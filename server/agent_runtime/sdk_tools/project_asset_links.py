@@ -20,7 +20,7 @@ from server.services.project_asset_links import (
 def manage_project_asset_link_tool(ctx: ToolContext):
     @tool(
         "manage_project_asset_link",
-        "链接或解除项目角色/场景/道具与全局资产的关系；场景/道具可配置全局图片用途，角色可选择参考音频或 TTS Voice ID。角色主图转参考图请使用 move_character_main_to_reference。",
+        "链接或解除项目角色/场景/道具与全局资产的关系；场景/道具可配置全局图片用途，角色可选择参考音频或 TTS Voice ID。角色主图与参考图之间移动请使用 move_character_main_to_reference，并按 direction 选择方向。",
         {
             "type": "object",
             "properties": {

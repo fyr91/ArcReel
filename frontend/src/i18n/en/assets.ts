@@ -105,6 +105,7 @@ export default {
   "global_asset_reference_audio": "Reference audio",
   "global_asset_no_voice": "None",
   "switch_to_reference_image": "Move main image to reference",
+  "switch_to_main_image": "Move reference image to main",
   "switch_to_reference_audio": "Switch to reference audio",
   "switch_to_voice_id": "Switch to Voice ID",
   "upload_sheet_busy_hint": "Generation or editing in progress — cannot upload an asset sheet",

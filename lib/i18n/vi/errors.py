@@ -121,6 +121,8 @@ MESSAGES = {
     "character_not_found": "Nhân vật '{name}' không tồn tại",
     "character_main_image_missing": "Nhân vật '{name}' không có ảnh chính hiện tại để chuyển sang ô tham chiếu",
     "character_main_image_changed": "Ảnh chính của nhân vật '{name}' vừa thay đổi; hãy làm mới và thử lại",
+    "character_reference_image_missing": "Nhân vật '{name}' không có ảnh tham chiếu hiện tại để chuyển sang ô ảnh chính",
+    "character_reference_image_changed": "Ảnh tham chiếu của nhân vật '{name}' vừa thay đổi; hãy làm mới và thử lại",
     "character_task_submitted": "Đã gửi tác vụ tạo hình tài sản nhân vật cho '{name}'",
     "voice_sample_voice_required": "Vui lòng chọn giọng đọc trước",
     "voice_sample_text_too_long": "Văn bản mẫu không được vượt quá {max_length} ký tự",

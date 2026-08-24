@@ -9,7 +9,9 @@ from server.services.project_character_images import (
     ProjectCharacterImageConflict,
     ProjectCharacterImageError,
     ProjectCharacterMainImageMissing,
+    ProjectCharacterReferenceImageMissing,
     move_character_main_to_reference,
+    move_character_reference_to_main,
 )
 
 # late-binding 必需：测试通过 monkeypatch.setattr(characters, "get_project_manager", ...) 替换模块属性
@@ -47,4 +49,38 @@ async def move_main_to_reference(project_name: str, character_name: str, _t: Tra
         "project_asset": result.project_asset,
         "source": result.source,
         "reference_path": result.reference_path,
+    }
+
+
+@router.post("/projects/{project_name}/characters/{character_name}/reference-to-main")
+async def move_reference_to_main(project_name: str, character_name: str, _t: Translator):
+    """Move the character card's displayed reference image into its main slot."""
+
+    try:
+        result = await move_character_reference_to_main(
+            project_name,
+            character_name,
+            manager=get_project_manager(),
+        )
+    except ProjectCharacterReferenceImageMissing as exc:
+        raise HTTPException(
+            status_code=409,
+            detail=_t("character_reference_image_missing", name=character_name),
+        ) from exc
+    except ProjectCharacterImageConflict as exc:
+        raise HTTPException(
+            status_code=409,
+            detail=_t("character_reference_image_changed", name=character_name),
+        ) from exc
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=_t("project_not_found", name=project_name)) from exc
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail=_t("character_not_found", name=character_name)) from exc
+    except ProjectCharacterImageError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return {
+        "success": True,
+        "project_asset": result.project_asset,
+        "source": result.source,
+        "main_path": result.main_path,
     }

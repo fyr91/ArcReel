@@ -136,7 +136,7 @@ describe("CharacterCard", () => {
     expect(screen.queryByLabelText("全局资产声音来源")).not.toBeInTheDocument();
   });
 
-  it("leaves main empty after moving a linked global image to the saved reference slot", async () => {
+  it("offers the inverse move after moving a linked global image to the saved reference slot", async () => {
     vi.spyOn(API, "getAsset").mockResolvedValue({
       asset: {
         id: "asset-hero",
@@ -171,6 +171,7 @@ describe("CharacterCard", () => {
     const referenceImage = await screen.findByAltText(/Hero.*参考图/);
     expect(referenceImage).toHaveAttribute("src", "/api/v1/files/demo/characters/refs/Hero.png");
     expect(screen.queryByRole("button", { name: "将主图转为参考图" })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "将参考图转为主图" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "生成资产图" })).toBeEnabled();
   });
 

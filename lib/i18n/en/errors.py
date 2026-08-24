@@ -121,6 +121,8 @@ MESSAGES = {
     "character_not_found": "Character '{name}' does not exist",
     "character_main_image_missing": "Character '{name}' has no current main image to move into the reference slot",
     "character_main_image_changed": "Character '{name}' changed its main image; refresh and try again",
+    "character_reference_image_missing": "Character '{name}' has no current reference image to move into the main slot",
+    "character_reference_image_changed": "Character '{name}' changed its reference image; refresh and try again",
     "character_task_submitted": "Character asset sheet generation task for '{name}' submitted",
     "voice_sample_voice_required": "Please select a voice first",
     "voice_sample_text_too_long": "Sample text cannot exceed {max_length} characters",
