@@ -162,9 +162,9 @@
     "semantic_hash": "29eef2a4e368488a6ee957460a2d4f25"
   },
   "frontend/src/api.ts": {
-    "mtime": 1787551239.401099,
-    "seen": 1787551274.335745,
-    "ast_hash": "54bf29c0916c54a2e81b3d9721b07231",
+    "mtime": 1787564540.4387352,
+    "seen": 1787564577.5319219,
+    "ast_hash": "7f6e84c47c1631f779a9ebead1473ceb",
     "semantic_hash": ""
   },
   "frontend/src/app-routes.ts": {
@@ -426,15 +426,15 @@
     "semantic_hash": "5273393389837f3b6b12d8fabae50b2a"
   },
   "frontend/src/components/canvas/lorebook/CharacterCard.test.tsx": {
-    "mtime": 1787503313.0033312,
-    "seen": 1787503490.412145,
-    "ast_hash": "a7f36d31ac914a968b499dcf4a6d8f87",
+    "mtime": 1787564540.4389496,
+    "seen": 1787564577.531947,
+    "ast_hash": "884c96335b40d7f5fa93fbf442301c28",
     "semantic_hash": ""
   },
   "frontend/src/components/canvas/lorebook/CharacterCard.tsx": {
-    "mtime": 1787551061.4078188,
-    "seen": 1787551101.110864,
-    "ast_hash": "7a04b83443bda44d56b75caf78929bd6",
+    "mtime": 1787564540.4391387,
+    "seen": 1787564577.531948,
+    "ast_hash": "033da676d3156d275be2534ceba54fc4",
     "semantic_hash": ""
   },
   "frontend/src/components/canvas/lorebook/CharactersPage.tsx": {
@@ -2160,9 +2160,9 @@
     "semantic_hash": "729685fb80098f66e2d73890c9708292"
   },
   "frontend/src/i18n/en/assets.ts": {
-    "mtime": 1787551239.4048693,
-    "seen": 1787551274.3359098,
-    "ast_hash": "6eb229f1497a879de1fa1073639d3469",
+    "mtime": 1787564540.4396534,
+    "seen": 1787564577.532094,
+    "ast_hash": "e1b20e6ad7d5f065a4297353062b6771",
     "semantic_hash": ""
   },
   "frontend/src/i18n/en/auth.ts": {
@@ -2220,9 +2220,9 @@
     "semantic_hash": "3277edf49b32f6f3f2fc6a87ed2d2ea5"
   },
   "frontend/src/i18n/vi/assets.ts": {
-    "mtime": 1787551239.4059684,
-    "seen": 1787551274.335915,
-    "ast_hash": "7906f2a3181f75d222c8310d46e43263",
+    "mtime": 1787564540.4398227,
+    "seen": 1787564577.532099,
+    "ast_hash": "dda04896c80fbe3745cfa00d2eba690a",
     "semantic_hash": ""
   },
   "frontend/src/i18n/vi/auth.ts": {
@@ -2268,9 +2268,9 @@
     "semantic_hash": ""
   },
   "frontend/src/i18n/zh/assets.ts": {
-    "mtime": 1787551239.4069507,
-    "seen": 1787551274.3359191,
-    "ast_hash": "eb9a41b7a5ddda688b710360c444a3b6",
+    "mtime": 1787564540.4399722,
+    "seen": 1787564577.5321028,
+    "ast_hash": "3f12161a6ddb1686a63f228263c0f56d",
     "semantic_hash": ""
   },
   "frontend/src/i18n/zh/auth.ts": {
@@ -5436,9 +5436,9 @@
     "semantic_hash": "b85334d7337ee23e2601145c49e738cc"
   },
   "lib/i18n/en/errors.py": {
-    "mtime": 1787547348.4721863,
-    "seen": 1787547385.355267,
-    "ast_hash": "d794dd76b226b3c212547835cb695b35",
+    "mtime": 1787564540.4401836,
+    "seen": 1787564577.532219,
+    "ast_hash": "42dfc51ea2035d23e7cc4ce257220ca0",
     "semantic_hash": ""
   },
   "lib/i18n/en/providers.py": {
@@ -5478,9 +5478,9 @@
     "semantic_hash": "34ee4b7da70b21bb18a2a458e3bee1e1"
   },
   "lib/i18n/vi/errors.py": {
-    "mtime": 1787547348.472742,
-    "seen": 1787547385.3552709,
-    "ast_hash": "a06527c124997f762a573446730b4015",
+    "mtime": 1787564540.4404223,
+    "seen": 1787564577.532223,
+    "ast_hash": "86e2790da9facdc9b98d9806026f9418",
     "semantic_hash": ""
   },
   "lib/i18n/vi/providers.py": {
@@ -5520,9 +5520,9 @@
     "semantic_hash": "62d2d0769e8c6a164981372859a4d6f4"
   },
   "lib/i18n/zh/errors.py": {
-    "mtime": 1787547348.4732573,
-    "seen": 1787547385.355274,
-    "ast_hash": "86272c8f0fb1dfc95e38a72961a59c3f",
+    "mtime": 1787564540.4407308,
+    "seen": 1787564577.532227,
+    "ast_hash": "a21b051bdbba32fc9ad8922a69a92d04",
     "semantic_hash": ""
   },
   "lib/i18n/zh/providers.py": {
@@ -6822,9 +6822,9 @@
     "semantic_hash": "248d03b5652bd45a4864aae4462d601e"
   },
   "server/routers/characters.py": {
-    "mtime": 1787503313.0074465,
-    "seen": 1787503490.4125388,
-    "ast_hash": "545e6f7168711f3a981dcc47d5de1f9b",
+    "mtime": 1787564540.441211,
+    "seen": 1787564577.532345,
+    "ast_hash": "efe66342e4af4e7bd3d65d22a4146b7c",
     "semantic_hash": ""
   },
   "server/routers/cost_estimation.py": {
@@ -8154,9 +8154,9 @@
     "semantic_hash": "3ed4b2992b03fee1b90f5bef1638058e"
   },
   "tests/test_characters_router.py": {
-    "mtime": 1787503313.008825,
-    "seen": 1787503490.412678,
-    "ast_hash": "0c45960973d1041f58b8becbd488be1d",
+    "mtime": 1787564540.4417524,
+    "seen": 1787564577.5324721,
+    "ast_hash": "6d15f1e7789ad67d625a8573c192b481",
     "semantic_hash": ""
   },
   "tests/test_compose_video_filter_graph.py": {
@@ -10206,21 +10206,21 @@
     "semantic_hash": ""
   },
   "agent_runtime_profile/CLAUDE.ad.md": {
-    "mtime": 1787547348.4639854,
-    "seen": 1787547385.355851,
-    "ast_hash": "5d32bfda730a38228f15c25f2986c79f",
+    "mtime": 1787564540.4375198,
+    "seen": 1787564577.532795,
+    "ast_hash": "5b97af954be20181a3f7d21ab3620a38",
     "semantic_hash": ""
   },
   "agent_runtime_profile/CLAUDE.drama.md": {
-    "mtime": 1787547348.4642546,
-    "seen": 1787547385.355851,
-    "ast_hash": "9bfdf348977d8222db2b82702b8598b8",
+    "mtime": 1787564540.4377348,
+    "seen": 1787564577.532796,
+    "ast_hash": "ba3eb1c990053260f1fa0fc4fafde909",
     "semantic_hash": ""
   },
   "agent_runtime_profile/CLAUDE.narration.md": {
-    "mtime": 1787547348.4645884,
-    "seen": 1787547385.3558521,
-    "ast_hash": "9a81348ceea22c214694923f1b3bce05",
+    "mtime": 1787564540.4381022,
+    "seen": 1787564577.5328472,
+    "ast_hash": "c16843d83a3fc01ebd1cf8c8905f3f99",
     "semantic_hash": ""
   },
   "docs/adr/0001-image-capability-resolved-at-execution.md": {
@@ -13086,9 +13086,9 @@
     "semantic_hash": ""
   },
   "server/agent_runtime/sdk_tools/project_asset_links.py": {
-    "mtime": 1787503313.0069385,
-    "seen": 1787503490.412521,
-    "ast_hash": "f0863abb5852df250062305f907b0a91",
+    "mtime": 1787564540.4408994,
+    "seen": 1787564577.532327,
+    "ast_hash": "6a812aed23d1d3ed4488e3bd3835e6d5",
     "semantic_hash": ""
   },
   "server/agent_runtime/subagent_status.py": {
@@ -13553,34 +13553,22 @@
     "ast_hash": "2af72a95aac69fe3415878c1bdc1cd3d",
     "semantic_hash": ""
   },
-  "frontend/src/components/canvas/lorebook/CharacterMainToReferenceButton.test.tsx": {
-    "mtime": 1787503313.0038152,
-    "seen": 1787503490.412147,
-    "ast_hash": "63fa11ee25c63ce9b6232128ea5ff683",
-    "semantic_hash": ""
-  },
-  "frontend/src/components/canvas/lorebook/CharacterMainToReferenceButton.tsx": {
-    "mtime": 1787503313.0039108,
-    "seen": 1787503490.412147,
-    "ast_hash": "4426b2dc53a8ed53d5603efe2ca7ff66",
-    "semantic_hash": ""
-  },
   "server/agent_runtime/sdk_tools/project_character_images.py": {
-    "mtime": 1787503313.007058,
-    "seen": 1787503490.412521,
-    "ast_hash": "13cb6e1ad2a4db226539d758fe189793",
+    "mtime": 1787564540.4410741,
+    "seen": 1787564577.532327,
+    "ast_hash": "409cfcb78f6f778ced9ee169b8f5d00b",
     "semantic_hash": ""
   },
   "server/services/project_character_images.py": {
-    "mtime": 1787503313.0082307,
-    "seen": 1787503490.412565,
-    "ast_hash": "a613b6f9a16d7ad5d90132bec4246827",
+    "mtime": 1787564540.4414737,
+    "seen": 1787564577.532371,
+    "ast_hash": "0d0b9e07827169f852bde54d6fefdfcf",
     "semantic_hash": ""
   },
   "tests/test_project_character_images.py": {
-    "mtime": 1787503313.0092688,
-    "seen": 1787503490.412747,
-    "ast_hash": "4d8d3b01967f3540479f77f0fbb5c854",
+    "mtime": 1787564540.4419007,
+    "seen": 1787564577.532541,
+    "ast_hash": "ab4143ea85d66c9de4a6a2b7c55fbfe5",
     "semantic_hash": ""
   },
   "lib/project_migrations/v9_to_v10_video_style_prompt.py": {
@@ -13713,6 +13701,18 @@
     "mtime": 1787559853.0519793,
     "seen": 1787559889.740465,
     "ast_hash": "d6c9b699eb4154bbd99fd5fa447a17ca",
+    "semantic_hash": ""
+  },
+  "frontend/src/components/canvas/lorebook/CharacterImageSlotMoveButton.test.tsx": {
+    "mtime": 1787564540.4392703,
+    "seen": 1787564577.531949,
+    "ast_hash": "8805946e6d80286cd3558885ada8dcf9",
+    "semantic_hash": ""
+  },
+  "frontend/src/components/canvas/lorebook/CharacterImageSlotMoveButton.tsx": {
+    "mtime": 1787564540.4393706,
+    "seen": 1787564577.531949,
+    "ast_hash": "d54057b5e66e16ee7a6d556fdeee61b3",
     "semantic_hash": ""
   }
 }
