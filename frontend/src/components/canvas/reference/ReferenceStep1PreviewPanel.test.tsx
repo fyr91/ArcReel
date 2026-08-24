@@ -6,9 +6,18 @@ import { useAssistantStore } from "@/stores/assistant-store";
 import { useProjectsStore } from "@/stores/projects-store";
 import { ReferenceStep1PreviewPanel } from "./ReferenceStep1PreviewPanel";
 import type { MentionLookup } from "@/hooks/useUnitPromptHighlight";
-import type { ReferenceStep1Draft, ScriptReviewState } from "@/types";
+import type { ProjectData, ReferenceStep1Draft, ScriptReviewState } from "@/types";
 
 const LOOKUP: MentionLookup = { 阿离: "character", 长街: "scene" };
+const PROJECT: ProjectData = {
+  title: "p",
+  content_mode: "narration",
+  style: "",
+  episodes: [],
+  characters: { 阿离: { description: "撑伞的少女" } },
+  scenes: { 长街: { description: "雨中的长街" } },
+  props: {},
+};
 
 function pendingState(overrides: Partial<ScriptReviewState> = {}): ScriptReviewState {
   return {
@@ -68,7 +77,7 @@ describe("ReferenceStep1PreviewPanel", () => {
     useAssistantStore.setState(useAssistantStore.getInitialState(), true);
     // 确认后的全局副作用（toast + 预填）只在「用户仍在看这个项目」时才生效，测试渲染面板时
     // 用的 projectName="p"，需要同步告诉 store 当前正在看的就是它。
-    useProjectsStore.setState({ currentProjectName: "p" });
+    useProjectsStore.setState({ currentProjectName: "p", currentProjectData: PROJECT });
   });
   afterEach(() => vi.restoreAllMocks());
 
@@ -234,6 +243,27 @@ describe("ReferenceStep1PreviewPanel", () => {
     expect(baseFingerprint).toBe("fp1");
     await waitFor(() => expect(screen.queryByRole("textbox", { name: "E1U01 正文" })).not.toBeInTheDocument());
     expect(screen.getByRole("button", { name: "编辑文稿" })).toBeInTheDocument();
+  });
+
+  it("selects a project asset with @ in the preprocess editor and saves the mention text", async () => {
+    vi.spyOn(API, "getScriptReview").mockResolvedValue(pendingState());
+    const save = vi.spyOn(API, "saveScriptReviewContent").mockResolvedValue(pendingState());
+
+    render(<ReferenceStep1PreviewPanel projectName="p" episode={1} lookup={LOOKUP} />);
+    fireEvent.click(await screen.findByRole("button", { name: "编辑文稿" }));
+    const textarea = await screen.findByRole<HTMLTextAreaElement>("combobox", { name: "E1U01 正文" });
+    const next = "门开了 @";
+    fireEvent.change(textarea, { target: { value: next, selectionStart: next.length } });
+
+    fireEvent.click(await screen.findByRole("option", { name: "阿离" }));
+    expect(textarea).toHaveValue("门开了 @[阿离] ");
+    expect(screen.queryByRole("listbox")).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByText("保存"));
+    await waitFor(() => expect(save).toHaveBeenCalledTimes(1));
+    expect(save.mock.calls[0][2]).toMatchObject({
+      units: [{ unit_id: "E1U01", text: "门开了 @[阿离] " }],
+    });
   });
 
   it("keeps the unit in edit mode when saving fails", async () => {
