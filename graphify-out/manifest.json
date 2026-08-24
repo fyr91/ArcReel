@@ -582,16 +582,16 @@
     "semantic_hash": "3e42dfd92c6d0dd90e7b1f9d9870bc21"
   },
   "frontend/src/components/canvas/reference/ReferenceStep1PreviewPanel.test.tsx": {
-    "mtime": 1787456199.4771988,
-    "seen": 1787503226.9482272,
-    "ast_hash": "1f9d87ab0c8b55a00b59b44d34c556ab",
-    "semantic_hash": "1f9d87ab0c8b55a00b59b44d34c556ab"
+    "mtime": 1787559853.0497234,
+    "seen": 1787559889.740455,
+    "ast_hash": "e8726c34be4f8a8f113c6ac1994aa1b3",
+    "semantic_hash": ""
   },
   "frontend/src/components/canvas/reference/ReferenceStep1PreviewPanel.tsx": {
-    "mtime": 1787456199.4775999,
-    "seen": 1787503226.9482281,
-    "ast_hash": "16e685f04b91f1068c35ec0ba0aec053",
-    "semantic_hash": "16e685f04b91f1068c35ec0ba0aec053"
+    "mtime": 1787559853.0502424,
+    "seen": 1787559889.740455,
+    "ast_hash": "a745b0d1063153b59272b3fa0b641f31",
+    "semantic_hash": ""
   },
   "frontend/src/components/canvas/reference/ReferenceVideoCanvas.test.tsx": {
     "mtime": 1787551239.4035552,
@@ -606,16 +606,16 @@
     "semantic_hash": ""
   },
   "frontend/src/components/canvas/reference/ReferenceVideoCard.test.tsx": {
-    "mtime": 1787112461.4128718,
-    "seen": 1787376469.110548,
-    "ast_hash": "c1da1d61556fb210b4463bc0aa5a8da5",
-    "semantic_hash": "c1da1d61556fb210b4463bc0aa5a8da5"
+    "mtime": 1787559853.0510604,
+    "seen": 1787559889.740457,
+    "ast_hash": "4fc906f5485db61fcfa8b83dd27e75ee",
+    "semantic_hash": ""
   },
   "frontend/src/components/canvas/reference/ReferenceVideoCard.tsx": {
-    "mtime": 1787480394.0527112,
-    "seen": 1787503226.948252,
-    "ast_hash": "e2dd9b8d8440dbd872f29a89b3ef003a",
-    "semantic_hash": "e2dd9b8d8440dbd872f29a89b3ef003a"
+    "mtime": 1787559853.0517066,
+    "seen": 1787559889.740457,
+    "ast_hash": "e6149a8620c8a9f4fda7efb9fa7d4c04",
+    "semantic_hash": ""
   },
   "frontend/src/components/canvas/reference/ScriptPreviewPanel.test.tsx": {
     "mtime": 1787112461.4130294,
@@ -13701,6 +13701,18 @@
     "mtime": 1787551239.4118395,
     "seen": 1787551274.336242,
     "ast_hash": "24c1ad4aab5260fae85206548310e331",
+    "semantic_hash": ""
+  },
+  "frontend/src/components/canvas/reference/MentionTextarea.tsx": {
+    "mtime": 1787559853.0493588,
+    "seen": 1787559889.740452,
+    "ast_hash": "40f7551effd1593b08ca363f96810ff5",
+    "semantic_hash": ""
+  },
+  "frontend/src/components/canvas/reference/mention-candidates.ts": {
+    "mtime": 1787559853.0519793,
+    "seen": 1787559889.740465,
+    "ast_hash": "d6c9b699eb4154bbd99fd5fa447a17ca",
     "semantic_hash": ""
   }
 }
