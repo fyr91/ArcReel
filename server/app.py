@@ -39,6 +39,7 @@ from lib.generation_worker import GenerationWorker
 from lib.httpx_shared import shutdown_http_client, startup_http_client
 from lib.logging_config import attach_file_handler, migrate_legacy_log_dir, setup_logging
 from lib.path_safety import try_safe_join
+from lib.project_manager import ProjectManager
 from lib.project_migrations import cleanup_stale_backups, run_project_migrations
 from lib.source_loader.migration import migrate_project_source_encoding
 from server.auth import ensure_auth_password, get_current_user
@@ -79,6 +80,7 @@ from server.routers import (
     versions,
 )
 from server.routers import auth as auth_router
+from server.services.project_asset_links import backfill_linked_character_sheets
 from server.services.project_events import ProjectEventService
 
 
@@ -375,6 +377,23 @@ async def lifespan(app: FastAPI):
             migration_summary.failed,
         )
     await asyncio.to_thread(cleanup_stale_backups, projects_root, 7)
+
+    # Historical linked characters may predate project-local sheet
+    # materialization. Repair only empty linked-main slots; existing project
+    # sheets and Global Asset files remain untouched.
+    try:
+        sheet_backfill = await backfill_linked_character_sheets(
+            manager=ProjectManager(projects_root),
+            session_factory=async_session_factory,
+        )
+        if sheet_backfill.materialized or sheet_backfill.skipped:
+            logger.info(
+                "Linked Character Sheet backfill: materialized=%d skipped=%d",
+                sheet_backfill.materialized,
+                sheet_backfill.skipped,
+            )
+    except Exception:  # noqa: BLE001 - one repair failure must not block startup
+        logger.exception("Linked Character Sheet backfill failed; server startup continues")
 
     # Migrate any pre-existing local SDK jsonl transcripts into the DbSessionStore.
     # Runs once (marker-gated); failures are non-fatal and logged.

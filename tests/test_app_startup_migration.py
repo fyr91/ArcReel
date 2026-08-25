@@ -1,7 +1,7 @@
 """FastAPI 启动时调用 run_project_migrations 和 cleanup_stale_backups。"""
 
 from types import SimpleNamespace
-from unittest.mock import MagicMock
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
@@ -31,9 +31,11 @@ class _FakeWorker:
 async def test_startup_invokes_project_migrations(monkeypatch):
     run_mock = MagicMock(return_value=SimpleNamespace(migrated=[], skipped=[], failed=[]))
     cleanup_mock = MagicMock()
+    sheet_backfill_mock = AsyncMock(return_value=SimpleNamespace(materialized=0, skipped=0))
 
     monkeypatch.setattr(app_module, "run_project_migrations", run_mock)
     monkeypatch.setattr(app_module, "cleanup_stale_backups", cleanup_mock)
+    monkeypatch.setattr(app_module, "backfill_linked_character_sheets", sheet_backfill_mock)
     monkeypatch.setattr(app_module, "ensure_auth_password", lambda: "test")
     monkeypatch.setattr(app_module, "init_db", _noop_async)
     monkeypatch.setattr(lib.db, "init_db", _noop_async)
@@ -52,3 +54,4 @@ async def test_startup_invokes_project_migrations(monkeypatch):
 
     run_mock.assert_called_once()
     cleanup_mock.assert_called_once()
+    sheet_backfill_mock.assert_awaited_once()

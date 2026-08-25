@@ -54,14 +54,14 @@ def _link(pm: ProjectManager, asset_id: str, *, usage: str) -> None:
     )
 
 
-async def test_linked_global_main_moves_to_reference_and_clears_duplicate_local_sheet(
+async def test_linked_global_main_moves_project_sheet_to_reference(
     tmp_path: Path,
     db_factory,
 ) -> None:
     projects_root = tmp_path / "projects"
     pm = ProjectManager(projects_root)
-    _project(pm, sheet=b"same-image")
-    asset_id, global_path = await _global_character(projects_root, db_factory, b"same-image")
+    _project(pm, sheet=b"project-main")
+    asset_id, global_path = await _global_character(projects_root, db_factory, b"global-main")
     _link(pm, asset_id, usage="main")
 
     result = await move_character_main_to_reference(
@@ -71,17 +71,17 @@ async def test_linked_global_main_moves_to_reference_and_clears_duplicate_local_
         session_factory=db_factory,
     )
 
-    assert result.source == "global"
-    assert (pm.get_project_path("demo") / result.reference_path).read_bytes() == b"same-image"
+    assert result.source == "project"
+    assert (pm.get_project_path("demo") / result.reference_path).read_bytes() == b"project-main"
     character = pm.load_project("demo")["characters"]["鳄鱼爸爸"]
     assert character["character_sheet"] == ""
     assert character["reference_image"] == result.reference_path
     assert character["global_asset_image_usage"] == "reference"
-    assert (projects_root / global_path).read_bytes() == b"same-image"
+    assert (projects_root / global_path).read_bytes() == b"global-main"
     assert (pm.get_project_path("demo") / "characters" / "鳄鱼爸爸.png").exists()
 
 
-async def test_linked_global_main_round_trip_restores_main_and_clears_snapshot_reference(
+async def test_linked_global_main_round_trip_materializes_project_sheet(
     tmp_path: Path,
     db_factory,
 ) -> None:
@@ -104,12 +104,14 @@ async def test_linked_global_main_round_trip_restores_main_and_clears_snapshot_r
         session_factory=db_factory,
     )
 
-    assert result.source == "global"
-    assert result.main_path == global_path
+    assert result.source == "project"
+    assert result.main_path == "characters/鳄鱼爸爸.png"
     character = pm.load_project("demo")["characters"]["鳄鱼爸爸"]
-    assert character["character_sheet"] == ""
+    assert character["character_sheet"] == result.main_path
     assert character["reference_image"] == ""
     assert character["global_asset_image_usage"] == "main"
+    assert (pm.get_project_path("demo") / result.main_path).read_bytes() == b"global-main"
+    assert (projects_root / global_path).read_bytes() == b"global-main"
 
 
 async def test_generated_project_main_replaces_reference_without_changing_global_primary(

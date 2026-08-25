@@ -130,6 +130,7 @@ describe("CharacterCard", () => {
     const switchButton = await screen.findByRole("button", { name: "将主图转为参考图" });
     const mainImage = screen.getByAltText(/Hero.*角色资产图/);
     const referenceImage = screen.getByAltText(/Hero.*参考图/);
+    expect(mainImage).toHaveAttribute("src", "/api/v1/files/demo/characters/Hero-local.png");
     expect(mainImage.compareDocumentPosition(switchButton) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(switchButton.compareDocumentPosition(referenceImage) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(screen.getByRole("button", { name: "切换 Voice ID" })).toBeInTheDocument();

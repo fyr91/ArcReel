@@ -146,6 +146,7 @@ class TestAssetsCRUDAndProjectLinks:
         asset = client.post(
             "/api/v1/assets",
             data={"type": "character", "name": "鳄鱼爸爸", "description": "全局描述"},
+            files={"image": ("dad.png", b"global-dad", "image/png")},
         ).json()["asset"]
 
         linked = client.post(
@@ -164,6 +165,8 @@ class TestAssetsCRUDAndProjectLinks:
         assert character["matched_global_asset_id"] == asset["id"]
         assert character["global_asset_image_usage"] == "main"
         assert character["global_asset_voice_source"] == "none"
+        assert character["character_sheet"] == "characters/鳄鱼爸爸.png"
+        assert (pm.get_project_path("target") / character["character_sheet"]).read_bytes() == b"global-dad"
 
         configured = client.patch(
             "/api/v1/assets/project-links",
@@ -186,6 +189,7 @@ class TestAssetsCRUDAndProjectLinks:
         assert "matched_global_asset_id" not in character
         assert "global_asset_image_usage" not in character
         assert "global_asset_voice_source" not in character
+        assert (pm.get_project_path("target") / character["character_sheet"]).read_bytes() == b"global-dad"
 
     @pytest.mark.unit
     def test_link_rejects_wrong_asset_type(self, _assets_env):

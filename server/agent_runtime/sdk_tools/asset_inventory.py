@@ -6,6 +6,7 @@ import asyncio
 import copy
 import json
 from collections.abc import Mapping
+from pathlib import Path
 from typing import Any
 
 from claude_agent_sdk import tool
@@ -28,6 +29,7 @@ from lib.asset_types import (
 )
 from lib.db import async_session_factory
 from lib.db.repositories.asset_repo import AssetRepository
+from lib.path_safety import safe_resolve
 from lib.source_revision import SourceScope
 from server.agent_runtime.sdk_tools._context import ToolContext, tool_error
 from server.services.character_voice_references import enqueue_character_voice_reference
@@ -42,11 +44,14 @@ def _json_response(payload: dict[str, Any], *, is_error: bool = False) -> dict[s
     return response
 
 
-async def _attach_exact_global_asset_matches(entries: object) -> object:
+async def _attach_exact_global_asset_matches(
+    entries: object,
+    projects_root: Path,
+) -> tuple[object, dict[str, str]]:
     """Attach one same-type, same-name match without asking the model to score candidates."""
 
     if not isinstance(entries, Mapping) or not any(isinstance(value, Mapping) and value for value in entries.values()):
-        return entries
+        return entries, {}
     async with async_session_factory() as session:
         assets = await AssetRepository(session).list(type=None, q=None, limit=10_000, offset=0)
     canonical_candidates: dict[tuple[str, str], set[str]] = {}
@@ -58,7 +63,8 @@ async def _attach_exact_global_asset_matches(entries: object) -> object:
             alias_candidates.setdefault((asset.type, alias.comparison_key), set()).add(asset.id)
     enriched = copy.deepcopy(entries)
     if not isinstance(enriched, dict):
-        return entries
+        return entries, {}
+    linked_character_image_paths: dict[str, str] = {}
     for asset_type, spec in ASSET_SPECS.items():
         if not spec.in_global_library:
             continue
@@ -89,7 +95,12 @@ async def _attach_exact_global_asset_matches(entries: object) -> object:
                     attrs[GLOBAL_ASSET_VOICE_SOURCE_FIELD] = (
                         "reference_audio" if matched.audio_path else "voice_id" if matched.voice_id else "none"
                     )
-    return enriched
+                    if (
+                        isinstance(matched.image_path, str)
+                        and safe_resolve(projects_root, matched.image_path) is not None
+                    ):
+                        linked_character_image_paths[name] = matched.image_path
+    return enriched, linked_character_image_paths
 
 
 def complete_asset_inventory_tool(ctx: ToolContext):
@@ -121,7 +132,10 @@ def complete_asset_inventory_tool(ctx: ToolContext):
         try:
             scope = SourceScope.model_validate(args.get("scope"))
             expected = args["expected_source_revision"]
-            entries = await _attach_exact_global_asset_matches(args.get("entries"))
+            entries, linked_character_image_paths = await _attach_exact_global_asset_matches(
+                args.get("entries"),
+                ctx.pm.projects_root,
+            )
             completed = await asyncio.to_thread(
                 complete_asset_inventory,
                 ctx.pm,
@@ -129,6 +143,7 @@ def complete_asset_inventory_tool(ctx: ToolContext):
                 scope,
                 expected,
                 entries,
+                linked_character_image_paths,
             )
             character_entries = entries.get("characters") if isinstance(entries, Mapping) else None
             character_names = (

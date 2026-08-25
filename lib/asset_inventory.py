@@ -5,17 +5,21 @@ from __future__ import annotations
 from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import UTC, datetime
+from pathlib import Path
 from typing import Any
 
+from lib.artifact_activation import register_current_resource_artifact
 from lib.asset_types import (
     ASSET_SPECS,
     GLOBAL_ASSET_ID_FIELD,
     GLOBAL_ASSET_IMAGE_USAGE_FIELD,
     GLOBAL_ASSET_VOICE_SOURCE_FIELD,
     MATCHED_GLOBAL_ASSET_ID_FIELD,
+    asset_name_comparison_key,
     resolve_asset_key,
     validate_asset_name,
 )
+from lib.character_sheet_materialization import plan_character_sheet_materialization
 from lib.content_digest import PREFIXED_DIGEST_RE
 from lib.project_manager import ProjectManager
 from lib.source_revision import SourceRevisionBlocker, SourceScope, compute_source_revision
@@ -63,6 +67,7 @@ def complete_asset_inventory(
     scope: SourceScope,
     expected_source_revision: object,
     entries: object = None,
+    linked_character_image_paths: Mapping[str, str] | None = None,
 ) -> AssetInventoryCompletion:
     """Validate and atomically persist extracted assets plus their inventory fact."""
 
@@ -70,9 +75,16 @@ def complete_asset_inventory(
         raise AssetInventoryInvalidRequest("expected_source_revision must be a sha256-v1 revision")
 
     prepared = _prepare_entries(entries)
+    materialization_sources = {
+        asset_name_comparison_key(validate_asset_name(name)): path
+        for name, path in (linked_character_image_paths or {}).items()
+        if path
+    }
 
     result: AssetInventoryCompletion | None = None
     project_path = pm.get_project_path(project_name)
+    copies: list[tuple[Path, Path]] = []
+    materialized_characters: set[str] = set()
 
     def _mutate(project: dict[str, Any]) -> None:
         nonlocal result
@@ -100,6 +112,19 @@ def complete_asset_inventory(
             for name, entry in bucket_entries.items():
                 if resolve_asset_key(bucket, name) is not None:
                     continue
+                if bucket_name == "characters" and (
+                    entry.get(GLOBAL_ASSET_ID_FIELD) or entry.get(MATCHED_GLOBAL_ASSET_ID_FIELD)
+                ):
+                    materialized = plan_character_sheet_materialization(
+                        project_dir=project_path,
+                        projects_root=pm.projects_root,
+                        character_name=name,
+                        entry=entry,
+                        global_image_path=materialization_sources.get(asset_name_comparison_key(name)),
+                        copies=copies,
+                    )
+                    if materialized is not None:
+                        materialized_characters.add(name)
                 bucket[name] = entry
         after_errors = set(DataValidator(str(pm.projects_root)).validate_project_payload(project).errors)
         new_errors = after_errors - before_errors
@@ -127,7 +152,20 @@ def complete_asset_inventory(
             },
         )
 
-    pm.update_project(project_name, _mutate)
+    def _register_sheets(_project_file: Path) -> None:
+        for character_name in materialized_characters:
+            register_current_resource_artifact(
+                project_path,
+                resource_type="characters",
+                resource_id=character_name,
+            )
+
+    pm.update_project_with_file_copies(
+        project_name,
+        _mutate,
+        copies,
+        on_commit=_register_sheets,
+    )
     if result is None:  # pragma: no cover - update_project always invokes the callback or raises
         raise RuntimeError("asset inventory completion did not run")
     return result

@@ -289,9 +289,10 @@ export function CharacterCard({
     : null;
   const hasGlobalLink = Boolean(character.global_asset_id || character.matched_global_asset_id);
   const usingGlobalMain = hasGlobalLink && (character.global_asset_image_usage ?? "main") === "main";
-  const sheetUrl = usingGlobalMain && globalImageUrl
-    ? globalImageUrl
-    : localSheetUrl;
+  // character_sheet is the current project's main-image source of truth. The
+  // Global URL is retained only as a compatibility fallback for historical
+  // linked entries that have not yet been materialized.
+  const sheetUrl = localSheetUrl ?? (usingGlobalMain ? globalImageUrl : null);
 
   const savedReferenceUrl = character.reference_image
     ? API.getFileUrl(projectName, character.reference_image, referenceFp)
@@ -403,7 +404,7 @@ export function CharacterCard({
             projectName={projectName}
             resourceType="character"
             resourceId={name}
-            hasImage={Boolean(character.character_sheet) && !usingGlobalMain}
+            hasImage={Boolean(character.character_sheet)}
             busy={generating || uploadingSheet}
           />
           <AddToLibraryButton
