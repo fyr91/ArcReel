@@ -6,12 +6,15 @@ from typing import Any
 
 import httpx
 import pytest
+from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 from lib.character_catalog import CROCO_CATALOG_SOURCE, sync_character_catalog
 from lib.config.service import ConfigService
+from lib.db import Base
 from lib.db.repositories.asset_alias_repo import AssetAliasRepository
 from lib.db.repositories.asset_repo import AssetRepository
 from lib.db.repositories.asset_resource_repo import AssetResourceRepository
+from lib.db.repositories.task_repo import TaskRepository
 from lib.project_manager import ProjectManager
 
 
@@ -127,6 +130,57 @@ async def test_sync_keeps_all_images_and_audio_but_ignores_video(
     assert [resource.media_type for resource in asset.resources].count("audio") == 1
     assert all(resource.media_type != "video" for resource in asset.resources)
     assert [(alias.alias, alias.origin) for alias in asset.aliases] == [("Croco Dad", "catalog")]
+
+
+@pytest.mark.integration
+async def test_sync_does_not_hold_sqlite_write_lock_while_downloading(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A slow catalog download must not starve the generation worker lease."""
+
+    engine = create_async_engine(
+        f"sqlite+aiosqlite:///{tmp_path / 'catalog-lock.db'}",
+        connect_args={"timeout": 0.05},
+    )
+    async with engine.begin() as connection:
+        await connection.run_sync(Base.metadata.create_all)
+    factory = async_sessionmaker(engine, expire_on_commit=False)
+    image = b"catalog-image"
+    image_url = "https://cdn.example.test/avatar.png"
+
+    class _LeaseProbeClient(_CatalogClient):
+        def __init__(self) -> None:
+            super().__init__(
+                _catalog([_remote_asset("avatarUrl", "avatar.png", image_url, image, "image/png")]), {image_url: image}
+            )
+            self.lease_renewed = False
+
+        async def get(self, url: str, **kwargs: Any) -> httpx.Response:
+            if url == image_url:
+                async with factory() as lease_session:
+                    self.lease_renewed = await TaskRepository(lease_session).acquire_or_renew_lease(
+                        name="default",
+                        owner_id="generation-worker",
+                        ttl=10.0,
+                    )
+            return await super().get(url, **kwargs)
+
+    client = _LeaseProbeClient()
+    manager = ProjectManager(tmp_path / "projects")
+    monkeypatch.setattr("lib.character_catalog.get_http_client", lambda: client)
+    monkeypatch.setattr("lib.character_catalog.get_project_manager", lambda: manager)
+
+    try:
+        async with factory() as sync_session:
+            settings = ConfigService(sync_session)
+            await settings.set_setting("croco_characters_api_url", "https://catalog.example.test/export")
+            await settings.set_setting("croco_characters_api_token", "test-secret")
+            await sync_character_catalog(sync_session)
+    finally:
+        await engine.dispose()
+
+    assert client.lease_renewed is True
 
 
 @pytest.mark.unit

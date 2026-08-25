@@ -3,6 +3,7 @@ from typing import Any
 from unittest.mock import AsyncMock
 
 import pytest
+from sqlalchemy.exc import OperationalError
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 from lib.artifact_manifest import ArtifactBasis, compose_video_artifact_basis
@@ -1681,6 +1682,39 @@ class TestGenerationWorker:
 
         assert queue.released
         assert worker._main_task is None
+
+    @pytest.mark.unit
+    @pytest.mark.asyncio
+    async def test_run_loop_recovers_after_transient_lease_database_error(self):
+        class _FlakyLeaseQueue(_FakeQueue):
+            def __init__(self):
+                super().__init__()
+                self.recovered = asyncio.Event()
+
+            async def acquire_or_renew_worker_lease(self, name, owner_id, ttl_seconds):
+                self._lease_calls += 1
+                if self._lease_calls == 1:
+                    raise OperationalError(
+                        "UPDATE worker_lease",
+                        {},
+                        Exception("database is locked"),
+                    )
+                self.recovered.set()
+                return True
+
+        queue = _FlakyLeaseQueue()
+        worker = GenerationWorker(queue=queue)
+        worker.heartbeat_interval = 0.01
+        worker.poll_interval = 0.01
+
+        await worker.start()
+        await asyncio.wait_for(queue.recovered.wait(), timeout=1.0)
+
+        assert worker._main_task is not None and not worker._main_task.done()
+        assert queue._lease_calls >= 2
+
+        await asyncio.wait_for(worker.stop(), timeout=1.0)
+        assert queue.released
 
     @pytest.mark.unit
     @pytest.mark.asyncio

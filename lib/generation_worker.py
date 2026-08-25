@@ -22,6 +22,8 @@ logger = logging.getLogger(__name__)
 
 from datetime import UTC
 
+from sqlalchemy.exc import OperationalError
+
 # Lease 丢失超过 ``lease_ttl * _ORPHAN_RESCAN_LEASE_LOST_MULT`` 才认为是真切换 owner
 # （另一个 worker 进程曾持过 lease 且写入了新 orphan），需要重扫；短 flap（续约抖动）
 # 不触发。lease_ttl 默认 10s → 阈值 30s。常量化便于单测注入与未来调参。
@@ -525,58 +527,73 @@ class GenerationWorker:
     async def _run_loop(self) -> None:
         try:
             while not self._stop_event.is_set():
-                had_lease = self._owns_lease
-                self._owns_lease = await self.queue.acquire_or_renew_worker_lease(
-                    name=self.lease_name,
-                    owner_id=self.owner_id,
-                    ttl_seconds=self.lease_ttl,
-                )
-
-                if self._owns_lease and not had_lease:
-                    logger.info("获得 worker lease (owner=%s)", self.owner_id)
-                if had_lease and not self._owns_lease:
-                    logger.warning("失去 worker lease (owner=%s)", self.owner_id)
-
-                await self._drain_finished_tasks()
-
-                # Lease 状态变化跟踪：首次失去 lease 时打点；重夺 lease 后判断
-                # 「真切换 owner」（>= 3× ttl）→ 重置开关；「续约 flap」（< 3× ttl）→ 保持。
-                if had_lease and not self._owns_lease and self._lease_lost_monotonic is None:
-                    self._lease_lost_monotonic = time.monotonic()
-                if self._owns_lease and self._lease_lost_monotonic is not None:
-                    lost_duration = time.monotonic() - self._lease_lost_monotonic
-                    if lost_duration > self.lease_ttl * _ORPHAN_RESCAN_LEASE_LOST_MULT:
-                        logger.info(
-                            "lease 丢失 %.1fs（> %d×ttl=%.1fs），认为另一进程曾持过 lease，重扫 orphan",
-                            lost_duration,
-                            _ORPHAN_RESCAN_LEASE_LOST_MULT,
-                            self.lease_ttl * _ORPHAN_RESCAN_LEASE_LOST_MULT,
-                        )
-                        self._orphan_handled_once = False
-                    self._lease_lost_monotonic = None
-
-                # 一次性扫描：进程持 lease 后只扫一次 orphan；后续主循环不再重扫。
-                # 单 lease 互斥保证不会与另一个 worker 同时扫；跨进程接管由上述阈值兜底。
-                if self._owns_lease and not self._orphan_handled_once:
-                    await self._handle_orphan_tasks_on_start()
-                    self._orphan_handled_once = True
-
-                if not self._owns_lease:
-                    await asyncio.sleep(self.heartbeat_interval)
-                    continue
-
-                claimed_any = await self._claim_tasks()
-
-                if claimed_any:
-                    await asyncio.sleep(0.05)
-                else:
-                    await asyncio.sleep(self.poll_interval)
+                try:
+                    delay = await self._run_cycle()
+                except OperationalError:
+                    # SQLite 的单写者模型或短暂连接故障不应杀死关键后台 Worker。
+                    # 当前 cycle 不再 claim；下一拍由同一 owner 重新续租，已有执行体继续运行。
+                    if self._owns_lease and self._lease_lost_monotonic is None:
+                        self._lease_lost_monotonic = time.monotonic()
+                    self._owns_lease = False
+                    logger.warning(
+                        "worker 数据库操作暂时失败，将在 %.1fs 后重试 (owner=%s)",
+                        self.heartbeat_interval,
+                        self.owner_id,
+                        exc_info=True,
+                    )
+                    delay = self.heartbeat_interval
+                await asyncio.sleep(delay)
 
             await self._wait_inflight_completion()
         finally:
             if self._owns_lease:
                 await self.queue.release_worker_lease(name=self.lease_name, owner_id=self.owner_id)
             self._owns_lease = False
+
+    async def _run_cycle(self) -> float:
+        """Run one lease/claim cycle and return the delay before the next cycle."""
+
+        had_lease = self._owns_lease
+        self._owns_lease = await self.queue.acquire_or_renew_worker_lease(
+            name=self.lease_name,
+            owner_id=self.owner_id,
+            ttl_seconds=self.lease_ttl,
+        )
+
+        if self._owns_lease and not had_lease:
+            logger.info("获得 worker lease (owner=%s)", self.owner_id)
+        if had_lease and not self._owns_lease:
+            logger.warning("失去 worker lease (owner=%s)", self.owner_id)
+
+        await self._drain_finished_tasks()
+
+        # Lease 状态变化跟踪：首次失去 lease 时打点；重夺 lease 后判断
+        # 「真切换 owner」（>= 3× ttl）→ 重置开关；「续约 flap」（< 3× ttl）→ 保持。
+        if had_lease and not self._owns_lease and self._lease_lost_monotonic is None:
+            self._lease_lost_monotonic = time.monotonic()
+        if self._owns_lease and self._lease_lost_monotonic is not None:
+            lost_duration = time.monotonic() - self._lease_lost_monotonic
+            if lost_duration > self.lease_ttl * _ORPHAN_RESCAN_LEASE_LOST_MULT:
+                logger.info(
+                    "lease 丢失 %.1fs（> %d×ttl=%.1fs），认为另一进程曾持过 lease，重扫 orphan",
+                    lost_duration,
+                    _ORPHAN_RESCAN_LEASE_LOST_MULT,
+                    self.lease_ttl * _ORPHAN_RESCAN_LEASE_LOST_MULT,
+                )
+                self._orphan_handled_once = False
+            self._lease_lost_monotonic = None
+
+        # 一次性扫描：进程持 lease 后只扫一次 orphan；后续主循环不再重扫。
+        # 单 lease 互斥保证不会与另一个 worker 同时扫；跨进程接管由上述阈值兜底。
+        if self._owns_lease and not self._orphan_handled_once:
+            await self._handle_orphan_tasks_on_start()
+            self._orphan_handled_once = True
+
+        if not self._owns_lease:
+            return self.heartbeat_interval
+
+        claimed_any = await self._claim_tasks()
+        return 0.05 if claimed_any else self.poll_interval
 
     def _pool_full_providers(self, media_type: str) -> frozenset[str]:
         """返回当前 cycle ``media_type`` 已满的 provider_id 集合（黑名单，用于 claim SQL）。

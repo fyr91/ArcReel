@@ -8,6 +8,7 @@ import json
 import os
 import uuid
 from collections.abc import Awaitable, Callable
+from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
 from typing import Any
 from urllib.parse import urlparse
@@ -121,6 +122,22 @@ class _CharacterCatalog(BaseModel):
     characters: list[_CatalogCharacter] = Field(max_length=1000)
 
 
+@dataclass(frozen=True)
+class _CatalogResourceSpec:
+    remote: _CatalogAsset
+    relative_path: PurePosixPath
+    media_type: str
+    sort_order: int
+    source_fields_json: str
+
+
+@dataclass(frozen=True)
+class _DownloadedCatalogResource:
+    path: str
+    sha256: str
+    byte_size: int
+
+
 def _validated_https_url(value: str) -> str:
     parsed = urlparse(value.strip())
     if parsed.scheme != "https" or not parsed.hostname or parsed.username or parsed.password:
@@ -207,6 +224,53 @@ async def _download_verified(client: httpx.AsyncClient, asset: _CatalogAsset) ->
     if expected is not None and digest != expected:
         raise CharacterCatalogSyncError("character_catalog_asset_integrity_failed")
     return data, digest
+
+
+def _resource_specs(character: _CatalogCharacter) -> list[_CatalogResourceSpec]:
+    specs: list[_CatalogResourceSpec] = []
+    seen_keys: set[str] = set()
+    for sort_order, remote in enumerate(character.assets):
+        if remote.key in seen_keys:
+            raise CharacterCatalogSyncError("character_catalog_invalid_payload")
+        seen_keys.add(remote.key)
+        relative_path = _safe_relative_path(remote.relative_path)
+        media_type = _media_type(remote, relative_path)
+        if media_type is None:
+            continue
+        specs.append(
+            _CatalogResourceSpec(
+                remote=remote,
+                relative_path=relative_path,
+                media_type=media_type,
+                sort_order=sort_order,
+                source_fields_json=json.dumps(remote.source_fields, ensure_ascii=False, separators=(",", ":")),
+            )
+        )
+    return specs
+
+
+async def _download_catalog_resource(
+    client: httpx.AsyncClient,
+    spec: _CatalogResourceSpec,
+    *,
+    asset_id: str,
+    resource_root: Path,
+    projects_root: Path,
+) -> tuple[_DownloadedCatalogResource, str | None]:
+    data, digest = await _download_verified(client, spec.remote)
+    key_digest = hashlib.sha256(spec.remote.key.encode("utf-8")).hexdigest()[:18]
+    target = resource_root / asset_id / f"{key_digest}-{digest[:16]}{_suffix(spec.remote, spec.relative_path)}"
+    relative_target = target.relative_to(projects_root).as_posix()
+    target_existed = target.exists()
+    await asyncio.to_thread(_atomic_write, target, data)
+    return (
+        _DownloadedCatalogResource(
+            path=relative_target,
+            sha256=digest,
+            byte_size=len(data),
+        ),
+        None if target_existed else relative_target,
+    )
 
 
 def _resource_is_unchanged(resource: AssetResource, asset: _CatalogAsset) -> bool:
@@ -306,6 +370,11 @@ async def sync_character_catalog(
     if not api_url or not token:
         raise CharacterCatalogSyncError("character_catalog_config_missing")
 
+    # ConfigService 的 SELECT 会开启隐式事务。远程目录与媒体下载可能持续数十秒，
+    # 必须先结束它；更重要的是，下方每个角色也遵守“先下载、后短事务落库”，
+    # 绝不让 SQLite 写锁跨越网络或大文件 I/O。
+    await session.commit()
+
     client = get_http_client()
     catalog = await _fetch_catalog(client, api_url, token)
     total_characters = len(catalog.characters)
@@ -318,21 +387,68 @@ async def sync_character_catalog(
     resource_root = get_project_manager().get_global_assets_root() / "character" / "catalog"
 
     result = {"added": 0, "updated": 0, "unchanged": 0, "assetsDownloaded": 0}
-    created_paths: set[str] = set()
 
-    try:
-        for character_index, character in enumerate(catalog.characters, start=1):
-            # 每个角色独立提交：后台状态可在 SQLite 下持续落盘并被其它请求读取；
-            # 若后续角色失败，已完成角色保持可用，重试仍由增量同步幂等收敛。
-            created_paths = set()
-            obsolete_paths: set[str] = set()
-            live_paths: set[str] = set()
-            existing = await asset_repo.get_by_external_identity(CROCO_CATALOG_SOURCE, character.id)
+    for character_index, character in enumerate(catalog.characters, start=1):
+        # 每个角色独立提交：后续角色失败时，已完成角色保持可用，重试由增量同步幂等收敛。
+        specs = _resource_specs(character)
+        planned_asset_id = str(uuid.uuid4())
+        downloaded: dict[str, _DownloadedCatalogResource] = {}
+        created_paths: set[str] = set()
+        obsolete_paths: set[str] = set()
+        live_paths: set[str] = set()
+
+        try:
+            while True:
+                # 只读预检决定真正需要下载的目录资源；发现状态在下载期间变化时会重新预检，
+                # 缺什么再补什么。只要即将发生网络 I/O，就先 commit 结束当前读事务。
+                existing = await asset_repo.get_by_external_identity(CROCO_CATALOG_SOURCE, character.id)
+                if existing is not None and existing.id != planned_asset_id:
+                    if downloaded:
+                        for path in created_paths:
+                            try:
+                                (projects_root / path).unlink()
+                            except FileNotFoundError:
+                                pass
+                        downloaded.clear()
+                        created_paths.clear()
+                    planned_asset_id = existing.id
+                previous_resources = [] if existing is None else list(existing.resources)
+                previous_by_key = {
+                    resource.resource_key: resource for resource in previous_resources if resource.origin == "catalog"
+                }
+                missing = [
+                    spec
+                    for spec in specs
+                    if spec.remote.key not in downloaded
+                    and not (
+                        (current := previous_by_key.get(spec.remote.key)) is not None
+                        and _resource_is_unchanged(current, spec.remote)
+                    )
+                ]
+                if not missing:
+                    break
+
+                await session.commit()
+                for spec in missing:
+                    prepared, created_path = await _download_catalog_resource(
+                        client,
+                        spec,
+                        asset_id=planned_asset_id,
+                        resource_root=resource_root,
+                        projects_root=projects_root,
+                    )
+                    downloaded[spec.remote.key] = prepared
+                    if created_path is not None:
+                        created_paths.add(created_path)
+                    result["assetsDownloaded"] += 1
+
+            # 从这里到 commit 只有数据库读写和内存计算；网络请求与大文件落盘均已完成。
             is_new = existing is None
             changed = is_new
             if existing is None:
                 name = await _available_name(asset_repo, character.chinese_name or character.name, character.id)
                 existing = await asset_repo.create(
+                    asset_id=planned_asset_id,
                     type="character",
                     name=name,
                     description=character.summary or character.subtitle or "",
@@ -341,10 +457,10 @@ async def sync_character_catalog(
                     external_id=character.id,
                     voice_id=character.voice.tts_voice_id if character.voice else None,
                 )
+                previous_resources = []
+                previous_by_key = {}
             else:
-                patch = {
-                    "voice_id": character.voice.tts_voice_id if character.voice else None,
-                }
+                patch = {"voice_id": character.voice.tts_voice_id if character.voice else None}
                 if any(getattr(existing, key) != value for key, value in patch.items()):
                     await asset_repo.update(existing.id, **patch)
                     changed = True
@@ -352,9 +468,6 @@ async def sync_character_catalog(
             if await alias_repo.sync_catalog_aliases(existing.id, _structured_aliases(character, existing.name)):
                 changed = True
 
-            # 新建 Asset 尚未通过 selectin 查询装载 relationship；在 AsyncSession 中
-            # 直接访问会触发不受支持的隐式 I/O。新角色显然没有历史资源。
-            previous_resources = [] if is_new else list(existing.resources)
             selected_image_id = next(
                 (resource.id for resource in previous_resources if resource.path == existing.image_path),
                 None,
@@ -363,31 +476,20 @@ async def sync_character_catalog(
                 (resource.id for resource in previous_resources if resource.path == existing.audio_path),
                 None,
             )
-            previous_by_key = {
-                resource.resource_key: resource for resource in previous_resources if resource.origin == "catalog"
-            }
             active_resources = [resource for resource in previous_resources if resource.origin != "catalog"]
             live_paths.update(resource.path for resource in active_resources)
-            seen_keys: set[str] = set()
-            remote_keys: set[str] = set()
-            for order, remote in enumerate(character.assets):
-                if remote.key in seen_keys:
-                    raise CharacterCatalogSyncError("character_catalog_invalid_payload")
-                seen_keys.add(remote.key)
-                relative = _safe_relative_path(remote.relative_path)
-                media_type = _media_type(remote, relative)
-                if media_type is None:
-                    continue
-                remote_keys.add(remote.key)
+            remote_keys = {spec.remote.key for spec in specs}
+
+            for spec in specs:
+                remote = spec.remote
                 current = previous_by_key.get(remote.key)
-                source_fields_json = json.dumps(remote.source_fields, ensure_ascii=False, separators=(",", ":"))
                 if current is not None and _resource_is_unchanged(current, remote):
                     metadata_patch = {
                         "origin": "catalog",
-                        "media_type": media_type,
+                        "media_type": spec.media_type,
                         "mime_type": remote.mime_type,
-                        "sort_order": order,
-                        "source_fields_json": source_fields_json,
+                        "sort_order": spec.sort_order,
+                        "source_fields_json": spec.source_fields_json,
                     }
                     if any(getattr(current, key) != value for key, value in metadata_patch.items()):
                         await resource_repo.update(current, **metadata_patch)
@@ -396,25 +498,18 @@ async def sync_character_catalog(
                     live_paths.add(current.path)
                     continue
 
-                data, digest = await _download_verified(client, remote)
-                key_digest = hashlib.sha256(remote.key.encode("utf-8")).hexdigest()[:18]
-                target = resource_root / existing.id / f"{key_digest}-{digest[:16]}{_suffix(remote, relative)}"
-                rel_target = target.relative_to(projects_root).as_posix()
-                target_existed = target.exists()
-                await asyncio.to_thread(_atomic_write, target, data)
-                if not target_existed:
-                    created_paths.add(rel_target)
-                live_paths.add(rel_target)
+                prepared = downloaded[remote.key]
+                live_paths.add(prepared.path)
                 resource_fields = {
-                    "media_type": media_type,
+                    "media_type": spec.media_type,
                     "mime_type": remote.mime_type,
-                    "path": rel_target,
+                    "path": prepared.path,
                     "source_url": remote.url,
-                    "sha256": digest,
-                    "byte_size": len(data),
+                    "sha256": prepared.sha256,
+                    "byte_size": prepared.byte_size,
                     "revision": str(remote.revision) if remote.revision is not None else None,
-                    "sort_order": order,
-                    "source_fields_json": source_fields_json,
+                    "sort_order": spec.sort_order,
+                    "source_fields_json": spec.source_fields_json,
                 }
                 if current is None:
                     current = await resource_repo.create(
@@ -424,12 +519,11 @@ async def sync_character_catalog(
                         **resource_fields,
                     )
                 else:
-                    if current.path != rel_target:
+                    if current.path != prepared.path:
                         obsolete_paths.add(current.path)
                     await resource_repo.update(current, **resource_fields)
                 active_resources.append(current)
                 changed = True
-                result["assetsDownloaded"] += 1
 
             for key, resource in previous_by_key.items():
                 if key not in remote_keys:
@@ -471,22 +565,23 @@ async def sync_character_catalog(
                 result["unchanged"] += 1
 
             await session.commit()
-            created_paths = set()
-            for path in obsolete_paths - live_paths:
+            created_paths.clear()
+        except Exception:
+            await session.rollback()
+            for path in created_paths:
                 try:
                     (projects_root / path).unlink()
                 except FileNotFoundError:
                     pass
-            if progress_callback is not None:
-                await progress_callback(character_index, total_characters)
-    except Exception:
-        await session.rollback()
-        for path in created_paths:
+            raise
+
+        for path in obsolete_paths - live_paths:
             try:
                 (projects_root / path).unlink()
             except FileNotFoundError:
                 pass
-        raise
+        if progress_callback is not None:
+            await progress_callback(character_index, total_characters)
 
     return {
         "publishVersion": catalog.publish_version.model_dump(by_alias=True),

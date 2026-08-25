@@ -20,6 +20,7 @@ class AssetRepository(BaseRepository):
     async def create(
         self,
         *,
+        asset_id: str | None = None,
         type: str,
         name: str,
         description: str = "",
@@ -32,7 +33,7 @@ class AssetRepository(BaseRepository):
         voice_id: str | None = None,
     ) -> Asset:
         asset = Asset(
-            id=str(uuid.uuid4()),
+            id=asset_id or str(uuid.uuid4()),
             type=type,
             name=name,
             description=description,
