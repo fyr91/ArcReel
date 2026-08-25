@@ -95,6 +95,11 @@ expected source revision：{next_action.args.expected_source_revision}
 内部独白视频作为用户资产展示。候选成功后在审核检查点提供音频试听，用户确认后再调用
 `confirm_character_voice_reference`。
 
+资产提取子任务返回并完成动作间确认后，必须重新查询计划。对 narration / drama 项目，新增角色、
+场景或道具只要仍缺资产图，下一动作就是 `generate_asset_sheets`；完成资产图生成与审核后才进入
+`plan_episodes`。不得沿用提取前的旧计划直接拆集；只有三类清单均为空或资产图已经可用时，计划才会
+直接进入分集规划。声音候选仍按上段规则与资产图并行，不额外阻塞这一顺序。
+
 ---
 
 ## `plan_episodes` / `reset_episode_planning`：分集规划
@@ -165,6 +170,9 @@ dispatch prompt 通用参数：项目名称、项目路径、集数、本集小�
 - character 缺 character_sheet
 - scene 缺 scene_sheet
 - prop 缺 prop_sheet
+
+在 narration / drama 工作流中，本动作位于 `analyze_assets` 之后、`plan_episodes` 之前；ad 没有全局
+资产提取阶段，仍由计划在正式剧本之后调度本动作。
 
 **调度规则（显式条件判断，按类型独立决定）**：
 

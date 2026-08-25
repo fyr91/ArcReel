@@ -31,11 +31,11 @@ _STEP_CHECKPOINTS: tuple[tuple[str, str | None], ...] = (
     ("project_input", "PROJECT_INPUT"),
     ("selling_points", "SELLING_POINTS"),
     ("asset_inventory", "ASSET_INVENTORY"),
+    ("asset_sheets", "ASSET_SHEETS"),
     ("episode_plan", "EPISODE_PLAN"),
     ("step1_content", "STEP1_CONTENT"),
     ("step1_review", "STEP1_REVIEW"),
     ("final_script", "FINAL_SCRIPT"),
-    ("asset_sheets", "ASSET_SHEETS"),
     ("script_structure", None),
     ("storyboard", "STORYBOARD"),
     ("video_unit_storyboard_sheet", None),
@@ -89,6 +89,20 @@ _PREPROCESSORS: dict[tuple[str, str], str | None] = {
 }
 
 
+def _ordered_step_checkpoints(content_mode: str) -> tuple[tuple[str, str | None], ...]:
+    """Keep episodic asset design before splitting while preserving the ad flow."""
+
+    if content_mode != "ad":
+        return _STEP_CHECKPOINTS
+    without_asset_sheets = tuple(item for item in _STEP_CHECKPOINTS if item[0] != "asset_sheets")
+    final_script_index = next(index for index, item in enumerate(without_asset_sheets) if item[0] == "final_script")
+    return (
+        *without_asset_sheets[: final_script_index + 1],
+        ("asset_sheets", "ASSET_SHEETS"),
+        *without_asset_sheets[final_script_index + 1 :],
+    )
+
+
 def _build_rule(content_mode: str, generation_mode: str) -> WorkflowRule:
     applicable = set(_CONTENT_STEPS[content_mode])
     if generation_mode == "storyboard":
@@ -104,7 +118,7 @@ def _build_rule(content_mode: str, generation_mode: str) -> WorkflowRule:
         preprocessor=_PREPROCESSORS[(content_mode, generation_mode)],
         steps=tuple(
             WorkflowStepRule(id=step_id, checkpoint=checkpoint, applicable=step_id in applicable)
-            for step_id, checkpoint in _STEP_CHECKPOINTS
+            for step_id, checkpoint in _ordered_step_checkpoints(content_mode)
         ),
     )
 

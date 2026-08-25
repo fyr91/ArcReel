@@ -364,6 +364,17 @@ def _sheet_bearing_counts(assets: Mapping[str, ArtifactCount]) -> list[ArtifactC
     return [count for asset_type, count in assets.items() if asset_type != "product"]
 
 
+def _missing_required_asset_sheet_ids(sheets: Mapping[str, Mapping[str, Any]]) -> list[str]:
+    """Return missing character/scene/prop sheets in their stable bucket order."""
+
+    return [
+        asset_id
+        for asset_type, collection in sheets.items()
+        if asset_type != "product"
+        for asset_id in collection.get("missing_ids", [])
+    ]
+
+
 def _asset_bucket_total(project: Mapping[str, Any], bucket_key: str) -> int:
     bucket = project.get(bucket_key)
     return len(bucket) if isinstance(bucket, Mapping) else 0
@@ -1298,6 +1309,13 @@ class WorkflowStateService:
                     "expected_source_revision": source.revision if source else None,
                 },
             )
+        elif mode != "ad" and (missing_sheets := _missing_required_asset_sheet_ids(sheets)):
+            state = "ASSET_SHEETS"
+            next_action = _action(
+                WorkflowActionType.GENERATE_ASSET_SHEETS,
+                "asset definitions need sheets before episode planning",
+                ids=missing_sheets,
+            )
         elif mode != "ad" and _planning_fingerprints_diverged(project, shared.planning_sources):
             state = "EPISODE_PLAN"
             next_action = _action(
@@ -1475,12 +1493,7 @@ class WorkflowStateService:
                         args={"episode": target.episode},
                     )
                 else:
-                    missing_sheets = [
-                        asset_id
-                        for asset_type, collection in sheets.items()
-                        if asset_type != "product"
-                        for asset_id in collection.get("missing_ids", [])
-                    ]
+                    missing_sheets = _missing_required_asset_sheet_ids(sheets)
                     if missing_sheets:
                         state = "ASSET_SHEETS"
                         next_action = _action(

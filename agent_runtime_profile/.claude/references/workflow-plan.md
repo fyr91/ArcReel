@@ -39,6 +39,11 @@ mcp__arcreel__get_workflow_plan({
 
 `next_action.type == "none"` 或 `blockers` 非空时：向用户展示 blockers，**停止一切变更**。
 
+剧集型项目（narration / drama）有一条固定的全局前置顺序：`asset_inventory` → `asset_sheets` →
+`episode_plan`。资产提取完成后只要角色、场景或道具仍缺资产图，计划必须先返回
+`generate_asset_sheets`；资产图可用后才允许返回 `plan_episodes`。ad 不适用资产提取，保持
+`final_script` → `asset_sheets`。
+
 ## 数据升级失败：修复 → 重试
 
 项目的数据升级（含产物补录）没跑完时，该项目整体阻断。此时计划只交回一件事：
