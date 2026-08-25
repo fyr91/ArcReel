@@ -110,6 +110,12 @@ export interface ConfirmedAssetSheet {
   sheet_path: string;
 }
 
+export interface ConfigImportStatus {
+  enabled: boolean;
+  ready: boolean;
+  issues: string[];
+}
+
 /** asset_type → REST 路径段（与后端 spec.subdir 对齐）。 */
 const ASSET_TYPE_PATH: Record<ProjectAssetType, string> = {
   character: "characters",
@@ -873,6 +879,30 @@ class API {
 
   static async getSystemConfig(): Promise<GetSystemConfigResponse> {
     return this.request("/system/config");
+  }
+
+  static async getConfigImportStatus(
+    options: { signal?: AbortSignal } = {}
+  ): Promise<ConfigImportStatus> {
+    return this.request("/config-import/status", { signal: options.signal });
+  }
+
+  static async importConfigFile(file: File): Promise<ConfigImportStatus> {
+    const formData = new FormData();
+    formData.append("file", file);
+    const endpoint = "/config-import/file";
+    const response = await fetch(
+      `${API_BASE}${endpoint}`,
+      withAuth(endpoint, { method: "POST", body: formData })
+    );
+    if (!response.ok) {
+      handleUnauthorized(response);
+      const payload = await response
+        .json()
+        .catch(() => ({ detail: response.statusText })) as ErrorResponse;
+      throw new ApiRequestError(messageFromDetail(payload.detail, "配置导入失败"), payload.diagnostic);
+    }
+    return response.json() as Promise<ConfigImportStatus>;
   }
 
   /**

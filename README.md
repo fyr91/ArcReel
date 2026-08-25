@@ -74,13 +74,18 @@ git clone https://github.com/ArcReel/ArcReel.git
 cd ArcReel
 uv sync
 cd frontend && pnpm install && cd ..
-cp .env.example .env
 ./scripts/dev.sh
 ```
 
-访问 <http://localhost:5173>。默认用户名为 `admin`；`AUTH_PASSWORD` 留空时，首次启动会自动生成密码并回写到根目录 `.env`。
+访问 <http://localhost:5173>。Release Branch 首次启动会自动创建本地 `.env`，关闭登录并打开配置导入功能；当 Agent、渠道或 Supabase 配置缺失时，页面会提示拖入管理员提供的 `.env.release` 文件。配置文件只由本地后端在内存中解析，密钥会写入本地配置数据库，文件本身不会被保存或提交到 Git。
 
-登录后进入 **设置** 页面，配置 ArcReel Agent 以及文本、图像、视频等生成能力，再创建项目开始制作。
+管理员可从已完成配置的 ArcReel 实例导出私有配置包：
+
+```bash
+uv run python scripts/export_release_config.py --output .env.release
+```
+
+导出的文件权限为 `0600` 且已被 Git ignore；请通过安全渠道交给使用者，不要提交到仓库。
 
 完整的首次使用流程见 [完整入门教程](https://docs.arc-reel.com/guide/getting-started)。
 

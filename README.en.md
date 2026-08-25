@@ -74,13 +74,18 @@ git clone https://github.com/ArcReel/ArcReel.git
 cd ArcReel
 uv sync
 cd frontend && pnpm install && cd ..
-cp .env.example .env
 ./scripts/dev.sh
 ```
 
-Open <http://localhost:5173>. The default username is `admin`. If `AUTH_PASSWORD` is empty, ArcReel generates a password on first startup and writes it back to the root `.env` file.
+Open <http://localhost:5173>. On the Release Branch, first startup creates a local `.env`, disables login, and enables the configuration importer. If Agent, provider, or Supabase settings are missing, the app prompts you to drop the administrator-provided `.env.release` file. The local backend parses it in memory, writes secrets to the local configuration database, and never stores the uploaded file or commits it to Git.
 
-After signing in, open **Settings**, configure the ArcReel AI assistant and the required text, image, and video generation capabilities, then create a project.
+Administrators can export a private bundle from an already configured ArcReel instance:
+
+```bash
+uv run python scripts/export_release_config.py --output .env.release
+```
+
+The exported file is created with `0600` permissions and is ignored by Git. Transfer it through a secure channel and never commit it to the repository.
 
 For the complete first-run workflow, see [Getting Started](https://docs.arc-reel.com/en/guide/getting-started).
 

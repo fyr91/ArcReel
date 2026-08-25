@@ -14,6 +14,7 @@ import { LoginPage } from "@/pages/LoginPage";
 import { NotFoundPage } from "@/pages/NotFoundPage";
 import { ToastOverlay } from "@/components/layout/ToastOverlay";
 import { CharacterCatalogSyncMonitor } from "@/components/assets/CharacterCatalogSyncMonitor";
+import { ConfigImportGate } from "@/components/config/ConfigImportGate";
 import { OnboardingTour } from "@/onboarding/OnboardingTour";
 import {
   buildDemoProjectData,
@@ -192,6 +193,7 @@ export function AppRoutes() {
   return (
     <>
       <ConfigStatusLoader />
+      <ConfigImportGate />
       <CharacterCatalogSyncMonitor />
       <OnboardingTour />
       <Switch>

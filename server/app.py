@@ -54,6 +54,7 @@ from server.routers import (
     assistant,
     character_catalog,
     characters,
+    config_import,
     cost_estimation,
     custom_providers,
     end_frames,
@@ -659,6 +660,7 @@ app.include_router(
 app.include_router(tasks.router, prefix="/api/v1", dependencies=[Depends(get_current_user)], tags=["任务队列"])
 app.include_router(providers.router, prefix="/api/v1", dependencies=[Depends(get_current_user)], tags=["供应商管理"])
 app.include_router(system_config.router, prefix="/api/v1", dependencies=[Depends(get_current_user)], tags=["系统配置"])
+app.include_router(config_import.router, prefix="/api/v1", dependencies=[Depends(get_current_user)], tags=["配置导入"])
 app.include_router(system.router, prefix="/api/v1", dependencies=[Depends(get_current_user)], tags=["系统"])
 app.include_router(api_keys.router, prefix="/api/v1", dependencies=[Depends(get_current_user)], tags=["API Key 管理"])
 app.include_router(agent_chat.router, prefix="/api/v1", dependencies=[Depends(get_current_user)], tags=["Agent 对话"])
