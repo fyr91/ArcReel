@@ -58,6 +58,9 @@ MiniMax H3 优化前会读取项目唯一的 Unified Video Style；缺失时生�
 提示词时，Agent 仍可调用 `mcp__arcreel__optimize_h3_video_prompts`，但正常视频生成无需预先手动调用。
 用户要求修改某个已生成且仍为 current 的 H3 提示词时，调用
 `mcp__arcreel__update_h3_video_prompt` 提交完整六段式正文；不要重新优化来覆盖用户的定向编辑。
+当用户已经集中审核提示词并要求继续生成时，先用
+`mcp__arcreel__confirm_h3_video_prompts` 在一次调用中确认全部目标 unit，再调用同一批目标的视频生成工具；
+不要逐 unit 确认，也不要把确认与付费视频提交合并成不可审核的隐式动作。
 
 ### 点名重新生成 unit
 

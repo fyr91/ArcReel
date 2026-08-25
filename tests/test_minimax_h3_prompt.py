@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import hashlib
 from dataclasses import replace
 from datetime import UTC, datetime
@@ -206,6 +207,33 @@ async def test_worker_prompt_step_accepts_the_stable_child_id_created_by_split(t
     assert load_h3_prompt_artifact(tmp_path, 1, "E1U01_1") == artifacts[0]
 
 
+async def test_stage_batch_optimizes_with_bounded_concurrency_and_preserves_unit_order(tmp_path: Path) -> None:
+    active = 0
+    peak = 0
+
+    class _Generator:
+        async def generate(self, request: Any, *, project_name: str) -> TextGenerationResult:
+            nonlocal active, peak
+            active += 1
+            peak = max(peak, active)
+            await asyncio.sleep(0.02)
+            active -= 1
+            return TextGenerationResult(text=_prompt(), provider="test", model="optimizer")
+
+    async def _factory(_project_name: str) -> Any:
+        return _Generator()
+
+    contexts = [_context(tmp_path, unit_id=f"E1U{index:02d}") for index in range(1, 8)]
+    artifacts = await H3PromptOptimizationService(generator_factory=_factory)._optimize_contexts(
+        "demo",
+        tmp_path,
+        contexts,
+    )
+
+    assert 1 < peak <= 3
+    assert [artifact.unit_id for artifact in artifacts] == [context.unit["unit_id"] for context in contexts]
+
+
 async def test_update_prompt_validates_and_persists_the_same_current_artifact(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -239,6 +267,39 @@ async def test_update_prompt_validates_and_persists_the_same_current_artifact(
     )
     assert updated.basis_digest == original.basis_digest
     assert updated.optimizer_provider == original.optimizer_provider
+    assert load_h3_prompt_artifact(tmp_path, 1, "E1U01") == updated
+
+
+async def test_update_prompt_invalidates_an_existing_confirmation(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    original = _artifact().model_copy(
+        update={
+            "status": "confirmed",
+            "confirmed_at": "2026-08-24T00:00:00+00:00",
+        }
+    )
+    save_h3_prompt_artifact(tmp_path, original)
+    context = _context(tmp_path)
+    service = H3PromptOptimizationService()
+
+    async def _contexts(*_args: Any, **_kwargs: Any) -> tuple[Path, list[H3PromptContext]]:
+        return tmp_path, [context]
+
+    monkeypatch.setattr(service, "_contexts", _contexts)
+    edited_prompt = _prompt().replace("The liquid settles", "The liquid spins")
+
+    updated = await service.update_prompt(
+        "demo",
+        1,
+        unit_id="E1U01",
+        rendered_prompt=edited_prompt,
+    )
+
+    assert updated.status == "pending_review"
+    assert updated.confirmed_at is None
+    assert updated.basis_digest == original.basis_digest
     assert load_h3_prompt_artifact(tmp_path, 1, "E1U01") == updated
 
 

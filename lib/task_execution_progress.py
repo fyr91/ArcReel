@@ -9,6 +9,7 @@ from typing import Any, Literal, TypedDict
 logger = logging.getLogger(__name__)
 
 H3_PROGRESS_KIND = "minimax_h3"
+MUSIC_PROGRESS_KIND = "minimax_music"
 
 H3ProgressPhase = Literal[
     "style_analyzing",
@@ -26,6 +27,18 @@ H3ProgressPhase = Literal[
 
 class H3ExecutionProgress(TypedDict):
     kind: Literal["minimax_h3"]
+    phase: H3ProgressPhase
+    provider_status: str | None
+    stage: str | None
+    progress: int | None
+    can_cancel: bool
+    queue_position: int | None
+    queue_length: int | None
+    queue_ahead: int | None
+
+
+class MusicExecutionProgress(TypedDict):
+    kind: Literal["minimax_music"]
     phase: H3ProgressPhase
     provider_status: str | None
     stage: str | None
@@ -76,6 +89,44 @@ async def persist_h3_execution_progress(task_id: str | None, progress: H3Executi
         logger.warning("H3 execution progress persistence failed task_id=%s", task_id, exc_info=True)
 
 
+def music_execution_progress(
+    phase: H3ProgressPhase,
+    *,
+    provider_status: str | None = None,
+    stage: str | None = None,
+    progress: int | float | None = None,
+    can_cancel: bool = False,
+    queue_position: int | None = None,
+    queue_length: int | None = None,
+) -> MusicExecutionProgress:
+    base = h3_execution_progress(
+        phase,
+        provider_status=provider_status,
+        stage=stage,
+        progress=progress,
+        can_cancel=can_cancel,
+        queue_position=queue_position,
+        queue_length=queue_length,
+    )
+    return {**base, "kind": MUSIC_PROGRESS_KIND}  # type: ignore[return-value]
+
+
+async def persist_music_execution_progress(
+    task_id: str | None,
+    progress: MusicExecutionProgress,
+) -> None:
+    """Best-effort Music 3 progress persistence for Web and Agent observers."""
+    if task_id is None:
+        return
+    from lib.generation_queue import get_generation_queue
+
+    try:
+        raw = json.dumps(progress, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+        await get_generation_queue().persist_execution_progress(task_id, raw)
+    except Exception:
+        logger.warning("Music execution progress persistence failed task_id=%s", task_id, exc_info=True)
+
+
 def h3_progress_from_provider(job: dict[str, Any], queue: dict[str, Any] | None = None) -> H3ExecutionProgress:
     """Map Croco lifecycle/status fields to ArcReel's H3-only phase contract."""
     status = str(job.get("status") or "unknown")
@@ -101,3 +152,11 @@ def h3_progress_from_provider(job: dict[str, Any], queue: dict[str, Any] | None 
         queue_position=queue.get("position") if isinstance(queue.get("position"), int) else None,
         queue_length=queue.get("queue_length") if isinstance(queue.get("queue_length"), int) else None,
     )
+
+
+def music_progress_from_provider(
+    job: dict[str, Any],
+    queue: dict[str, Any] | None = None,
+) -> MusicExecutionProgress:
+    h3 = h3_progress_from_provider(job, queue)
+    return {**h3, "kind": MUSIC_PROGRESS_KIND}  # type: ignore[return-value]

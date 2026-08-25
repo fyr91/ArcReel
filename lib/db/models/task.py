@@ -44,7 +44,7 @@ class Task(UserOwnedMixin, Base):
     # checkpoint/job 组合在重启时可无歧义分流；只由 worker 内部消费，不属于 tasks API 契约。
     execution_checkpoint_json: Mapped[str | None] = mapped_column(Text)
     # 供应商执行过程的可展示投影。仅支持分阶段反馈的 backend 写入；API 读侧解析为
-    # execution_progress，其他模型保持 NULL，避免把 H3 专属状态扩散成通用模型假设。
+    # execution_progress；当前 MiniMax H3 与 Music 3 写入，其他模型保持 NULL。
     execution_progress_json: Mapped[str | None] = mapped_column(Text)
     queued_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))

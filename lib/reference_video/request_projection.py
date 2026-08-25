@@ -563,11 +563,7 @@ _PROBLEM_PRESENTATION: dict[str, tuple[str, tuple[tuple[str | int, ...], ...]]] 
     "reference_capability_changed": ("repair_reference_assets", (("text",),)),
     "reference_images_clamped": ("review_reference_selection", (("text",),)),
     "reference_storyboard_sheet_required": ("generate_reference_storyboard_sheets", (("storyboard_sheet",),)),
-    "reference_storyboard_sheet_confirmation_required": (
-        "confirm_reference_storyboard_sheet",
-        (("storyboard_sheet",),),
-    ),
-    "reference_keyframe_plan_required": ("repair_keyframe_plan", (("keyframes",),)),
+    "reference_keyframes_required": ("regenerate_video_unit_manuscript", (("keyframes",),)),
     "reference_keyframe_images_required": ("generate_reference_keyframes", (("keyframes",),)),
     "video_audio_switch_not_supported": (
         "enable_model_audio",
@@ -643,7 +639,7 @@ class ReferenceUnitRequestProjector:
                 and str(item.get("description") or "").strip()
                 for item in unit.get("keyframes") or []
             ):
-                problems.append(_problem("reference_keyframe_plan_required", blocking=True, unit_id=unit_id))
+                problems.append(_problem("reference_keyframes_required", blocking=True, unit_id=unit_id))
             else:
                 missing_keyframe_ids = [
                     str(item.get("keyframe_id") or "").strip()
@@ -665,10 +661,6 @@ class ReferenceUnitRequestProjector:
             sheet = unit.get("storyboard_sheet")
             if not isinstance(sheet, dict) or not str(sheet.get("image_path") or "").strip():
                 problems.append(_problem("reference_storyboard_sheet_required", blocking=True, unit_id=unit_id))
-            elif sheet.get("status") != "confirmed":
-                problems.append(
-                    _problem("reference_storyboard_sheet_confirmation_required", blocking=True, unit_id=unit_id)
-                )
         if options.narration_preparation is not None:
             for delivery_problem in options.narration_preparation.problems:
                 problems.append(
@@ -729,12 +721,10 @@ class ReferenceUnitRequestProjector:
         if candidate is not None:
             request_assets = clamp_reference_assets(available, candidate.max_reference_images)
             if len(request_assets) < len(available):
-                sheet = unit.get("storyboard_sheet")
-                confirmed_sheet = isinstance(sheet, dict) and sheet.get("status") == "confirmed"
                 problems.append(
                     _problem(
                         "reference_images_clamped",
-                        blocking=confirmed_sheet,
+                        blocking=False,
                         count=len(available),
                         max_count=candidate.max_reference_images,
                         provider=candidate.provider_id,

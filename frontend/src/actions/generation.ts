@@ -336,6 +336,7 @@ export async function enqueueReferenceStoryboardSheet(
   episode: number,
   unitId: string,
   selection: ImageModelSelection = {},
+  instructions?: string,
 ): Promise<EnqueueResult> {
   const res = await submit(
     [
@@ -346,7 +347,7 @@ export async function enqueueReferenceStoryboardSheet(
         "reference_storyboard_sheet",
       ),
     ],
-    () => API.generateReferenceStoryboardSheet(projectName, episode, unitId, selection),
+    () => API.generateReferenceStoryboardSheet(projectName, episode, unitId, selection, instructions),
     oneTaskId,
   );
   notifyEnqueued(res.deduped, res.message);

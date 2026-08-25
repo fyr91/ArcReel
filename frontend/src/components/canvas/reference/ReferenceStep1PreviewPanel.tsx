@@ -13,9 +13,10 @@ import { useAssistantStore } from "@/stores/assistant-store";
 import { useProjectsStore } from "@/stores/projects-store";
 import { useScriptReviewDraft } from "@/hooks/useScriptReviewDraft";
 import { voidPromise } from "@/utils/async";
-import { AutoTextarea } from "@/components/ui/AutoTextarea";
 import { ACCENT_BTN_CLS, ACCENT_BUTTON_STYLE, CARD_STYLE, GHOST_BTN_CLS, GHOST_BTN_LG_CLS } from "@/components/ui/darkroom-tokens";
 import { ScriptHighlight } from "@/components/shared/ScriptHighlight";
+import { MentionTextarea } from "./MentionTextarea";
+import { buildMentionCandidates } from "./mention-candidates";
 import { toScriptLines, type MentionLookup } from "@/hooks/useUnitPromptHighlight";
 import { extractMentions } from "@/utils/reference-mentions";
 
@@ -179,6 +180,8 @@ function UnitCard({
   outOfTier,
   onDurationChange,
   busy,
+  projectName,
+  candidates,
 }: {
   unit: DisplayUnit;
   violations: UnitViolations;
@@ -194,6 +197,8 @@ function UnitCard({
   onDurationChange: ((seconds: number) => void) | null;
   /** 保存 / 确认请求在途：锁住时长下拉与正文，避免 adopt() 用服务端回显覆盖请求发出后的新编辑。 */
   busy: boolean;
+  projectName: string;
+  candidates: ReturnType<typeof buildMentionCandidates>;
 }) {
   const { t } = useTranslation("dashboard");
   const hasViolation = violations.anchorSource.length + violations.byLine.size + violations.aggregate.length > 0;
@@ -276,12 +281,15 @@ function UnitCard({
 
       <div className="mt-3">
         {editing && unit.editable && onTextChange ? (
-          <AutoTextarea
+          <MentionTextarea
             value={unit.scriptText}
             onChange={onTextChange}
+            lookup={lookup}
+            candidates={candidates}
+            projectName={projectName}
             disabled={busy}
-            aria-label={t("reference_step1_unit_text_label", { unit: unit.key })}
-            className="text-text-3"
+            ariaLabel={t("reference_step1_unit_text_label", { unit: unit.key })}
+            placeholder={t("reference_editor_placeholder")}
           />
         ) : (
           <ScriptHighlight
@@ -317,6 +325,8 @@ function selectUnitsContent(state: ScriptReviewState): ReferenceStep1Draft | nul
 export function ReferenceStep1PreviewPanel({ projectName, episode, lookup }: ReferenceStep1PreviewPanelProps) {
   const { t } = useTranslation("dashboard");
   const pushToast = useAppStore((s) => s.pushToast);
+  const project = useProjectsStore((s) => s.currentProjectData);
+  const candidates = useMemo(() => buildMentionCandidates(project), [project]);
 
   const [editingUnitKey, setEditingUnitKey] = useState<string | null>(null);
 
@@ -570,6 +580,8 @@ export function ReferenceStep1PreviewPanel({ projectName, episode, lookup }: Ref
             outOfTier={outOfTierUnitKeys.has(unit.key)}
             onDurationChange={quarantined ? null : (seconds) => updateDuration(i, seconds)}
             busy={busy}
+            projectName={projectName}
+            candidates={candidates}
           />
         ))}
       </div>

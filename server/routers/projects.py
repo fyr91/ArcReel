@@ -61,11 +61,17 @@ from server.routers._script_edits import (
 )
 from server.routers._validators import validate_backend_value
 from server.services import workflow_planner as workflow_plan_service
+from server.services.episode_metadata import EpisodeMetadataNotFoundError, update_episode_metadata
 from server.services.project_archive import (
     ProjectArchiveService,
     ProjectArchiveValidationError,
 )
 from server.services.project_cover import resolve_project_cover
+from server.services.reference_keyframe_mentions import (
+    EpisodeReferenceScriptNotFoundError,
+    normalize_episode_keyframe_mentions,
+)
+from server.services.reference_script_text_replacements import replace_reference_script_text
 from server.services.video_style import VideoStyleService
 
 router = APIRouter()
@@ -133,6 +139,10 @@ _PROJECT_BACKEND_FIELDS = (
     "video_provider_r2v",
     "image_provider_t2i",
     "image_provider_i2i",
+    "image_provider_asset",
+    "image_provider_reference",
+    "image_provider_storyboard",
+    "image_provider_keyframe",
     "default_image_backend",
     "text_backend_simple",
     "text_backend_complex",
@@ -207,6 +217,10 @@ class CreateProjectRequest(BaseModel):
     # 桶为空 = 回退项目默认（default_image_backend）与全局层
     image_provider_t2i: str | None = None
     image_provider_i2i: str | None = None
+    image_provider_asset: str | None = None
+    image_provider_reference: str | None = None
+    image_provider_storyboard: str | None = None
+    image_provider_keyframe: str | None = None
     default_image_backend: str | None = None
     # 文本任务档位（docs/adr/0051）项目级覆盖 + 项目默认模型；空值 = 继承全局
     text_backend_simple: str | None = None
@@ -242,6 +256,10 @@ class UpdateProjectRequest(BaseModel):
     video_provider_r2v: str | None = None
     image_provider_t2i: str | None = None
     image_provider_i2i: str | None = None
+    image_provider_asset: str | None = None
+    image_provider_reference: str | None = None
+    image_provider_storyboard: str | None = None
+    image_provider_keyframe: str | None = None
     default_image_backend: str | None = None
     video_generate_audio: bool | None = None
     # 旁白配音（TTS）项目级覆盖：音频后端 / 音色 / 语速；留空 = 跟随全局默认
@@ -1386,7 +1404,30 @@ class UpdateOverviewRequest(BaseModel):
 
 
 class UpdateEpisodeRequest(BaseModel):
-    title: str
+    """Editable formal-script metadata mirrored into project.json episodes[]."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    title: str | None = None
+    hook: str | None = None
+    outline: dict[str, Any] | None = None
+
+
+class ReferenceTextReplacementRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    unit_id: str
+    field: Literal["text", "storyboard_description", "keyframe_description"]
+    keyframe_id: str | None = None
+    old: str
+    new: str
+
+
+class ReplaceReferenceScriptTextRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    expected_revision: str
+    replacements: list[ReferenceTextReplacementRequest]
 
 
 @router.patch("/projects/{name}/segments/{segment_id}")
@@ -1462,33 +1503,24 @@ async def update_segment(name: str, segment_id: str, req: UpdateSegmentRequest, 
 
 @router.patch("/projects/{name}/episodes/{episode}")
 async def update_episode(name: str, episode: int, req: UpdateEpisodeRequest, _t: Translator):
-    """更新分集顶层元数据（当前仅标题）。
+    """更新正式文稿的分集元数据并原子镜像到 project.json。
 
-    以剧本 scripts/*.json 顶层 title 为唯一真相源：走 locked_episode_script 在
-    「脚本锁 → 项目锁」临界区内改剧本 title，并内联 _apply_episode_sync 把镜像同步回
-    project.json 的 episodes[].title，原子且无 TOCTOU。镜像由 PATCH /projects 改写的入口
-    已移除（title 不在 EpisodePatch 上），杜绝第二真相源。
+    Web 与 Agent 共用 ``update_episode_metadata``；title / hook / outline 都以正式文稿顶层
+    字段为真相源，并在同一个脚本锁 → 项目锁事务内同步到 episodes[] 导览镜像。
     """
-    title = req.title.strip()
-    if not title:
-        raise HTTPException(status_code=422, detail=_t("episode_title_empty"))
+    updates = req.model_dump(exclude_unset=True)
+    if not updates:
+        raise HTTPException(status_code=422, detail=_t("script_validation_failed"))
 
     try:
 
         def _sync():
             manager = get_project_manager()
-
-            def _resolve(project: dict) -> str:
-                episodes = project.get("episodes") or []
-                meta = next((e for e in episodes if e.get("episode") == episode), None)
-                if meta is None or not meta.get("script_file"):
-                    raise HTTPException(status_code=404, detail=_t("episode_not_found", episode=episode))
-                return meta["script_file"]
-
             with project_change_source("webui"):
                 try:
-                    with manager.locked_episode_script(name, _resolve) as script:
-                        script["title"] = title
+                    updated = update_episode_metadata(manager, name, episode, updates)
+                except EpisodeMetadataNotFoundError as exc:
+                    raise HTTPException(status_code=404, detail=_t("episode_not_found", episode=episode)) from exc
                 except FileNotFoundError as exc:
                     if not manager.project_exists(name):
                         raise NotFoundError("project_not_found", name=name) from exc
@@ -1502,9 +1534,7 @@ async def update_episode(name: str, episode: int, req: UpdateEpisodeRequest, _t:
                         status_code=422, detail=_t("script_validation_failed", details=str(exc))
                     ) from exc
 
-            # 返回刚写入的值（前端保存后整体 refreshProject，不强依赖此返回）。
-            # 不再锁后二次 load_project：省一次读盘，且避免锁外读取被并发写者污染返回值。
-            return {"success": True, "episode": {"episode": episode, "title": title}}
+            return {"success": True, "episode": updated}
 
         return await asyncio.to_thread(_sync)
     except (HTTPException, ApiError):
@@ -1516,6 +1546,80 @@ async def update_episode(name: str, episode: int, req: UpdateEpisodeRequest, _t:
     except Exception:
         logger.exception("请求处理失败")
         raise HTTPException(status_code=500, detail=_t("internal_server_error"))
+
+
+@router.post("/projects/{name}/episodes/{episode}/keyframes/normalize-asset-mentions")
+async def normalize_keyframe_asset_mentions(name: str, episode: int, _t: Translator):
+    """Batch-normalize registered asset mentions in formal Keyframe descriptions."""
+
+    try:
+
+        def _sync():
+            manager = get_project_manager()
+            with project_change_source("webui"):
+                try:
+                    result = normalize_episode_keyframe_mentions(manager, name, episode)
+                except EpisodeReferenceScriptNotFoundError as exc:
+                    raise HTTPException(status_code=404, detail=_t("episode_not_found", episode=episode)) from exc
+                except FileNotFoundError as exc:
+                    if not manager.project_exists(name):
+                        raise NotFoundError("project_not_found", name=name) from exc
+                    raise NotFoundError("ref_script_missing") from exc
+                except EpisodeScriptReboundError as exc:
+                    raise HTTPException(status_code=409, detail=_t("ref_script_rebound")) from exc
+                except ValueError as exc:
+                    raise HTTPException(
+                        status_code=422,
+                        detail=_t("script_validation_failed", details=str(exc)),
+                    ) from exc
+            return {"success": True, **result}
+
+        return await asyncio.to_thread(_sync)
+    except (HTTPException, ApiError):
+        raise
+    except FileNotFoundError as exc:
+        raise NotFoundError("project_not_found", name=name) from exc
+    except Exception:
+        logger.exception("请求处理失败")
+        raise HTTPException(status_code=500, detail=_t("internal_server_error"))
+
+
+@router.post(
+    "/projects/{name}/episodes/{episode}/reference-script/exact-replacements",
+    response_model=None,
+    dependencies=[Depends(require_project_migration_ok)],
+)
+async def replace_reference_manuscript_text(
+    name: str,
+    episode: int,
+    req: ReplaceReferenceScriptTextRequest,
+    _t: Translator,
+) -> JSONResponse:
+    """Apply the same atomic exact-replacement operation exposed to Agent."""
+
+    try:
+        manager = get_project_manager()
+        with project_change_source("webui"):
+            result = await asyncio.to_thread(
+                replace_reference_script_text,
+                manager,
+                name,
+                episode,
+                req.expected_revision,
+                [item.model_dump(exclude_none=True) for item in req.replacements],
+            )
+        return JSONResponse(status_code=script_batch_status(result), content=result.model_dump(mode="json"))
+    except FileNotFoundError as exc:
+        if not get_project_manager().project_exists(name):
+            raise NotFoundError("project_not_found", name=name) from exc
+        raise NotFoundError("ref_script_missing") from exc
+    except ValueError as exc:
+        raise UnprocessableError("script_validation_failed").with_diagnostic(str(exc)) from exc
+    except ApiError:
+        raise
+    except Exception as exc:
+        logger.exception("请求处理失败")
+        raise HTTPException(status_code=500, detail=_t("internal_server_error")) from exc
 
 
 # ==================== 源文件管理 ====================

@@ -26,7 +26,7 @@ from lib.artifact_activation import (
 )
 from lib.artifact_manifest import ArtifactKey
 from lib.asset_types import ASSET_SPECS, resolve_asset_key
-from lib.config.resolver import ConfigResolver, video_bucket_for_generation_mode
+from lib.config.resolver import ConfigResolver, image_stage_for_task, video_bucket_for_generation_mode
 from lib.generation_queue import get_generation_queue
 from lib.generation_queue_client import TaskSpec
 from lib.i18n import Translator
@@ -821,6 +821,7 @@ async def generate_product(
 
 async def _require_i2i_image_provider_configured(
     project: dict,
+    resource_type: str,
     payload: dict[str, str] | None = None,
     *,
     user_id: str,
@@ -838,6 +839,7 @@ async def _require_i2i_image_provider_configured(
             project,
             payload,
             capability="i2i",
+            stage=image_stage_for_task("image_edit", {"resource_type": resource_type}),
         )
     except ValueError:
         raise BadRequestError("image_edit_i2i_unavailable")
@@ -903,7 +905,12 @@ async def edit_image(
     project = await asyncio.to_thread(_sync)
 
     image_override = req.image_override_payload()
-    provider_id = await _require_i2i_image_provider_configured(project, image_override, user_id=user.id)
+    provider_id = await _require_i2i_image_provider_configured(
+        project,
+        req.resource_type,
+        image_override,
+        user_id=user.id,
+    )
 
     # 结构校验 + 构造经单一守卫点（与 SDK 入队同源，规则不分叉）
     spec = TaskSpec.from_request(

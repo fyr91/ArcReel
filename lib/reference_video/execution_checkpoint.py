@@ -21,7 +21,7 @@ from typing import Any, ClassVar, Literal, Self, cast
 from lib.artifact_manifest import ArtifactBasisDescriptor
 from lib.content_digest import canonical_json, canonical_json_digest, sha256_file_with_size
 from lib.json_io import atomic_write_json, load_json
-from lib.path_safety import safe_join
+from lib.path_safety import PathTraversalError, safe_join
 from lib.video_artifact_facts import VideoArtifactCurrencyFacts
 
 logger = logging.getLogger(__name__)
@@ -261,8 +261,7 @@ def _media_plan(
     staging_prefix = PurePosixPath(".arcreel", "tasks", task_id, "provider_media")
     planned: list[StagedProviderMedia] = []
     for index, item in enumerate(inputs):
-        source = safe_join(project_path, item.path, require_file=True)
-        source_locator = source.relative_to(project_path.resolve()).as_posix()
+        source, source_locator = _resolve_provider_media_source(project_path, item.path)
         suffix = source.suffix.lower() or ".bin"
         filename = f"{index:03d}-{item.role}{suffix}"
         digest, size = sha256_file_with_size(source)
@@ -281,6 +280,26 @@ def _media_plan(
             )
         )
     return tuple(planned)
+
+
+def _resolve_provider_media_source(project_path: Path, path: Path) -> tuple[Path, str]:
+    """Resolve project media or a registered sibling ``_global_assets`` file.
+
+    Global catalog assets intentionally live beside project directories.  They are
+    trusted generation inputs selected through the asset registry, but still need
+    to be copied into the task-local immutable staging directory before provider
+    submission.  Keep the allow-list narrow: an arbitrary sibling path remains a
+    traversal error.
+    """
+
+    try:
+        source = safe_join(project_path, path, require_file=True)
+    except PathTraversalError:
+        projects_root = project_path.resolve().parent
+        source = safe_join(projects_root / "_global_assets", path, require_file=True)
+        source_locator = source.relative_to(projects_root).as_posix()
+        return source, source_locator
+    return source, source.relative_to(project_path.resolve()).as_posix()
 
 
 def _load_staging_manifest(path: Path) -> tuple[StagedProviderMedia, ...]:
@@ -330,8 +349,8 @@ def stage_provider_media(
     temporary_dir = Path(tempfile.mkdtemp(prefix=".provider_media.", dir=task_dir))
     published = False
     try:
-        for item in planned:
-            source = safe_join(project_path, item.source_locator, require_file=True)
+        for item, provider_input in zip(planned, inputs, strict=True):
+            source, _source_locator = _resolve_provider_media_source(project_path, provider_input.path)
             destination = temporary_dir / Path(item.staged_locator).name
             shutil.copyfile(source, destination)
             digest, size = sha256_file_with_size(destination)

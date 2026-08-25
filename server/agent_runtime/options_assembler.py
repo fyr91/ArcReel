@@ -21,11 +21,13 @@ from lib.agent_session_store import (
     session_store_flush_mode,
     session_store_mode,
 )
+from lib.agent_session_store.image_filter import TextOnlySessionStore
 from lib.agent_session_store.store import DbSessionStore
 from lib.db.base import DEFAULT_USER_ID
 from lib.db.engine import async_session_factory as default_async_session_factory
 from lib.i18n import DEFAULT_LOCALE, LOCALE_LANGUAGE_MAP
 from server.agent_runtime.agent_access_policy import AgentAccessPolicy
+from server.agent_runtime.model_capabilities import is_image_path, supports_agent_image_input
 from server.agent_runtime.sdk_tools import build_arcreel_mcp_server
 
 logger = logging.getLogger(__name__)
@@ -216,6 +218,9 @@ class OptionsAssembler:
             raise ValueError("resume_id and session_id are mutually exclusive")
 
         policy = self._access_policy_provider()
+        provider_env = await self.build_provider_env_overrides()
+        configured_model = str(provider_env.get("ANTHROPIC_MODEL") or "")
+        image_input_supported = supports_agent_image_input(configured_model)
 
         project_cwd = self._resolve_project_cwd(project_name)
 
@@ -226,7 +231,10 @@ class OptionsAssembler:
         hooks = None
         if HookMatcher is not None:
             hook_callbacks: list[Any] = [
-                self._build_file_access_hook(project_cwd),
+                self._build_file_access_hook(
+                    project_cwd,
+                    image_input_supported=image_input_supported,
+                ),
             ]
             if can_use_tool is not None:
                 # Official Python SDK guidance: keep stream open when using
@@ -261,7 +269,6 @@ class OptionsAssembler:
                 ],
             }
 
-        provider_env = await self.build_provider_env_overrides()
         sandbox_typed = policy.build_sandbox_settings(project_cwd)
 
         # Windows 回退：sandbox 关闭时 Bash 系列被剥离出 allowed_tools，
@@ -276,6 +283,10 @@ class OptionsAssembler:
             projects_root=self.projects_root,
             user_id=self._user_id_provider(),
         )
+
+        session_store = self.build_session_store()
+        if session_store is not None and not image_input_supported:
+            session_store = TextOnlySessionStore(session_store)
 
         return ClaudeAgentOptions(
             cwd=str(project_cwd),
@@ -296,7 +307,7 @@ class OptionsAssembler:
             can_use_tool=can_use_tool,
             hooks=hooks,  # type: ignore[arg-type]
             mcp_servers={"arcreel": arcreel_server},
-            session_store=self.build_session_store(),  # type: ignore[arg-type]
+            session_store=session_store,  # type: ignore[arg-type]
             session_store_flush=session_store_flush_mode(),
             sandbox=sandbox_typed,  # type: ignore[arg-type]
             env=provider_env,
@@ -340,6 +351,8 @@ class OptionsAssembler:
     def _build_file_access_hook(
         self,
         project_cwd: Path,
+        *,
+        image_input_supported: bool = True,
     ) -> Callable[..., Any]:
         """Build a PreToolUse hook callback that enforces file access control.
 
@@ -362,6 +375,18 @@ class OptionsAssembler:
             tool_input = input_data.get("tool_input", {})
             path_key = path_tools[tool_name]
             file_path = tool_input.get(path_key)
+
+            if tool_name == "Read" and not image_input_supported and is_image_path(file_path):
+                return {
+                    "hookSpecificOutput": {
+                        "hookEventName": "PreToolUse",
+                        "permissionDecision": "deny",
+                        "permissionDecisionReason": (
+                            "当前 Agent 模型不支持图片输入，已阻止 Read 把图片写入会话历史。"
+                            "请读取图片文件元数据，或请用户完成视觉审核后继续。"
+                        ),
+                    },
+                }
 
             if file_path:
                 allowed, deny_reason = policy.check_path_access(

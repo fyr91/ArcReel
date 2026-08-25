@@ -8,14 +8,13 @@ from typing import Any
 from lib.db.base import DEFAULT_USER_ID
 from lib.generation_queue_client import TaskSpec
 from lib.image_reference_snapshot import freeze_image_references
-from lib.path_safety import safe_join
-from lib.reference_video.keyframes import find_keyframe
+from lib.reference_video.keyframes import find_keyframe, without_keyframe_mentions
 from lib.reference_video.request_projection import resolve_reference_assets
 from lib.resource_paths import resource_relative_path
 from server.services.generation_context import ImageLaneRequest, resolve_generation_context
 from server.services.generation_tasks import get_aspect_ratio, get_project_manager
 from server.services.reference_image_binding import (
-    prepend_storyboard_sheet,
+    bind_resolved_assets,
     prompt_roster,
     provider_inputs,
     visual_references,
@@ -47,9 +46,6 @@ def reference_keyframe_task_specs(
                 continue
             if missing_only and keyframe.get("image_path"):
                 continue
-            from server.services.reference_storyboard_sheet_tasks import require_confirmed_storyboard_sheet
-
-            require_confirmed_storyboard_sheet(unit)
             specs.append(
                 TaskSpec.from_request(
                     task_type="reference_keyframe",
@@ -66,7 +62,9 @@ def reference_keyframe_task_specs(
     return specs
 
 
-def build_keyframe_prompt(project: dict[str, Any], description: str, reference_roster: str) -> str:
+def build_keyframe_prompt(
+    project: dict[str, Any], manuscript: str, description: str, reference_roster: str
+) -> str:
     style = str(project.get("style") or "").strip()
     style_description = str(project.get("style_description") or "").strip()
     return (
@@ -75,6 +73,8 @@ def build_keyframe_prompt(project: dict[str, Any], description: str, reference_r
         "不得选择同一 beat 的完成结果、撞击后、摔倒后或事后状态。只有结果本身开启新的 beat 时，才可作为下一关键帧。\n"
         f"项目风格：{style}\n"
         f"风格定义：{style_description}\n"
+        "正式 Video Unit 文稿（关键分镜与 Storyboard 的共同上游，不得增删其中事实）：\n"
+        f"{manuscript.strip()}\n"
         "真实参考图绑定（必须按 Picture 编号使用；@ 名称不是画面文字）：\n"
         f"{reference_roster}\n"
         f"首帧描述：{description.strip()}"
@@ -96,9 +96,12 @@ def _assert_keyframe_unchanged(
     project_name: str,
     script_file: str,
     keyframe_id: str,
+    expected_manuscript: str,
     expected_description: str,
 ) -> None:
-    _project, _script, _unit, keyframe = _load_keyframe(project_name, script_file, keyframe_id)
+    _project, _script, unit, keyframe = _load_keyframe(project_name, script_file, keyframe_id)
+    if without_keyframe_mentions(str(unit.get("text") or "")) != expected_manuscript:
+        raise ValueError(f"reference manuscript changed while keyframe generation was pending: {keyframe_id}")
     if str(keyframe.get("description") or "").strip() != expected_description:
         raise ValueError(f"reference keyframe changed while generation was pending: {keyframe_id}")
 
@@ -107,6 +110,7 @@ def _commit_keyframe_pointer(
     project_name: str,
     script_file: str,
     keyframe_id: str,
+    expected_manuscript: str,
     expected_description: str,
     image_path: str,
 ) -> None:
@@ -115,10 +119,13 @@ def _commit_keyframe_pointer(
         found = find_keyframe(script, keyframe_id)
         if found is None:
             raise ValueError(f"reference keyframe no longer exists: {keyframe_id}")
-        _unit, keyframe = found
+        unit, keyframe = found
+        if without_keyframe_mentions(str(unit.get("text") or "")) != expected_manuscript:
+            raise ValueError(f"reference manuscript changed before keyframe image activation: {keyframe_id}")
         if str(keyframe.get("description") or "").strip() != expected_description:
             raise ValueError(f"reference keyframe changed before image activation: {keyframe_id}")
         keyframe["image_path"] = image_path
+        keyframe["generation_input_changed"] = False
 
 
 async def execute_reference_keyframe_task(
@@ -134,7 +141,8 @@ async def execute_reference_keyframe_task(
     if not script_file:
         raise ValueError("script_file is required for reference_keyframe task")
 
-    project, _script, _unit, keyframe = await asyncio.to_thread(_load_keyframe, project_name, script_file, resource_id)
+    project, _script, unit, keyframe = await asyncio.to_thread(_load_keyframe, project_name, script_file, resource_id)
+    manuscript = without_keyframe_mentions(str(unit.get("text") or ""))
     description = str(keyframe.get("description") or "").strip()
     if not description:
         raise ValueError("reference keyframe description is required")
@@ -144,13 +152,9 @@ async def execute_reference_keyframe_task(
         resolve_reference_assets,
         project,
         project_path,
-        {"text": description, "keyframes": []},
+        {"text": f"{manuscript}\n{description}", "keyframes": []},
     )
-    from server.services.reference_storyboard_sheet_tasks import require_confirmed_storyboard_sheet
-
-    sheet = require_confirmed_storyboard_sheet(_unit)
-    sheet_path = safe_join(project_path, str(sheet["image_path"]))
-    bindings = prepend_storyboard_sheet(str(_unit.get("unit_id") or ""), sheet_path, reference_assets)
+    bindings = bind_resolved_assets(reference_assets)
     frozen = freeze_image_references(
         provider_inputs(bindings),
         visual_references(bindings, role="keyframe_subject"),
@@ -161,7 +165,10 @@ async def execute_reference_keyframe_task(
             payload,
             project=project,
             user_id=user_id,
-            image=ImageLaneRequest(capability="i2i" if frozen.reference_images else "t2i"),
+            image=ImageLaneRequest(
+                capability="i2i" if frozen.reference_images else "t2i",
+                stage="keyframe",
+            ),
         )
 
         async def _before_submit() -> None:
@@ -170,12 +177,13 @@ async def execute_reference_keyframe_task(
                 project_name,
                 script_file,
                 resource_id,
+                manuscript,
                 description,
             )
 
         image_path = resource_relative_path("keyframes", resource_id)
         _output, version = await ctx.generator.generate_image_async(
-            prompt=build_keyframe_prompt(project, description, prompt_roster(bindings)),
+            prompt=build_keyframe_prompt(project, manuscript, description, prompt_roster(bindings)),
             resource_type="keyframes",
             resource_id=resource_id,
             reference_images=frozen.reference_images,
@@ -193,6 +201,7 @@ async def execute_reference_keyframe_task(
         project_name,
         script_file,
         resource_id,
+        manuscript,
         description,
         image_path,
     )

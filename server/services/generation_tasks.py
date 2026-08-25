@@ -1192,6 +1192,7 @@ class _FormalImagePlan:
     artifact_path: str
     prompt: str
     aspect_ratio: str
+    image_stage: str
     build_commit_callback: Callable[[Any, list[_FormalImageCommitOutcome]], _StagedImageCommit]
     finalize: Callable[[Any, int], Awaitable[tuple[str, _CancellationReceipt | None]]]
     pre_submit: Callable[[], Awaitable[None]] | None = None
@@ -1219,7 +1220,10 @@ async def _run_formal_image_task(
             payload,
             project=project,
             user_id=user_id,
-            image=ImageLaneRequest(capability="i2i" if reference_images else "t2i"),
+            image=ImageLaneRequest(
+                capability="i2i" if reference_images else "t2i",
+                stage=plan.image_stage,
+            ),
         )
         if plan.pre_submit is not None:
             await plan.pre_submit()
@@ -1321,6 +1325,7 @@ async def _run_asset_sheet_image_task(
             artifact_path=sheet_path,
             prompt=full_prompt,
             aspect_ratio=get_aspect_ratio(project, bucket_key),
+            image_stage="asset",
             build_commit_callback=_build_commit,
             finalize=_finalize,
         ),
@@ -1742,6 +1747,7 @@ async def execute_storyboard_task(
             artifact_path=artifact_path,
             prompt=prompt_text,
             aspect_ratio=get_aspect_ratio(project, "storyboards"),
+            image_stage="storyboard",
             build_commit_callback=_build_commit,
             finalize=_finalize,
             pre_submit=_assert_claims_usable,
@@ -3405,7 +3411,10 @@ async def execute_grid_task(
             payload,
             project=project,
             user_id=user_id,
-            image=ImageLaneRequest(capability="i2i" if _needs_i2i else "t2i"),
+            image=ImageLaneRequest(
+                capability="i2i" if _needs_i2i else "t2i",
+                stage="storyboard",
+            ),
         )
         generator = ctx.generator
         aspect_ratio = grid_aspect_ratio
@@ -3618,6 +3627,28 @@ async def _execute_reference_storyboard_sheet_task_proxy(
     )
 
 
+async def _execute_hyperframes_bgm_task_proxy(
+    project_name: str,
+    resource_id: str,
+    payload: dict[str, Any],
+    *,
+    user_id: str = DEFAULT_USER_ID,
+    task_id: str | None = None,
+    provider_job_id: str | None = None,
+) -> dict[str, Any]:
+    """Lazy proxy because the HyperFrames task service enqueues through this module."""
+    from server.services.hyperframes_music_tasks import execute_hyperframes_bgm_task
+
+    return await execute_hyperframes_bgm_task(
+        project_name,
+        resource_id,
+        payload,
+        user_id=user_id,
+        task_id=task_id,
+        provider_job_id=provider_job_id,
+    )
+
+
 _TASK_EXECUTORS = {
     "storyboard": execute_storyboard_task,
     "video": execute_video_task,
@@ -3632,6 +3663,7 @@ _TASK_EXECUTORS = {
     "image_edit": _execute_image_edit_task_proxy,
     "reference_keyframe": _execute_reference_keyframe_task_proxy,
     "reference_storyboard_sheet": _execute_reference_storyboard_sheet_task_proxy,
+    "hyperframes_bgm": _execute_hyperframes_bgm_task_proxy,
 }
 
 
@@ -3675,6 +3707,15 @@ async def execute_generation_task(task: dict[str, Any], *, claimed_provider_id: 
                 task_id=queue_task_id,
                 claimed_provider_id=claimed_provider_id,
                 **({"script_file": task.get("script_file")} if task_type == "video" else {}),
+            )
+        elif task_type == "hyperframes_bgm":
+            result = await _execute_hyperframes_bgm_task_proxy(
+                project_name,
+                resource_id,
+                payload,
+                user_id=user_id,
+                task_id=queue_task_id,
+                provider_job_id=task.get("provider_job_id"),
             )
         else:
             result = await executor(project_name, resource_id, payload, user_id=user_id, task_id=queue_task_id)

@@ -68,7 +68,7 @@ class WorkflowTaskObservation(BaseModel):
 
 
 class ReferenceVisualGateObservation(BaseModel):
-    """Current reference-video Sheet/keyframe gate, derived from the formal script."""
+    """Current sibling Storyboard/Keyframe production state derived from the formal script."""
 
     model_config = ConfigDict(extra="forbid")
 
@@ -80,7 +80,7 @@ class ReferenceVisualGateObservation(BaseModel):
 
     @property
     def sheets_complete(self) -> bool:
-        return not self.missing_sheet_unit_ids and not self.pending_sheet_unit_ids
+        return not self.missing_sheet_unit_ids
 
     @property
     def keyframes_complete(self) -> bool:
@@ -312,35 +312,35 @@ def build_workflow_plan(
         }
         if reference_visual_gate.missing_sheet_unit_ids:
             sheet_step.state = WorkflowStepState.READY
-            keyframe_step.state = WorkflowStepState.PENDING
-            gate_action = WorkflowNextAction(
+            sheet_step.action = WorkflowNextAction(
                 type=WorkflowActionType.GENERATE_REFERENCE_STORYBOARD_SHEETS,
                 requested_ids=list(reference_visual_gate.missing_sheet_unit_ids),
                 reason="Video Unit Storyboard Sheets are missing",
             )
-            sheet_step.action = gate_action
-        elif reference_visual_gate.pending_sheet_unit_ids:
-            sheet_step.state = WorkflowStepState.READY
-            keyframe_step.state = WorkflowStepState.PENDING
-            gate_action = WorkflowNextAction(
-                type=WorkflowActionType.CONFIRM_REFERENCE_STORYBOARD_SHEET,
-                requested_ids=list(reference_visual_gate.pending_sheet_unit_ids),
-                requires_confirmation=True,
-                reason="current Video Unit Storyboard Sheets require user confirmation",
-            )
-            sheet_step.action = gate_action
-        elif reference_visual_gate.missing_keyframe_ids:
-            sheet_step.state = WorkflowStepState.COMPLETED
-            keyframe_step.state = WorkflowStepState.READY
-            gate_action = WorkflowNextAction(
-                type=WorkflowActionType.GENERATE_REFERENCE_KEYFRAMES,
-                requested_ids=list(reference_visual_gate.missing_keyframe_ids),
-                reason="confirmed Video Unit Storyboard Sheets still have missing keyframe images",
-            )
-            keyframe_step.action = gate_action
         else:
             sheet_step.state = WorkflowStepState.COMPLETED
+
+        if reference_visual_gate.missing_keyframe_ids:
+            keyframe_step.state = WorkflowStepState.READY
+            keyframe_step.action = WorkflowNextAction(
+                type=WorkflowActionType.GENERATE_REFERENCE_KEYFRAMES,
+                requested_ids=list(reference_visual_gate.missing_keyframe_ids),
+                reason="formal Video Unit manuscripts still have missing Keyframe images",
+            )
+        else:
             keyframe_step.state = WorkflowStepState.COMPLETED
+
+        # Missing sibling media takes precedence over review, while each step keeps
+        # its own action so Web UI and Agent can enqueue both branches in parallel.
+        if (
+            sheet_step.action is not None
+            and sheet_step.action.type is WorkflowActionType.GENERATE_REFERENCE_STORYBOARD_SHEETS
+        ):
+            gate_action = sheet_step.action
+        elif keyframe_step.action is not None:
+            gate_action = keyframe_step.action
+        elif sheet_step.action is not None:
+            gate_action = sheet_step.action
 
     delivery_step = by_id["narration_delivery"]
     delivery_index = next(index for index, item in enumerate(rules) if item.id == "narration_delivery")

@@ -164,6 +164,32 @@ def test_stage_provider_media_copies_only_declared_inputs_with_digest_and_identi
     assert (project_path / staged[1].staged_locator).read_bytes() == b"immutable-audio"
 
 
+def test_stage_provider_media_accepts_registered_global_asset(tmp_path: Path) -> None:
+    project_path = tmp_path / "demo"
+    project_path.mkdir()
+    audio = tmp_path / "_global_assets" / "character" / "catalog" / "voice.mp3"
+    audio.parent.mkdir(parents=True)
+    audio.write_bytes(b"global-voice-reference")
+
+    staged = stage_provider_media(
+        project_path,
+        "task-1",
+        (
+            ProviderMediaInput(
+                path=audio,
+                role="reference_audio",
+                logical_type="speaker",
+                logical_name="Alice",
+                kind="voice_reference",
+                target_index=0,
+            ),
+        ),
+    )
+
+    assert staged[0].source_locator == "_global_assets/character/catalog/voice.mp3"
+    assert (project_path / staged[0].staged_locator).read_bytes() == b"global-voice-reference"
+
+
 def test_stage_provider_media_is_idempotent_but_never_replaces_published_bytes(tmp_path: Path) -> None:
     project_path = tmp_path / "demo"
     inputs = _stage_inputs(project_path)

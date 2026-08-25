@@ -14,6 +14,8 @@ _MEDIA_SUBDIRS = (
     "products",
     "grids",
     "reference_videos",
+    "keyframes",
+    "storyboard_sheets",
 )
 
 # 根目录下的已知媒体文件（如风格参考图）

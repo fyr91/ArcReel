@@ -49,7 +49,6 @@ from lib.episode_paths import (
     STEP1_LEGACY_FILENAMES,
     episode_drafts_dir,
 )
-from lib.generation_queue_client import batch_enqueue_only
 from lib.i18n import _ as translate
 from lib.json_io import load_json_or_none
 from lib.path_safety import PathTraversalError, safe_join
@@ -62,7 +61,6 @@ from lib.reference_video.draft_validation import (
     validate_dialogue_load,
     validate_unit_text,
 )
-from lib.reference_video.keyframes import MAX_KEYFRAMES_PER_UNIT
 from lib.reference_video.script_preview import (
     WARN_REFERENCE_AUDIO_OVERFLOW,
     WARN_SILENT_EPISODE,
@@ -94,7 +92,6 @@ from server.agent_runtime.sdk_tools._context import (
     tool_error,
     user_scope_kwargs,
 )
-from server.services.reference_storyboard_sheet_tasks import reference_storyboard_sheet_task_specs
 
 # 四个分集数据生成工具共用的 instructions 参数 schema：用户意见原样注入 prompt 末尾的
 # 「用户意见」分节，遵循强度由正文表达（需要强约束时在正文写明）。
@@ -107,25 +104,6 @@ _INSTRUCTIONS_SCHEMA: dict[str, Any] = {
 }
 
 logger = logging.getLogger(__name__)
-
-
-async def _enqueue_auto_storyboard_sheets(ctx: ToolContext, result_path: Path) -> str:
-    """Queue every missing mandatory Video Unit Storyboard Sheet after script commit."""
-
-    script_file = result_path.name
-    script = ctx.pm.load_script(ctx.project_name, script_file)
-    specs = reference_storyboard_sheet_task_specs(script, script_file, missing_only=True)
-    if not specs:
-        return ""
-    enqueued, failures = await batch_enqueue_only(
-        project_name=ctx.project_name,
-        specs=specs,
-        user_id=ctx.user_id,
-    )
-    message = f"；已自动提交 {len(enqueued)} 个 Video Unit Storyboard Sheet 任务（使用项目默认图片模型）"
-    if failures:
-        message += f"，另有 {len(failures)} 个任务未能入队"
-    return message
 
 
 def _parse_step1_json(response_text: str, model: type[BaseModel], *, label: str, top_shape: str) -> dict:
@@ -444,12 +422,13 @@ def generate_episode_script_tool(ctx: ToolContext):
 
             generator = await ScriptGenerator.create(project_path)
             result_path = await generator.generate(episode=episode, instructions=instructions)
-            auto_note = (
-                await _enqueue_auto_storyboard_sheets(ctx, result_path)
+            next_step = (
+                "；请先集中审核正式 Video Unit 文稿，再按需并行调用 "
+                "generate_reference_storyboard_sheets 与 generate_reference_keyframes"
                 if _uses_reference_video_units(project_data)
                 else ""
             )
-            return {"content": [{"type": "text", "text": f"✅ 剧本生成完成: {result_path}{auto_note}"}]}
+            return {"content": [{"type": "text", "text": f"✅ 剧本生成完成: {result_path}{next_step}"}]}
         except FileNotFoundError as exc:
             return {"content": [{"type": "text", "text": f"❌ 文件错误: {exc}"}], "is_error": True}
         except Exception as exc:  # noqa: BLE001
@@ -693,9 +672,10 @@ def normalize_drama_script_tool(ctx: ToolContext):
 class ReferenceSplitCaps(NamedTuple):
     """rv 拆分用的视频能力：参考图档位、兼容校验档位、派生上限、用户偏好与声音输入档。
 
-    ``reference_durations`` / ``text_durations`` 是带 / 不带 ``@`` 引用的 unit 各自的生效档位，
-    ``durations`` 保留二者并集供隔离草稿兼容校验。新拆分的每个 unit 都有非空 keyframe_plan，
-    因而 prompt 与实际准入统一使用 ``reference_durations``；正文有没有普通资产引用不再改变档位。
+    ``reference_durations`` / ``text_durations`` 是带 / 不带参考图的 unit 各自的生效档位，
+    ``durations`` 保留二者并集供隔离草稿兼容校验。正式 Video Unit 后续必然带 Storyboard Sheet
+    和至少一张从已确认 Text 提取的 Keyframe，因而拆分预处理的时长仍按
+    ``reference_durations`` 取档，但本阶段不提前产出 Keyframes。
 
     ``voice`` 是同一次能力解析派生出的声音输入档，供声音相关的容忍 warning 消费——与时长档位同源
     于这一次解析，分两次查会让同一份产物的档位与声音提示描述不同时刻的配置。能力解析故障回退时
@@ -783,7 +763,7 @@ def _validate_unit_duration_tier(label: str, duration: int, *, has_references: b
     """按该 unit 的引用状态判时长是否落在生效档位内，出档抛 ``DraftViolation``。
 
     schema 为了让存量 / 手工编辑的越界值进入隔离修复闭环，仍可卡两套档位的并集；实际准入在此
-    复判。新拆分的 unit 因非空 keyframe_plan 必然 ``has_references=True``。
+    复判。拆分预处理不产出 Keyframes；但正式 Unit 后续必然使用 Sheet 与 Keyframe 参考图。
 
     抛的是内容违约而非 ``ValueError``：这一类同样是 agent 改一改草稿就能修好的，走隔离草稿
     的修复闭环，不该退回丢弃重抽。
@@ -816,8 +796,8 @@ def _collect_reference_flat_violations(
     报告要能一次列全所有坏 unit，否则 agent 每修一处就要再跑
     一轮才知道下一处。
 
-    时长档位与正文合并为一个入口：keyframe_plan 必定会生成参考图，因此每个合法 unit 都按
-    ``with_references`` 档位校验；正文解析仍负责普通资产引用语法与数量。
+    时长按正式 Unit 后续必然带参考图的档位校验；正文解析负责普通资产引用。
+    Keyframe 数量与内容由确认后的 step2 从 Text 提取，不属于本阶段校验对象。
     """
     # 台词口播量的语速与 prompt 侧同源：项目级覆盖优先，否则按语言默认。
     speech_rate_override = project_speech_rate_override(project)
@@ -826,12 +806,10 @@ def _collect_reference_flat_violations(
         label = f"unit E{episode}U{index:02d}"
         duration = flat["duration_seconds"]
         text = flat["text"]
-        keyframe_plan = flat.get("keyframe_plan")
-        keyframe_count = len(keyframe_plan) if isinstance(keyframe_plan, list) else 0
 
-        def _check_text_and_tier(la: str = label, tx: str = text, d: int = duration, kc: int = keyframe_count) -> None:
-            validate_unit_text(la, tx, project, max_refs=caps.max_refs)
-            _validate_unit_duration_tier(la, d, has_references=kc > 0, caps=caps)
+        def _check_text_and_tier(la: str = label, tx: str = text, d: int = duration) -> None:
+            validate_unit_text(la, tx, project, max_refs=None)
+            _validate_unit_duration_tier(la, d, has_references=True, caps=caps)
 
         violations.extend(
             collect_violations(
@@ -843,23 +821,17 @@ def _collect_reference_flat_violations(
                 ]
             )
         )
-        if keyframe_count > MAX_KEYFRAMES_PER_UNIT:
-            violations.append(
-                DraftViolation(
-                    f"{label} 规划了 {keyframe_count} 个关键分镜，超过单 unit 上限 {MAX_KEYFRAMES_PER_UNIT}；"
-                    "请在核心场景切换处继续拆分 unit",
-                    code="keyframe_limit_exceeded",
-                    label=label,
-                )
-            )
         if caps.max_refs is not None:
             ordinary_refs = len(derive_references_from_text(text, project)[0])
-            storyboard_sheet_count = 1
-            if ordinary_refs + keyframe_count + storyboard_sheet_count > caps.max_refs:
+            # Downstream always contributes one confirmed Sheet and at least one
+            # keyframe derived from this Text.  Exact keyframe count is validated
+            # after step2 has produced the formal Video Unit.
+            minimum_downstream_refs = 2
+            if ordinary_refs + minimum_downstream_refs > caps.max_refs:
                 violations.append(
                     DraftViolation(
-                        f"{label} 的普通资产引用（{ordinary_refs}）、关键分镜（{keyframe_count}）与 "
-                        "Video Unit Storyboard Sheet（1）合计超过"
+                        f"{label} 的普通资产引用（{ordinary_refs}）加上后续必需的 "
+                        "Video Unit Storyboard Sheet（1）与至少一张 Keyframe 后超过"
                         f"视频模型 reference image 上限 {caps.max_refs}；请继续拆分 unit 或去掉次要资产引用",
                         code="reference_limit_with_keyframes",
                         label=label,
@@ -892,10 +864,6 @@ def _build_reference_units_from_flat(
             "duration_seconds": flat["duration_seconds"],
             "source_text": flat["source_text"],
         }
-        # Empty plans carry no information. Omitting them keeps a no-op edit byte-equivalent
-        # to legacy step1 files, so an unrelated in-progress step2 repair is not invalidated.
-        if flat.get("keyframe_plan"):
-            unit["keyframe_plan"] = flat["keyframe_plan"]
         units.append(unit)
     return units
 
@@ -957,8 +925,7 @@ def _reference_result_text(step1_path: Path, units: list[dict], warning_lines: l
     text = (
         f"✅ 参考视频单元{action}（结构化 step1）已保存: {step1_path}\n"
         f"📊 生成统计: {len(units)} 个 unit，总时长 {total_seconds} 秒；"
-        f"单 unit `@` 提及最多 {max_unit_refs} 个；"
-        f"关键首帧规划共 {sum(len(u.get('keyframe_plan') or []) for u in units)} 个"
+        f"单 unit `@` 提及最多 {max_unit_refs} 个"
     )
     if warning_lines:
         text += "\n⚠️ 声音降级提示（不阻断，产物已落盘）:\n" + "\n".join(f"- {line}" for line in warning_lines)
@@ -1194,7 +1161,6 @@ def _flatten_reference_step1_units(units: list[Any]) -> list[dict[str, Any]]:
                 "duration_seconds": unit.get("duration_seconds"),
                 "source_text": unit.get("source_text", ""),
                 "text": text if isinstance(text, str) else "",
-                "keyframe_plan": unit.get("keyframe_plan") if isinstance(unit.get("keyframe_plan"), list) else [],
             }
         )
     return flat
@@ -1571,8 +1537,7 @@ def open_step1_for_edit_tool(ctx: ToolContext):
 def split_reference_video_units_tool(ctx: ToolContext):
     @tool(
         "split_reference_video_units",
-        "把本集小说原文拆分为参考生视频 video_unit 表（unit → 时长 + 辅助源文映射 + 书写层正文 + "
-        "1–5 个不可为空的关键场景首帧规划），"
+        "把本集小说原文拆分为参考生视频的预处理 unit 表（unit → 时长 + 辅助源文映射 + 书写层正文），"
         "保存到 drafts/episode_N/step1_reference_units.json，供 generate_episode_script"
         "（reference_video 模式）消费。unit_id 由工具按序号机械派生，"
         "并校验正文语法、资产引用与台词量；source_text 保留用于审阅追溯，不做逐字校验。"
@@ -1629,8 +1594,8 @@ def split_reference_video_units_tool(ctx: ToolContext):
                 characters=characters,
                 scenes=scenes,
                 props=props,
-                # 每个 unit 的非空 keyframe_plan 会生成参考图，拆分 prompt 只给带图档位；
-                # ``durations`` 并集仅保留给隔离草稿的兼容校验。
+                # 正式 Unit 后续必然使用 Sheet 与 Keyframe 参考图，所以时长只给带图档位；
+                # 但 Keyframe 内容在确认后的 step2 从 Text 提取，不进本阶段 schema。
                 supported_durations=split_caps.reference_durations,
                 reference_supported_durations=split_caps.reference_durations,
                 text_supported_durations=split_caps.reference_durations,
@@ -1821,10 +1786,16 @@ def validate_and_promote_draft_tool(ctx: ToolContext):
                 # metadata.generator 记成 "unknown"，与直接生成路径的同一份产物对不上。
                 generator = await ScriptGenerator.create(project_path)
                 result_path = await generator.promote_reference_step2_draft(episode)
-                auto_note = await _enqueue_auto_storyboard_sheets(ctx, result_path)
                 return {
                     "content": [
-                        {"type": "text", "text": f"✅ step2 视觉展开已校验通过并晋升: {result_path}{auto_note}"}
+                        {
+                            "type": "text",
+                            "text": (
+                                f"✅ step2 视觉展开已校验通过并晋升: {result_path}；"
+                                "请先集中审核正式 Video Unit 文稿，再按需并行调用 "
+                                "generate_reference_storyboard_sheets 与 generate_reference_keyframes"
+                            ),
+                        }
                     ]
                 }
 

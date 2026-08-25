@@ -38,7 +38,6 @@ from lib.json_io import atomic_write_json, load_json
 from lib.path_safety import safe_join
 from lib.project_migration_failure import ProjectMigrationError
 from lib.reference_video.duration_migration import migrate_unit_durations
-from lib.reference_video.keyframes import DEFAULT_ENTRY_KEYFRAME_DESCRIPTION
 from lib.script_models import ReferenceStep1Unit, ReferenceVideoUnit
 
 _TARGET_VERSION = 9
@@ -86,11 +85,11 @@ def _migrate_unit(unit: object, location: str, model: type[BaseModel]) -> dict[s
     if migrated.pop("migration_requires_content_replan", None) is True:
         migrated["needs_replan"] = True
     migrated["text"] = text
-    # v8 step1 predates keyframe planning. Seed one reviewable entry so this
-    # historical migration can reach v11, where formal units receive stable
-    # keyframe identities and the mandatory Storyboard Sheet gate.
-    if model is ReferenceStep1Unit and not migrated.get("keyframe_plan"):
-        migrated["keyframe_plan"] = [DEFAULT_ENTRY_KEYFRAME_DESCRIPTION]
+    # A short-lived fork revision placed keyframe planning in preprocessing.
+    # Step2 derives formal keyframes from the confirmed body, so never seed that
+    # obsolete second content source while migrating older step1 drafts.
+    if model is ReferenceStep1Unit:
+        migrated.pop("keyframe_plan", None)
     model.model_validate(migrated)
     return migrated
 

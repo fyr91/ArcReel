@@ -19,7 +19,7 @@ from lib.artifact_activation import (
     resolve_artifact_episode,
 )
 from lib.artifact_manifest import ArtifactManifestError
-from lib.config.resolver import ConfigResolver
+from lib.config.resolver import ConfigResolver, image_stage_for_task
 from lib.db import async_session_factory
 from lib.db.base import DEFAULT_USER_ID
 from lib.generation_queue_client import TaskSpec, batch_enqueue_and_wait
@@ -62,6 +62,7 @@ _LABEL_ZH: dict[str, str] = {
 
 async def _i2i_provider_available(
     project: dict[str, Any],
+    resource_type: str,
     payload: dict[str, str] | None = None,
     *,
     user_id: str = DEFAULT_USER_ID,
@@ -75,6 +76,7 @@ async def _i2i_provider_available(
             project,
             payload or {},
             capability="i2i",
+            stage=image_stage_for_task("image_edit", {"resource_type": resource_type}),
         )
     except ValueError:
         return False
@@ -299,9 +301,18 @@ def edit_images_tool(ctx: ToolContext):
 
             image_override = image_override_from_args(args)
             provider_available = (
-                await _i2i_provider_available(project, image_override, **user_scope_kwargs(ctx.user_id))
+                await _i2i_provider_available(
+                    project,
+                    resource_type,
+                    image_override,
+                    **user_scope_kwargs(ctx.user_id),
+                )
                 if image_override
-                else await _i2i_provider_available(project, **user_scope_kwargs(ctx.user_id))
+                else await _i2i_provider_available(
+                    project,
+                    resource_type,
+                    **user_scope_kwargs(ctx.user_id),
+                )
             )
             if not provider_available:
                 # 拦截在入队前：不是某个 ID 的产物问题，是整批共享的前置条件不满足，

@@ -5,28 +5,36 @@ import { API } from "@/api";
 import { useAppStore } from "@/stores/app-store";
 import { errMsg } from "@/utils/async";
 
-interface CharacterMainToReferenceButtonProps {
+interface CharacterImageSlotMoveButtonProps {
   projectName: string;
   characterName: string;
+  direction: "main-to-reference" | "reference-to-main";
   onReload?: () => void | Promise<unknown>;
   busy?: boolean;
 }
 
-/** Move the card's current main image into the reference slot, leaving main empty. */
-export function CharacterMainToReferenceButton({
+/** Move the card's active image between its main and reference slots. */
+export function CharacterImageSlotMoveButton({
   projectName,
   characterName,
+  direction,
   onReload,
   busy = false,
-}: CharacterMainToReferenceButtonProps) {
+}: CharacterImageSlotMoveButtonProps) {
   const { t } = useTranslation("assets");
   const [submitting, setSubmitting] = useState(false);
-  const label = t("switch_to_reference_image");
+  const label = direction === "main-to-reference"
+    ? t("switch_to_reference_image")
+    : t("switch_to_main_image");
 
   const move = async () => {
     setSubmitting(true);
     try {
-      await API.moveCharacterMainToReference(projectName, characterName);
+      if (direction === "main-to-reference") {
+        await API.moveCharacterMainToReference(projectName, characterName);
+      } else {
+        await API.moveCharacterReferenceToMain(projectName, characterName);
+      }
       await onReload?.();
     } catch (error) {
       useAppStore.getState().pushToast(errMsg(error), "error");

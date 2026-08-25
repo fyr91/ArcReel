@@ -1,0 +1,165 @@
+diff --git a/dist/studio/index.html b/dist/studio/index.html
+index 63271748cc88c2bda4e983384083d7dc8ec52601..7deb33244dcb793de4faa53705e1e8d775b5a149 100644
+--- a/dist/studio/index.html
++++ b/dist/studio/index.html
+@@ -1,14 +1,157 @@
+ <!doctype html>
+-<html lang="en">
++<html lang="zh-CN">
+   <head>
+     <meta charset="UTF-8" />
+     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+-    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+-    <title>HyperFrames Studio</title>
++    <title>ArcReel 剪辑器</title>
+     <script type="module" crossorigin src="/assets/index-6x3VcnTA.js"></script>
+     <link rel="stylesheet" crossorigin href="/assets/index-yGhfxxoL.css">
++    <style>
++      /* ArcReel embeds the Apache-2.0 Studio engine without its upstream product mark. */
++      svg[aria-label="Hyperframes"],
++      svg[aria-label="Hyperframes"] + span[aria-hidden="true"] {
++        display: none !important;
++      }
++    </style>
+   </head>
+   <body>
+     <div data-hf-id="hf-aph5" id="root"></div>
++    <script>
++      (() => {
++        const text = new Map(Object.entries({
++          "Storyboard": "分镜",
++          "Preview": "预览",
++          "Capture": "截取画面",
++          "Capturing…": "正在截取…",
++          "Inspector": "检查器",
++          "Export": "导出",
++          "Rendering…": "正在导出…",
++          "Undo": "撤销",
++          "Redo": "重做",
++          "Files": "文件",
++          "Effects": "效果",
++          "Captions": "字幕",
++          "Variables": "变量",
++          "Design": "设计",
++          "Layers": "图层",
++          "Renders": "导出记录",
++          "Add": "添加",
++          "Add text": "添加文字",
++          "Add at playhead": "在播放头处添加",
++          "Save": "保存",
++          "Saving…": "正在保存…",
++          "Delete": "删除",
++          "Remove": "移除",
++          "Rename": "重命名",
++          "Cancel": "取消",
++          "Close": "关闭",
++          "Download": "下载",
++          "Retry": "重试",
++          "Reset": "重置",
++          "Copy": "复制",
++          "Copy path": "复制路径",
++          "Fit": "适应",
++          "Loop": "循环",
++          "Muted": "已静音",
++          "Volume": "音量",
++          "Playback rate": "播放速度",
++          "Resolution": "分辨率",
++          "Frame rate": "帧率",
++          "Quality": "质量",
++          "Format": "格式",
++          "Status": "状态",
++          "Source": "来源",
++          "Position": "位置",
++          "Animation": "动画",
++          "Style": "样式",
++          "Color": "颜色",
++          "Font": "字体",
++          "Font family": "字体系列",
++          "Weight": "字重",
++          "Parameters": "参数",
++          "New track": "新建轨道",
++          "Nothing selected": "尚未选择内容",
++          "No layers": "暂无图层",
++          "No renders yet": "暂无导出记录",
++          "Loading composition…": "正在加载合成…",
++          "Loading storyboard…": "正在加载分镜…",
++          "Loading blocks…": "正在加载组件…",
++          "Connecting to project…": "正在连接项目…",
++          "Preview failed to load": "预览加载失败",
++          "Preview unavailable": "预览不可用",
++          "Retry preview": "重试预览",
++          "Show Renders": "查看导出",
++          "Edit captions": "编辑字幕",
++          "Editing captions": "正在编辑字幕",
++          "Work area": "工作区间",
++          "Media start": "媒体起点",
++          "In-point": "入点",
++          "Out-point": "出点",
++          "Open source to fix": "打开源文件修复",
++          "Select a file to edit": "请选择要编辑的文件",
++          "Select an element in the preview.": "请在预览中选择一个元素。",
++          "Click any element on the canvas to edit it, or drag to select several.": "点击画布元素进行编辑，或拖动框选多个元素。",
++          "Select a single element to edit its properties": "请选择一个元素以编辑属性",
++          "Load a composition to see its element tree": "加载合成后查看元素树",
++          "No compositions found": "未找到合成",
++          "No storyboard yet": "暂无分镜",
++          "This storyboard has no frames yet.": "此分镜尚无画面。",
++          "Open in Preview →": "在预览中打开 →",
++          "Record a gesture": "录制手势",
++          "Describe a change to the agent": "描述希望 Agent 修改的内容",
++          "Shift + drag/click to edit range": "按住 Shift 拖动或点击以编辑区间",
++          "Export complete": "导出完成",
++          "Export failed": "导出失败"
++        }));
++        const attrs = ["aria-label", "title", "placeholder"];
++        const translateValue = (value) => {
++          if (!value) return value;
++          if (text.has(value)) return text.get(value);
++          return value
++            .replace(/^Undo \((.+)\)$/, "撤销（$1）")
++            .replace(/^Redo \((.+)\)$/, "重做（$1）")
++            .replace(/^Preview volume: (.+)$/, "预览音量：$1")
++            .replace(/^Capture current frame$/, "截取当前画面")
++            .replace(/^Capturing frame…?$/, "正在截取画面…")
++            .replace(/^Render and export this composition$/, "渲染并导出当前合成")
++            .replace(/^A render is already in progress$/, "已有导出任务正在进行")
++            .replace(/^Video (\d+)$/, "视频 $1")
++            .replace(/^Provider Audio (\d+)$/, "原生音频 $1");
++        };
++        const localize = (root) => {
++          if (root.nodeType === Node.TEXT_NODE) {
++            const raw = root.nodeValue;
++            const trimmed = raw && raw.trim();
++            const translated = translateValue(trimmed);
++            if (trimmed && translated !== trimmed) {
++              root.nodeValue = raw.replace(trimmed, translated);
++            }
++            return;
++          }
++          if (root.nodeType !== Node.ELEMENT_NODE) return;
++          for (const attr of attrs) {
++            const raw = root.getAttribute(attr);
++            const translated = translateValue(raw);
++            if (raw && translated !== raw) root.setAttribute(attr, translated);
++          }
++          const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
++          while (walker.nextNode()) localize(walker.currentNode);
++          for (const element of root.querySelectorAll("[aria-label], [title], [placeholder]")) {
++            for (const attr of attrs) {
++              const raw = element.getAttribute(attr);
++              const translated = translateValue(raw);
++              if (raw && translated !== raw) element.setAttribute(attr, translated);
++            }
++          }
++        };
++        new MutationObserver((records) => {
++          for (const record of records) {
++            for (const node of record.addedNodes) localize(node);
++            if (record.type === "characterData") localize(record.target);
++          }
++        }).observe(document.documentElement, { subtree: true, childList: true, characterData: true });
++        document.addEventListener("DOMContentLoaded", () => localize(document.body), { once: true });
++      })();
++    </script>
+   </body>
+ </html>

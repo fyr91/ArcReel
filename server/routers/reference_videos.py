@@ -51,6 +51,7 @@ from lib.reference_video.keyframes import (
     find_keyframe,
     keyframe_id,
     keyframe_mention,
+    without_keyframe_mentions,
 )
 from lib.reference_video.request_projection import (
     ReferenceRequestOptions,
@@ -79,8 +80,10 @@ from server.services.narration_delivery_tasks import (
 from server.services.reference_keyframe_tasks import reference_keyframe_task_specs
 from server.services.reference_storyboard_sheet_tasks import (
     StoryboardSheetGateError,
-    confirm_storyboard_sheet_and_enqueue_keyframes,
     reference_storyboard_sheet_task_specs,
+)
+from server.services.reference_storyboard_sheet_tasks import (
+    confirm_storyboard_sheet as confirm_storyboard_sheet_service,
 )
 from server.services.reference_video_tasks import (
     apply_unit_video_assets,
@@ -116,6 +119,10 @@ router = APIRouter(
 class ScriptPreviewRequest(BaseModel):
     prompt: str = ""
     unit_id: str | None = None
+
+
+class StoryboardSheetGenerationRequest(ImageModelSelection):
+    instructions: str | None = Field(default=None, max_length=4000)
 
 
 class AddUnitRequest(BaseModel):
@@ -314,6 +321,7 @@ def _build_unit_dict(
     unit = {
         "unit_id": unit_id,
         "text": f"{keyframe_mention(first_keyframe_id)} {prompt}".strip() if first_keyframe_id else prompt,
+        "storyboard_description": prompt.strip() or None,
         "duration_seconds": duration_seconds,
         "transition_to_next": transition,
         "note": note,
@@ -412,6 +420,7 @@ class PatchUnitRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     prompt: str | None = None
+    storyboard_description: str | None = None
     duration_seconds: int | None = Field(default=None, ge=1)
     transition_to_next: str | None = Field(default=None, pattern=r"^(cut|fade|dissolve)$")
     note: str | None = None
@@ -488,6 +497,8 @@ async def patch_keyframe(
     keyframes = [dict(item) for item in unit.get("keyframes") or [] if isinstance(item, dict)]
     updated = next(item for item in keyframes if item.get("keyframe_id") == keyframe_id_value)
     updated["description"] = req.description.strip()
+    if updated.get("image_path"):
+        updated["generation_input_changed"] = True
     result = execute_current_episode_edit(
         get_project_manager(),
         project_name,
@@ -636,7 +647,7 @@ async def generate_storyboard_sheet(
     project_name: str,
     episode: int,
     unit_id: str,
-    req: ImageModelSelection,
+    req: StoryboardSheetGenerationRequest,
     user: CurrentUser,
     _t: Translator,
 ) -> dict[str, Any]:
@@ -646,6 +657,7 @@ async def generate_storyboard_sheet(
         script_file,
         unit_ids={unit_id},
         image_override=req.image_override_payload(),
+        instructions=req.instructions,
     )
     if not specs:
         raise NotFoundError("ref_unit_not_found", unit_id=unit_id)
@@ -668,16 +680,13 @@ async def confirm_storyboard_sheet(
 ) -> dict[str, Any]:
     _project, _script, script_file = _load_episode_script(project_name, episode, _t)
     try:
-        sheet, task_ids = await confirm_storyboard_sheet_and_enqueue_keyframes(
-            project_name, script_file, unit_id, user_id=user.id
-        )
+        sheet = await confirm_storyboard_sheet_service(project_name, script_file, unit_id, user_id=user.id)
     except StoryboardSheetGateError as exc:
         _raise_storyboard_gate(exc)
     return {
         "success": True,
         "storyboard_sheet": sheet,
-        "task_ids": task_ids,
-        "message": _t("reference_storyboard_sheet_confirmed", unit_id=unit_id, count=len(task_ids)),
+        "message": _t("reference_storyboard_sheet_confirmed", unit_id=unit_id),
     }
 
 
@@ -694,6 +703,8 @@ async def patch_unit(
     fields: dict[str, Any] = {}
     if req.prompt is not None:
         fields["text"] = req.prompt
+    if req.storyboard_description is not None:
+        fields["storyboard_description"] = without_keyframe_mentions(req.storyboard_description)
     if req.duration_seconds is not None:
         fields["duration_seconds"] = req.duration_seconds
     if req.transition_to_next is not None:

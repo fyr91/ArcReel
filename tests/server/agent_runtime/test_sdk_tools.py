@@ -55,7 +55,10 @@ from server.agent_runtime.sdk_tools.enqueue_videos import (
     generate_video_scene_tool,
     generate_video_selected_tool,
 )
-from server.agent_runtime.sdk_tools.h3_prompt_optimization import update_h3_video_prompt_tool
+from server.agent_runtime.sdk_tools.h3_prompt_optimization import (
+    confirm_h3_video_prompts_tool,
+    update_h3_video_prompt_tool,
+)
 from server.agent_runtime.sdk_tools.text_generation import (
     _parse_normalized_content,
     generate_episode_script_tool,
@@ -546,6 +549,62 @@ def test_update_h3_video_prompt_is_registered_and_migration_guarded() -> None:
 
     assert "update_h3_video_prompt" in ARCREEL_MCP_TOOL_IDS
     assert "update_h3_video_prompt" in MIGRATION_BLOCKED_TOOL_IDS
+
+
+@pytest.mark.unit
+def test_confirm_h3_video_prompts_is_registered_and_migration_guarded() -> None:
+    from server.agent_runtime.sdk_tools import ARCREEL_MCP_TOOL_IDS, MIGRATION_BLOCKED_TOOL_IDS
+
+    assert "confirm_h3_video_prompts" in ARCREEL_MCP_TOOL_IDS
+    assert "confirm_h3_video_prompts" in MIGRATION_BLOCKED_TOOL_IDS
+
+
+@pytest.mark.unit
+async def test_confirm_h3_video_prompts_uses_the_shared_batch_operation(
+    fake_ctx: ToolContext,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from server.agent_runtime.sdk_tools import h3_prompt_optimization as mod
+
+    captured: dict[str, Any] = {}
+
+    class _Artifact:
+        def __init__(self, unit_id: str) -> None:
+            self.unit_id = unit_id
+
+        def model_dump(self, *, mode: str) -> dict[str, Any]:
+            assert mode == "json"
+            return {"unit_id": self.unit_id, "status": "confirmed"}
+
+    class _Service:
+        def __init__(self, pm: ProjectManager) -> None:
+            assert pm is fake_ctx.pm
+
+        async def confirm(self, project_name: str, episode: int, **kwargs: Any) -> list[_Artifact]:
+            captured.update({"project_name": project_name, "episode": episode, **kwargs})
+            return [_Artifact(unit_id) for unit_id in kwargs["unit_ids"]]
+
+    monkeypatch.setattr(mod, "H3PromptOptimizationService", _Service)
+    tool_obj = confirm_h3_video_prompts_tool(fake_ctx)
+
+    out = await _call(
+        tool_obj,
+        {
+            "episode": 1,
+            "unit_ids": ["E1U01", "E1U02"],
+            "narration_delivery": "post_production",
+        },
+    )
+
+    assert out.get("is_error") is not True
+    assert [item["unit_id"] for item in out["artifacts"]] == ["E1U01", "E1U02"]
+    assert captured == {
+        "project_name": fake_ctx.project_name,
+        "episode": 1,
+        "unit_ids": ["E1U01", "E1U02"],
+        "narration_delivery": "post_production",
+        "confirmed_request_durations": {},
+    }
 
 
 @pytest.mark.unit
@@ -1714,7 +1773,7 @@ async def test_edit_images_happy(fake_ctx: ToolContext, monkeypatch) -> None:
     (project_path / "characters" / "zhangsan.png").write_bytes(b"png")
     fake_ctx.pm.project_payload["characters"]["张三"]["character_sheet"] = "characters/zhangsan.png"  # type: ignore[attr-defined]
 
-    async def fake_i2i(_project):
+    async def fake_i2i(_project, _stage):
         return True
 
     async def fake_batch(*, project_name, specs, **_batch_kwargs):
@@ -1754,7 +1813,7 @@ async def test_edit_images_failure_preserves_the_untouched_source_path(fake_ctx:
     (project_path / "characters" / "zhangsan.png").write_bytes(b"png")
     fake_ctx.pm.project_payload["characters"]["张三"]["character_sheet"] = "characters/zhangsan.png"  # type: ignore[attr-defined]
 
-    async def fake_i2i(_project):
+    async def fake_i2i(_project, _stage):
         return True
 
     async def fake_batch(*, project_name, specs, **_batch_kwargs):
@@ -1785,7 +1844,7 @@ async def test_edit_images_i2i_unavailable(fake_ctx: ToolContext, monkeypatch) -
     """i2i 不可用时直接报错，不创建任何任务（复用服务端 fail-fast 判断点）。"""
     from server.agent_runtime.sdk_tools import enqueue_image_edits as mod
 
-    async def fake_i2i(_project):
+    async def fake_i2i(_project, _stage):
         return False
 
     monkeypatch.setattr(mod, "_i2i_provider_available", fake_i2i)
@@ -1830,7 +1889,7 @@ async def test_edit_images_active_asset_without_a_manifest_claim_is_not_enqueued
             self.compare(key, artifact_path=artifact_path)
             return None
 
-    async def fake_i2i(_project):
+    async def fake_i2i(_project, _stage):
         return True
 
     enqueue = AsyncMock(return_value=([], []))
@@ -1872,7 +1931,7 @@ async def test_edit_images_one_manifest_fail_loud_error_does_not_abort_the_batch
     fake_ctx.pm.project_payload["characters"]["李四"]["character_sheet"] = "characters/lisi.png"  # type: ignore[attr-defined]
     fake_ctx.pm.project_payload["characters"]["李四"]["description"] = "配角"  # type: ignore[attr-defined]
 
-    async def fake_i2i(_project):
+    async def fake_i2i(_project, _stage):
         return True
 
     async def fake_batch(*, project_name, specs, **_batch_kwargs):
@@ -1928,7 +1987,7 @@ async def test_edit_images_one_manifest_fail_loud_error_does_not_abort_the_batch
 async def test_edit_images_storyboard_requires_script_file(fake_ctx: ToolContext, monkeypatch) -> None:
     from server.agent_runtime.sdk_tools import enqueue_image_edits as mod
 
-    async def fake_i2i(_project):
+    async def fake_i2i(_project, _stage):
         return True
 
     monkeypatch.setattr(mod, "_i2i_provider_available", fake_i2i)
@@ -1979,7 +2038,7 @@ async def test_edit_images_skips_missing_current_image(fake_ctx: ToolContext, mo
     """资产没有可编辑的当前图（sheet 字段未设置）时跳过并告警，不入队。"""
     from server.agent_runtime.sdk_tools import enqueue_image_edits as mod
 
-    async def fake_i2i(_project):
+    async def fake_i2i(_project, _stage):
         return True
 
     monkeypatch.setattr(mod, "_i2i_provider_available", fake_i2i)
@@ -2010,7 +2069,7 @@ async def test_edit_images_build_specs_warnings(fake_ctx: ToolContext, monkeypat
     (project_path / "characters" / "zhangsan.png").write_bytes(b"png")
     fake_ctx.pm.project_payload["characters"]["张三"]["character_sheet"] = "characters/zhangsan.png"  # type: ignore[attr-defined]
 
-    async def fake_i2i(_project):
+    async def fake_i2i(_project, _stage):
         return True
 
     async def fake_batch(*, project_name, specs, **_batch_kwargs):
@@ -2065,7 +2124,7 @@ async def test_edit_images_storyboard_happy(fake_ctx: ToolContext, monkeypatch) 
     """storyboard 分支带合法 script_file 时应正常解析剧本并入队（覆盖 validate_script_filename + load_script 调用）。"""
     from server.agent_runtime.sdk_tools import enqueue_image_edits as mod
 
-    async def fake_i2i(_project):
+    async def fake_i2i(_project, _stage):
         return True
 
     async def fake_batch(*, project_name, specs, **_batch_kwargs):
@@ -2107,7 +2166,7 @@ async def test_edit_images_reports_failures(fake_ctx: ToolContext, monkeypatch) 
     (project_path / "characters" / "zhangsan.png").write_bytes(b"png")
     fake_ctx.pm.project_payload["characters"]["张三"]["character_sheet"] = "characters/zhangsan.png"  # type: ignore[attr-defined]
 
-    async def fake_i2i(_project):
+    async def fake_i2i(_project, _stage):
         return True
 
     async def fake_batch(*, project_name, specs, **_batch_kwargs):
@@ -2148,12 +2207,13 @@ async def test_i2i_provider_available_true(monkeypatch) -> None:
     from lib.config.resolver import ConfigResolver
     from server.agent_runtime.sdk_tools import enqueue_image_edits as mod
 
-    async def fake_resolve(self, project, payload, *, capability):
+    async def fake_resolve(self, project, payload, *, capability, stage=None):
         assert capability == "i2i"
+        assert stage == "asset"
         return object()
 
     monkeypatch.setattr(ConfigResolver, "resolve_image_backend", fake_resolve)
-    assert await mod._i2i_provider_available({}) is True
+    assert await mod._i2i_provider_available({}, "character") is True
 
 
 @pytest.mark.unit
@@ -2161,11 +2221,12 @@ async def test_i2i_provider_available_false_on_value_error(monkeypatch) -> None:
     from lib.config.resolver import ConfigResolver
     from server.agent_runtime.sdk_tools import enqueue_image_edits as mod
 
-    async def fake_resolve(self, project, payload, *, capability):
+    async def fake_resolve(self, project, payload, *, capability, stage=None):
+        assert stage == "asset"
         raise ValueError("未找到可用的 image 供应商")
 
     monkeypatch.setattr(ConfigResolver, "resolve_image_backend", fake_resolve)
-    assert await mod._i2i_provider_available({}) is False
+    assert await mod._i2i_provider_available({}, "character") is False
 
 
 # ---------------------------------------------------------------------------
@@ -5453,6 +5514,50 @@ async def test_generate_episode_script_writes_to_default_project_scripts(fake_ct
 
 
 @pytest.mark.unit
+async def test_generate_reference_episode_stops_for_manuscript_review_before_visuals(
+    fake_ctx: ToolContext, monkeypatch
+) -> None:
+    """正式文稿落盘后不偷偷入队任一同级视觉分支。"""
+    from lib import script_review
+    from server.agent_runtime.sdk_tools import text_generation as mod
+
+    _rv_project(fake_ctx)
+    drafts = fake_ctx.project_path / "drafts" / "episode_1"
+    drafts.mkdir(parents=True)
+    step1 = drafts / "step1_reference_units.json"
+    step1.write_text(json.dumps({"units": [_rv_unit("@[张三] 在村口等人")]}), encoding="utf-8")
+    fingerprint = script_review.content_fingerprint(step1)
+    (fake_ctx.project_path / "project.json").write_text(
+        json.dumps(
+            {
+                "content_mode": "narration",
+                "generation_mode": "reference_video",
+                "episodes": [{"episode": 1, "step1_review": {"fingerprint": fingerprint, "confirmed_at": "t"}}],
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    class _FakeGenerator:
+        @classmethod
+        async def create(cls, _path):
+            return cls()
+
+        async def generate(self, **_kwargs) -> Path:
+            return fake_ctx.project_path / "scripts" / "episode_1.json"
+
+    monkeypatch.setattr(mod, "ScriptGenerator", _FakeGenerator)
+    out = await _call(generate_episode_script_tool(fake_ctx), {"episode": 1})
+
+    assert out.get("is_error") is not True, out
+    text = out["content"][0]["text"]
+    assert "先集中审核正式 Video Unit 文稿" in text
+    assert "generate_reference_storyboard_sheets" in text
+    assert "generate_reference_keyframes" in text
+    assert "自动提交" not in text
+
+
+@pytest.mark.unit
 async def test_generate_episode_script_ad_skips_step1(fake_ctx: ToolContext, monkeypatch) -> None:
     """ad 一键生成不依赖 step1 中间文件：缺 drafts/ 也不报 step1 错误。"""
     from server.agent_runtime.sdk_tools import text_generation as mod
@@ -7115,14 +7220,12 @@ def _rv_unit(
     *,
     duration: int = 8,
     source_text: str = _RV_NOVEL,
-    keyframe_plan: list[str] | None = None,
 ) -> dict:
-    """step1 的 LLM 产出形状：正文契约与至少一个关键场景首帧规划。"""
+    """step1 preprocessing output: duration, source mapping, and confirmed body only."""
     return {
         "duration_seconds": duration,
         "source_text": source_text,
         "text": text,
-        "keyframe_plan": keyframe_plan or ["全景平视，核心场景建立帧"],
     }
 
 
@@ -7167,7 +7270,7 @@ async def test_split_reference_video_units_dry_run(fake_ctx: ToolContext, monkey
 
 
 @pytest.mark.unit
-async def test_split_reference_video_units_prompt_uses_keyframe_reference_tier(
+async def test_split_reference_video_units_prompt_uses_downstream_reference_tier(
     fake_ctx: ToolContext, monkeypatch
 ) -> None:
     from server.agent_runtime.sdk_tools import text_generation as mod
@@ -7216,7 +7319,7 @@ async def test_split_reference_video_units_happy_derives_structure(fake_ctx: Too
     assert "references" not in unit
     assert _derived_reference_names(fake_ctx, unit["text"]) == ["张三", "村口"]
     assert unit["source_text"] == _RV_NOVEL
-    assert unit["keyframe_plan"] == ["全景平视，核心场景建立帧"]
+    assert "keyframe_plan" not in unit
     assert captured["task_type"] is mod.TextTaskType.SCRIPT
     assert captured["create_project_name"] == "demo"
     assert captured["generate_project_name"] == "demo"
@@ -7269,31 +7372,28 @@ async def test_split_reference_video_units_rejects_unregistered_speaker(fake_ctx
 @pytest.mark.unit
 async def test_split_reference_video_units_rejects_over_max_refs(fake_ctx: ToolContext, monkeypatch) -> None:
     _rv_source(fake_ctx)
-    out = await _run_rv_split(fake_ctx, monkeypatch, [_rv_unit("@[张三] 与 @[李四] 在 @[村口]")], max_refs=2)
+    out = await _run_rv_split(fake_ctx, monkeypatch, [_rv_unit("@[张三] 走向 @[村口]")], max_refs=3)
     assert out.get("is_error") is True
-    assert "参考图数" in out["content"][0]["text"]
+    assert "普通资产引用（2）加上后续必需的 Video Unit Storyboard Sheet（1）与至少一张 Keyframe" in out[
+        "content"
+    ][0]["text"]
     assert not _rv_step1_path(fake_ctx).exists()
 
 
 @pytest.mark.unit
-async def test_split_reference_video_units_counts_keyframes_toward_reference_limit(
+async def test_split_reference_video_units_reserves_sheet_and_one_future_keyframe(
     fake_ctx: ToolContext, monkeypatch
 ) -> None:
     _rv_source(fake_ctx)
     out = await _run_rv_split(
         fake_ctx,
         monkeypatch,
-        [
-            _rv_unit(
-                "@[张三] 在门口等待",
-                keyframe_plan=["全景平视，门口建立帧", "中景平视，张三转入屋内的场景切换帧"],
-            )
-        ],
+        [_rv_unit("@[张三] 在门口等待")],
         max_refs=2,
     )
 
     assert out.get("is_error") is True
-    assert "普通资产引用（1）、关键分镜（2）与 Video Unit Storyboard Sheet（1）合计超过" in out["content"][0]["text"]
+    assert "普通资产引用（1）加上后续必需的 Video Unit Storyboard Sheet（1）与至少一张 Keyframe" in out["content"][0]["text"]
     assert [v["code"] for v in _read_rv_quarantine(fake_ctx)["violations"]] == ["reference_limit_with_keyframes"]
 
 
@@ -7322,10 +7422,10 @@ async def test_split_reference_video_units_rejects_duration_off_reference_tier(
 
 
 @pytest.mark.integration
-async def test_split_reference_video_units_keyframe_uses_reference_tier_without_asset_mentions(
+async def test_split_reference_video_units_future_visual_refs_use_reference_tier_without_asset_mentions(
     fake_ctx: ToolContext, monkeypatch
 ) -> None:
-    """正文即使没有普通 `@` 资产引用，非空 keyframe_plan 仍使 unit 使用带参考图档位。"""
+    """Formal units later have Sheet/Keyframes, so preprocessing already uses the reference tier."""
     _rv_source(fake_ctx)
     out = await _run_rv_split(
         fake_ctx,
@@ -7358,24 +7458,20 @@ async def test_split_reference_video_units_rejects_empty_units(fake_ctx: ToolCon
 
 
 @pytest.mark.unit
-@pytest.mark.parametrize("keyframe_plan", [None, [], ["   "]])
-async def test_split_reference_video_units_requires_nonempty_keyframe_plan(
-    fake_ctx: ToolContext, monkeypatch, keyframe_plan
-) -> None:
+async def test_split_reference_video_units_discards_legacy_keyframe_plan(fake_ctx: ToolContext, monkeypatch) -> None:
     _rv_source(fake_ctx)
     unit = {
         "duration_seconds": 8,
         "source_text": _RV_NOVEL,
         "text": "@[张三] 在 @[村口] 等人",
     }
-    if keyframe_plan is not None:
-        unit["keyframe_plan"] = keyframe_plan
+    unit["keyframe_plan"] = ["旧的预处理首帧规划"]
 
     out = await _run_rv_split(fake_ctx, monkeypatch, [unit])
 
-    assert out.get("is_error") is True
-    assert "keyframe_plan" in out["content"][0]["text"]
-    assert not _rv_step1_path(fake_ctx).exists()
+    assert out.get("is_error") is not True, out
+    saved = json.loads(_rv_step1_path(fake_ctx).read_text(encoding="utf-8"))
+    assert "keyframe_plan" not in saved["units"][0]
 
 
 @pytest.mark.unit
@@ -7605,7 +7701,6 @@ def _rv_saved_unit(text: str, *, unit_id: str = "E1U01", duration: int = 8) -> d
         "text": text,
         "duration_seconds": duration,
         "source_text": _RV_NOVEL,
-        "keyframe_plan": ["全景平视，核心场景建立帧"],
     }
 
 
@@ -7630,11 +7725,10 @@ async def test_open_step1_for_edit_returns_flat_writing_layer(fake_ctx: ToolCont
     assert envelope["violations"] == []
     assert envelope["meta"]["source"] == "source/episode_1.txt"
     unit = envelope["content"]["units"][0]
-    assert set(unit) == {"duration_seconds", "source_text", "text", "keyframe_plan"}
+    assert set(unit) == {"duration_seconds", "source_text", "text"}
     assert unit["duration_seconds"] == 8
     assert unit["source_text"] == _RV_NOVEL
     assert unit["text"] == "@[张三] 起身\n@[张三] 走向 @[村口]"
-    assert unit["keyframe_plan"] == ["全景平视，核心场景建立帧"]
 
 
 @pytest.mark.unit

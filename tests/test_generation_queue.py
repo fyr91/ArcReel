@@ -642,7 +642,7 @@ def stub_enqueue_resolution(monkeypatch):
         async def resolve_video_backend(self, project, payload, *, capability=None):
             return holder["resolved"]
 
-        async def resolve_image_backend(self, project, payload, *, capability):
+        async def resolve_image_backend(self, project, payload, *, capability, stage=None):
             return holder["resolved"]
 
         async def resolve_audio_backend(self, project, payload):

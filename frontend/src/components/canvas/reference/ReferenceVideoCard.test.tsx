@@ -61,7 +61,13 @@ const PROJECT: ProjectData = {
   content_mode: "narration",
   style: "",
   episodes: [],
-  characters: { 主角: { description: "" }, 张三: { description: "" }, "角色甲（成年）": { description: "" } },
+  characters: {
+    主角: { description: "" },
+    张三: { description: "" },
+    "角色甲（成年）": { description: "" },
+    鳄鱼爸爸: { description: "" },
+    鳄鱼弟弟: { description: "" },
+  },
   scenes: { 酒馆: { description: "" }, "地点甲·版本A": { description: "" } },
   props: { 长剑: { description: "" } },
 };
@@ -174,6 +180,38 @@ describe("ReferenceVideoCard", () => {
     expect(lastCall[0]).toMatch(/@\[主角\]\s$/);
   });
 
+  it("replaces the full wrapped mention when selecting from the middle of its name", async () => {
+    const onChange = vi.fn();
+    const initial = "近景 @[鳄鱼爸爸] 推门而入。";
+    render(<ControlledCard unit={mkUnit({ text: initial })} onChange={onChange} />);
+    const ta = screen.getByRole("combobox") as HTMLTextAreaElement;
+    const caret = initial.indexOf("鳄鱼爸爸") + 2;
+    ta.focus();
+    ta.setSelectionRange(caret, caret);
+    fireEvent.click(ta);
+
+    fireEvent.click(await screen.findByRole("option", { name: /鳄鱼弟弟/ }));
+
+    expect(onChange).toHaveBeenLastCalledWith("近景 @[鳄鱼弟弟] 推门而入。");
+    expect(ta).toHaveValue("近景 @[鳄鱼弟弟] 推门而入。");
+  });
+
+  it("replaces the full bare mention when selecting from the middle of its name", async () => {
+    const onChange = vi.fn();
+    const initial = "近景 @鳄鱼爸爸 推门而入。";
+    render(<ControlledCard unit={mkUnit({ text: initial })} onChange={onChange} />);
+    const ta = screen.getByRole("combobox") as HTMLTextAreaElement;
+    const caret = initial.indexOf("鳄鱼爸爸") + 2;
+    ta.focus();
+    ta.setSelectionRange(caret, caret);
+    fireEvent.click(ta);
+
+    fireEvent.click(await screen.findByRole("option", { name: /鳄鱼弟弟/ }));
+
+    expect(onChange).toHaveBeenLastCalledWith("近景 @[鳄鱼弟弟] 推门而入。");
+    expect(ta).toHaveValue("近景 @[鳄鱼弟弟] 推门而入。");
+  });
+
   it("closes the picker synchronously on textarea blur", async () => {
     const user = userEvent.setup();
     render(<ControlledCard unit={mkUnit()} />);
@@ -235,7 +273,7 @@ describe("ReferenceVideoCard combobox ARIA", () => {
     renderCard();
     const ta = screen.getByRole("combobox");
     expect(ta).toHaveAttribute("aria-expanded", "false");
-    expect(ta).toHaveAttribute("aria-controls", "reference-editor-picker");
+    expect(ta.getAttribute("aria-controls")).toMatch(/^reference-editor-picker-/);
     expect(ta).toHaveAttribute("aria-autocomplete", "list");
     // aria-label 是短名，不是长 placeholder
     expect(ta.getAttribute("aria-label")).toBe("Unit 提示词");
@@ -257,8 +295,9 @@ describe("ReferenceVideoCard combobox ARIA", () => {
     const unit = mkUnit({ text: "@未知人 出现" });
     renderCard(unit);
     const ta = screen.getByRole("combobox");
-    expect(ta).toHaveAttribute("aria-describedby", "reference-editor-unknown-desc");
-    const desc = document.getElementById("reference-editor-unknown-desc");
+    const descriptionId = ta.getAttribute("aria-describedby");
+    expect(descriptionId).toMatch(/^reference-editor-unknown-desc-/);
+    const desc = document.getElementById(descriptionId!);
     expect(desc).not.toBeNull();
     expect(desc).toHaveAttribute("aria-live", "polite");
     expect(desc?.textContent).toContain("未知人");

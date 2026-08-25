@@ -1569,6 +1569,10 @@ PROVIDER_REGISTRY: dict[str, ProviderMeta] = {
         },
         default_base_url=CROCO_BASE_URL,
         group="own",
+        # Croco is our own asynchronous scheduler: submit the whole stage batch
+        # promptly and let the remote service queue/expend its GPU capacity.
+        # External providers retain the conservative global video default.
+        default_concurrency={"video": 32},
     ),
     "doubao": ProviderMeta(
         display_name="火山 TTS",

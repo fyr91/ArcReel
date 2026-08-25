@@ -197,6 +197,10 @@ export function ProjectSettingsPage() {
   const [imageBackendDefault, setImageBackendDefault] = useState<string>("");
   const [imageBackendT2I, setImageBackendT2I] = useState<string>("");
   const [imageBackendI2I, setImageBackendI2I] = useState<string>("");
+  const [imageBackendAsset, setImageBackendAsset] = useState<string>("");
+  const [imageBackendReference, setImageBackendReference] = useState<string>("");
+  const [imageBackendStoryboard, setImageBackendStoryboard] = useState<string>("");
+  const [imageBackendKeyframe, setImageBackendKeyframe] = useState<string>("");
   const [audioOverride, setAudioOverride] = useState<boolean | null>(null);
   // 旁白配音（TTS）项目级覆盖：空字符串/ null 表示跟随全局默认
   const [audioBackend, setAudioBackend] = useState<string>("");
@@ -248,6 +252,7 @@ export function ProjectSettingsPage() {
   const initialRef = useRef({
     videoBackend: "", videoProviderI2V: "", videoProviderR2V: "",
     imageBackendDefault: "", imageBackendT2I: "", imageBackendI2I: "",
+    imageBackendAsset: "", imageBackendReference: "", imageBackendStoryboard: "", imageBackendKeyframe: "",
     audioOverride: null as boolean | null,
     audioBackend: "", narrationVoice: "", narrationSpeed: null as number | null,
     textDefault: "", textSimple: "", textComplex: "",
@@ -329,6 +334,10 @@ export function ProjectSettingsPage() {
       const ibDefault = (project.default_image_backend as string | undefined) ?? "";
       const ibt2i = (project.image_provider_t2i as string | undefined) ?? "";
       const ibi2i = (project.image_provider_i2i as string | undefined) ?? "";
+      const ibAsset = (project.image_provider_asset as string | undefined) ?? "";
+      const ibReference = (project.image_provider_reference as string | undefined) ?? "";
+      const ibStoryboard = (project.image_provider_storyboard as string | undefined) ?? "";
+      const ibKeyframe = (project.image_provider_keyframe as string | undefined) ?? "";
       const rawAudio = project.video_generate_audio;
       const ao = typeof rawAudio === "boolean" ? rawAudio : null;
       const ab = (project.audio_backend as string | undefined) ?? "";
@@ -356,6 +365,10 @@ export function ProjectSettingsPage() {
       setImageBackendDefault(ibDefault);
       setImageBackendT2I(ibt2i);
       setImageBackendI2I(ibi2i);
+      setImageBackendAsset(ibAsset);
+      setImageBackendReference(ibReference);
+      setImageBackendStoryboard(ibStoryboard);
+      setImageBackendKeyframe(ibKeyframe);
       setAudioOverride(ao);
       setAudioBackend(ab);
       setNarrationVoice(nv);
@@ -410,6 +423,8 @@ export function ProjectSettingsPage() {
       initialRef.current = {
         videoBackend: vb, videoProviderI2V: vpi2v, videoProviderR2V: vpr2v,
         imageBackendDefault: ibDefault, imageBackendT2I: ibt2i, imageBackendI2I: ibi2i,
+        imageBackendAsset: ibAsset, imageBackendReference: ibReference,
+        imageBackendStoryboard: ibStoryboard, imageBackendKeyframe: ibKeyframe,
         audioOverride: ao,
         audioBackend: ab, narrationVoice: nv, narrationSpeed: ns,
         textDefault: td, textSimple: tsi, textComplex: tcx,
@@ -468,6 +483,10 @@ export function ProjectSettingsPage() {
     imageBackendDefault !== initialRef.current.imageBackendDefault ||
     imageBackendT2I !== initialRef.current.imageBackendT2I ||
     imageBackendI2I !== initialRef.current.imageBackendI2I ||
+    imageBackendAsset !== initialRef.current.imageBackendAsset ||
+    imageBackendReference !== initialRef.current.imageBackendReference ||
+    imageBackendStoryboard !== initialRef.current.imageBackendStoryboard ||
+    imageBackendKeyframe !== initialRef.current.imageBackendKeyframe ||
     audioOverride !== initialRef.current.audioOverride ||
     audioBackend !== initialRef.current.audioBackend ||
     narrationVoice !== initialRef.current.narrationVoice ||
@@ -688,8 +707,10 @@ export function ProjectSettingsPage() {
         video_provider_i2v: videoProviderI2V || null,
         video_provider_r2v: videoProviderR2V || null,
         default_image_backend: imageBackendDefault || null,
-        image_provider_t2i: imageBackendT2I || null,
-        image_provider_i2i: imageBackendI2I || null,
+        image_provider_asset: imageBackendAsset || null,
+        image_provider_reference: imageBackendReference || null,
+        image_provider_storyboard: imageBackendStoryboard || null,
+        image_provider_keyframe: imageBackendKeyframe || null,
         video_generate_audio: audioOverride,
         audio_backend: audioBackend || null,
         narration_voice: trimmedVoice || null,
@@ -712,6 +733,7 @@ export function ProjectSettingsPage() {
       initialRef.current = {
         videoBackend, videoProviderI2V, videoProviderR2V,
         imageBackendDefault, imageBackendT2I, imageBackendI2I, audioOverride,
+        imageBackendAsset, imageBackendReference, imageBackendStoryboard, imageBackendKeyframe,
         audioBackend, narrationVoice: trimmedVoice, narrationSpeed,
         textDefault, textSimple, textComplex,
         aspectRatio, gridStoryboard, defaultDuration, speechRate,
@@ -726,7 +748,7 @@ export function ProjectSettingsPage() {
     } finally {
       setSaving(false);
     }
-  }, [modelSettings, videoBackend, videoProviderI2V, videoProviderR2V, imageBackendDefault, imageBackendT2I, imageBackendI2I, audioOverride, audioBackend, narrationVoice, narrationSpeed, textDefault, textSimple, textComplex, aspectRatio, generationRoute, gridStoryboard, gridToggleVisible, defaultDuration, speechRate, contentMode, videoResolution, imageResolution, projectName, t, globalDefaults]);
+  }, [modelSettings, videoBackend, videoProviderI2V, videoProviderR2V, imageBackendDefault, imageBackendT2I, imageBackendI2I, imageBackendAsset, imageBackendReference, imageBackendStoryboard, imageBackendKeyframe, audioOverride, audioBackend, narrationVoice, narrationSpeed, textDefault, textSimple, textComplex, aspectRatio, generationRoute, gridStoryboard, gridToggleVisible, defaultDuration, speechRate, contentMode, videoResolution, imageResolution, projectName, t, globalDefaults]);
 
   const handleResetAgentProfile = useCallback(async () => {
     if (profileResetProject !== projectName) {
@@ -1044,6 +1066,10 @@ export function ProjectSettingsPage() {
                     imageBackendDefault,
                     imageBackendT2I,
                     imageBackendI2I,
+                    imageBackendAsset,
+                    imageBackendReference,
+                    imageBackendStoryboard,
+                    imageBackendKeyframe,
                     textBackendDefault: textDefault,
                     textBackendSimple: textSimple,
                     textBackendComplex: textComplex,
@@ -1058,6 +1084,10 @@ export function ProjectSettingsPage() {
                     setImageBackendDefault(next.imageBackendDefault);
                     setImageBackendT2I(next.imageBackendT2I);
                     setImageBackendI2I(next.imageBackendI2I);
+                    setImageBackendAsset(next.imageBackendAsset ?? "");
+                    setImageBackendReference(next.imageBackendReference ?? "");
+                    setImageBackendStoryboard(next.imageBackendStoryboard ?? "");
+                    setImageBackendKeyframe(next.imageBackendKeyframe ?? "");
                     setTextDefault(next.textBackendDefault);
                     setTextSimple(next.textBackendSimple);
                     setTextComplex(next.textBackendComplex);

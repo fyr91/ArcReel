@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Literal
 
-from lib.artifact_activation import reconcile_artifact_target_claims
+from lib.artifact_activation import reconcile_artifact_target_claims, register_current_resource_artifact
 from lib.artifact_manifest import ArtifactKey
 from lib.asset_types import (
     GLOBAL_ASSET_ID_FIELD,
@@ -15,6 +15,7 @@ from lib.asset_types import (
     MATCHED_GLOBAL_ASSET_ID_FIELD,
     resolve_asset_key,
 )
+from lib.content_digest import sha256_file
 from lib.db import async_session_factory
 from lib.db.repositories.asset_repo import AssetRepository
 from lib.path_safety import safe_exists, safe_join
@@ -30,6 +31,10 @@ class ProjectCharacterMainImageMissing(ProjectCharacterImageError):
     """The character has no currently displayed main image to move."""
 
 
+class ProjectCharacterReferenceImageMissing(ProjectCharacterImageError):
+    """The character has no currently displayed reference image to move."""
+
+
 class ProjectCharacterImageConflict(ProjectCharacterImageError):
     """The image source changed between resolution and the locked commit."""
 
@@ -39,6 +44,13 @@ class CharacterMainToReferenceResult:
     project_asset: dict[str, Any]
     source: Literal["global", "project"]
     reference_path: str
+
+
+@dataclass(frozen=True, slots=True)
+class CharacterReferenceToMainResult:
+    project_asset: dict[str, Any]
+    source: Literal["global", "project"]
+    main_path: str
 
 
 def _character_entry(project: dict[str, Any], character_name: str) -> tuple[str, dict[str, Any]]:
@@ -67,10 +79,10 @@ async def move_character_main_to_reference(
 ) -> CharacterMainToReferenceResult:
     """Move the card's current main image into its project reference slot.
 
-    A linked Global Asset is only the initial source of the card main image. The
-    operation snapshots whichever image is currently visible (Global or project)
-    into the project reference slot, clears ``character_sheet``, and leaves the
-    Global Asset and its primary selection untouched.
+    A linked Global Asset is materialized into ``character_sheet`` when linked.
+    This operation therefore moves the project-local current main first; direct
+    Global Asset access remains only as a compatibility fallback for historical
+    linked entries whose sheet is still empty.
     """
 
     pm = manager or get_project_manager()
@@ -85,8 +97,16 @@ async def move_character_main_to_reference(
     source_relative: str
     source_root: Path
 
+    project_sheet: str | None = None
+    if (
+        isinstance(expected_sheet, str)
+        and expected_sheet
+        and safe_exists(pm.get_project_path(project_name), expected_sheet)
+    ):
+        project_sheet = expected_sheet
+
     global_relative: str | None = None
-    if expected_link_id is not None and expected_usage == "main":
+    if project_sheet is None and expected_link_id is not None and expected_usage == "main":
         async with factory() as session:
             asset = await AssetRepository(session).get_by_id(expected_link_id)
         if (
@@ -97,18 +117,14 @@ async def move_character_main_to_reference(
         ):
             global_relative = asset.image_path
 
-    if global_relative is not None:
+    if project_sheet is not None:
+        source_kind = "project"
+        source_relative = project_sheet
+        source_root = pm.get_project_path(project_name)
+    elif global_relative is not None:
         source_kind = "global"
         source_relative = global_relative
         source_root = pm.projects_root
-    elif (
-        isinstance(expected_sheet, str)
-        and expected_sheet
-        and safe_exists(pm.get_project_path(project_name), expected_sheet)
-    ):
-        source_kind = "project"
-        source_relative = expected_sheet
-        source_root = pm.get_project_path(project_name)
     else:
         raise ProjectCharacterMainImageMissing(character_name)
 
@@ -173,10 +189,137 @@ async def move_character_main_to_reference(
     )
 
 
+async def move_character_reference_to_main(
+    project_name: str,
+    character_name: str,
+    *,
+    manager: ProjectManager | None = None,
+    session_factory=None,
+    source: ProjectChangeSource = "webui",
+) -> CharacterReferenceToMainResult:
+    """Move the card's displayed reference image back into the main slot.
+
+    A saved project reference takes precedence over the linked Global Asset.
+    Whichever source wins is always materialized into ``character_sheet`` so all
+    downstream consumers keep one project-local main-image contract. The linked
+    Global Asset itself and its primary selection remain untouched.
+    """
+
+    pm = manager or get_project_manager()
+    factory = session_factory or async_session_factory
+    project = await asyncio.to_thread(pm.load_project, project_name)
+    _key, entry = _character_entry(project, character_name)
+    expected_link_id = _linked_asset_id(entry)
+    expected_usage = entry.get(GLOBAL_ASSET_IMAGE_USAGE_FIELD, "main")
+    expected_reference = entry.get("reference_image")
+    project_dir = pm.get_project_path(project_name)
+
+    global_relative: str | None = None
+    if expected_link_id is not None and expected_usage == "reference":
+        async with factory() as session:
+            asset = await AssetRepository(session).get_by_id(expected_link_id)
+        if (
+            asset is not None
+            and asset.type == "character"
+            and isinstance(asset.image_path, str)
+            and safe_exists(pm.projects_root, asset.image_path)
+        ):
+            global_relative = asset.image_path
+
+    project_reference: str | None = None
+    if isinstance(expected_reference, str) and expected_reference and safe_exists(project_dir, expected_reference):
+        project_reference = expected_reference
+
+    if project_reference is None and global_relative is None:
+        raise ProjectCharacterReferenceImageMissing(character_name)
+
+    copies: list[tuple[Path, Path]] = []
+    moved_entry: dict[str, Any] = {}
+    canonical_name = ""
+    main_path = ""
+    source_kind: Literal["global", "project"] = "project"
+
+    def _mutate(locked_project: dict[str, Any]) -> None:
+        nonlocal canonical_name, main_path, source_kind
+        canonical_name, current = _character_entry(locked_project, character_name)
+        if (
+            _linked_asset_id(current) != expected_link_id
+            or current.get(GLOBAL_ASSET_IMAGE_USAGE_FIELD, "main") != expected_usage
+            or current.get("reference_image") != expected_reference
+        ):
+            raise ProjectCharacterImageConflict(character_name)
+
+        project_source: Path | None = None
+        if project_reference is not None:
+            try:
+                project_source = safe_join(project_dir, project_reference, require_file=True)
+            except FileNotFoundError as exc:
+                raise ProjectCharacterReferenceImageMissing(character_name) from exc
+            except ValueError as exc:
+                raise ProjectCharacterImageError(str(exc)) from exc
+
+        global_source: Path | None = None
+        if global_relative is not None:
+            try:
+                global_source = safe_join(pm.projects_root, global_relative, require_file=True)
+            except FileNotFoundError as exc:
+                if project_source is None:
+                    raise ProjectCharacterReferenceImageMissing(character_name) from exc
+            except ValueError as exc:
+                raise ProjectCharacterImageError(str(exc)) from exc
+
+        restores_linked_main = global_source is not None and (
+            project_source is None or sha256_file(project_source) == sha256_file(global_source)
+        )
+        main_source = project_source or global_source
+        if main_source is None:  # pragma: no cover - guarded above
+            raise ProjectCharacterReferenceImageMissing(character_name)
+        source_kind = "project" if project_source is not None else "global"
+        suffix = main_source.suffix.lower() or ".png"
+        main_path = f"characters/{canonical_name}{suffix}"
+        target = safe_join(project_dir, main_path)
+        if main_source.resolve(strict=False) != target.resolve(strict=False):
+            copies.append((main_source, target))
+        current["character_sheet"] = main_path
+        if restores_linked_main:
+            current[GLOBAL_ASSET_IMAGE_USAGE_FIELD] = "main"
+
+        current["reference_image"] = ""
+        moved_entry.update(current)
+
+    def _reconcile_sheet_claim(_project_file: Path) -> None:
+        if not canonical_name:  # pragma: no cover - mutation contract
+            raise RuntimeError("character image move did not resolve a canonical identity")
+        register_current_resource_artifact(
+            project_dir,
+            resource_type="characters",
+            resource_id=canonical_name,
+        )
+
+    def _commit() -> None:
+        with project_change_source(source):
+            pm.update_project_with_file_copies(
+                project_name,
+                _mutate,
+                copies,
+                on_commit=_reconcile_sheet_claim,
+            )
+
+    await asyncio.to_thread(_commit)
+    return CharacterReferenceToMainResult(
+        project_asset=moved_entry,
+        source=source_kind,
+        main_path=main_path,
+    )
+
+
 __all__ = [
     "CharacterMainToReferenceResult",
+    "CharacterReferenceToMainResult",
     "ProjectCharacterImageConflict",
     "ProjectCharacterImageError",
     "ProjectCharacterMainImageMissing",
+    "ProjectCharacterReferenceImageMissing",
     "move_character_main_to_reference",
+    "move_character_reference_to_main",
 ]

@@ -14,7 +14,7 @@ from lib.script_models import ReferenceResource
 def unit_reference_declarations(project: dict, unit: dict) -> tuple[ReferenceResource, ...]:
     """Return a unit's registered logical image references in first-mention order.
 
-    A confirmed Video Unit Storyboard Sheet is always first. Keyframe mentions
+    A generated Video Unit Storyboard Sheet is always first. Keyframe mentions
     are valid only when the referenced keyframe belongs to the current unit.
     Other mentions resolve through the project's registered asset buckets.
     Unknown names are intentionally omitted so callers can surface them as
@@ -27,7 +27,7 @@ def unit_reference_declarations(project: dict, unit: dict) -> tuple[ReferenceRes
     references: list[ReferenceResource] = []
     seen: set[tuple[str, str]] = set()
     sheet = unit.get("storyboard_sheet")
-    if isinstance(sheet, dict) and sheet.get("status") == "confirmed":
+    if isinstance(sheet, dict) and str(sheet.get("image_path") or "").strip():
         unit_id = str(unit.get("unit_id") or "").strip()
         if unit_id:
             references.append(ReferenceResource(type="storyboard_sheet", name=unit_id))

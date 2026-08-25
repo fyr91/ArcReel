@@ -127,9 +127,56 @@ async def test_reference_route_blocks_without_keyframe_plan_and_confirmed_sheet(
     )
 
     assert [problem.code for problem in result.blocking_problems] == [
-        "reference_keyframe_plan_required",
+        "reference_keyframes_required",
         "reference_storyboard_sheet_required",
     ]
+
+
+@pytest.mark.asyncio
+async def test_reference_image_clamp_is_advisory_even_for_legacy_confirmed_sheet() -> None:
+    projector = ReferenceUnitRequestProjector(_FakeCapabilities(), _FakeAssets(set()))
+    project = {
+        "generation_mode": "reference_video",
+        "products": {"手袋": {}},
+        "scenes": {"大厅": {}},
+    }
+    unit = {
+        "unit_id": "E1U1",
+        "text": "@[关键分镜 E1U1K01] @[手袋] 放在 @[大厅]。",
+        "duration_seconds": 8,
+        "storyboard_sheet": {
+            "image_path": "storyboard_sheets/E1U1.png",
+            "status": "confirmed",
+        },
+        "keyframes": [
+            {
+                "keyframe_id": "E1U1K01",
+                "description": "手袋刚放到大厅桌面",
+                "image_path": "keyframes/E1U1K01.png",
+            }
+        ],
+    }
+    assets = [
+        _asset("storyboard_sheet", "E1U1", "/fake/storyboard.png"),
+        _asset("keyframe", "关键分镜 E1U1K01", "/fake/keyframe.png"),
+        _asset("product", "手袋", "/fake/product.png"),
+        _asset("scene", "大厅", "/fake/scene.png"),
+    ]
+
+    result = await projector.project_current(
+        project=project,
+        script={"video_units": [unit]},
+        unit=unit,
+        resolved_assets=assets,
+        options=ReferenceRequestOptions(
+            narration_delivery=POST_PRODUCTION,
+            confirmed_request_duration_seconds=8,
+        ),
+    )
+
+    clamp = next(problem for problem in result.problems if problem.code == "reference_images_clamped")
+    assert clamp.blocking is False
+    assert "reference_images_clamped" not in [problem.code for problem in result.blocking_problems]
 
 
 @pytest.mark.asyncio

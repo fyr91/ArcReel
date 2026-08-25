@@ -146,11 +146,15 @@ async def test_inventory_tool_records_one_exact_same_type_global_match(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     pm, project_path = _make_project(tmp_path)
+    global_image = tmp_path / "projects" / "_global_assets" / "character" / "dad.jpeg"
+    global_image.parent.mkdir(parents=True)
+    global_image.write_bytes(b"global-dad")
     async with db_factory() as session:
         global_character = await AssetRepository(session).create(
             type="character",
             name="鳄鱼爸爸",
             description="全局角色",
+            image_path="_global_assets/character/dad.jpeg",
         )
         global_scene = await AssetRepository(session).create(
             type="scene",
@@ -190,6 +194,8 @@ async def test_inventory_tool_records_one_exact_same_type_global_match(
     assert character["global_asset_image_usage"] == "main"
     assert character["global_asset_voice_source"] == "none"
     assert character["matched_global_asset_id"] != scene_id
+    assert character["character_sheet"] == "characters/鳄鱼爸爸.jpeg"
+    assert (project_path / character["character_sheet"]).read_bytes() == b"global-dad"
 
 
 @pytest.mark.integration

@@ -898,6 +898,16 @@ class TestCapacityTable:
         assert table.get("agnes", "image") == 5  # 声明不外溢到未声明的 image lane
         assert table.get("ark", "video") == 5  # 未声明默认的视频供应商仍跟随全局 env
 
+    @pytest.mark.unit
+    def test_croco_video_default_fans_out_to_its_remote_queue(self, monkeypatch):
+        """自有 Croco 调度服务一次接收整批任务，不受外部视频后端的保守全局值限制。"""
+        monkeypatch.setenv("VIDEO_MAX_WORKERS", "3")
+
+        table = CapacityTable.from_env()
+
+        assert table.get("croco", "video") == 32
+        assert table.get("ark", "video") == 3
+
 
 class TestGenerationWorker:
     @pytest.mark.unit
@@ -1869,6 +1879,35 @@ class TestGenerationWorker:
         assert requeued == []
         assert queue.failed and queue.failed[0][0] == "img-orphan"
         assert "[restart_lost_image]" in queue.failed[0][1]
+
+    @pytest.mark.unit
+    @pytest.mark.asyncio
+    async def test_handle_orphan_hyperframes_bgm_with_job_id_requeues_for_resume(self, monkeypatch):
+        queue = _FakeQueue()
+        queue._orphans = [
+            {
+                "task_id": "bgm-orphan",
+                "status": "running",
+                "provider_id": "croco",
+                "provider_job_id": "music-job-1",
+                "media_type": "audio",
+                "task_type": "hyperframes_bgm",
+                "payload": {"episode": 1, "direction": "calm"},
+                "project_name": "demo",
+            }
+        ]
+        worker = GenerationWorker(queue=queue)
+        requeued: list[str] = []
+
+        async def _capture_requeue(self, task_id):
+            requeued.append(task_id)
+
+        monkeypatch.setattr(GenerationWorker, "_requeue_single_task", _capture_requeue)
+
+        await worker._handle_orphan_tasks_on_start()
+
+        assert requeued == ["bgm-orphan"]
+        assert queue.failed == []
 
     @pytest.mark.unit
     @pytest.mark.asyncio

@@ -26,7 +26,13 @@ from typing import TYPE_CHECKING, Any, Literal
 
 from lib.audio_backends.base import VoiceOption
 from lib.backend_assembly import assemble_backend
-from lib.config.resolver import ConfigResolver, VideoCapability, VoiceConsistency, get_provider_fallback
+from lib.config.resolver import (
+    ConfigResolver,
+    ImageGenerationStage,
+    VideoCapability,
+    VoiceConsistency,
+    get_provider_fallback,
+)
 from lib.custom_provider.backends import CustomVideoBackend
 from lib.db.base import DEFAULT_USER_ID
 from lib.gemini_shared import get_shared_rate_limiter
@@ -151,9 +157,10 @@ async def _get_or_create_audio_backend(
 
 @dataclass(frozen=True)
 class ImageLaneRequest:
-    """声明当前任务需要 image lane。capability 决定 t2i / i2i 默认槽（``docs/adr/0001``）。"""
+    """声明 image lane；stage 选项目制作阶段，capability 仅做底层能力回退。"""
 
     capability: Literal["t2i", "i2i"] = "t2i"
+    stage: ImageGenerationStage | None = None
 
 
 @dataclass(frozen=True)
@@ -339,7 +346,12 @@ async def resolve_generation_context(
 
     async with resolver.session() as r:
         if image is not None:
-            resolved = await r.resolve_image_backend(project, payload, capability=image.capability)
+            resolved = await r.resolve_image_backend(
+                project,
+                payload,
+                capability=image.capability,
+                stage=image.stage,
+            )
             image_backend = await _get_or_create_image_backend(
                 resolved.provider_id,
                 {},

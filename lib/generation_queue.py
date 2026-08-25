@@ -231,7 +231,7 @@ async def _derive_execution_model_for_enqueue(
     try:
         # 局部导入：lib.config 的解析链会拉进 backend 与自定义供应商装配层，入队路径不为此
         # 付模块级导入代价。
-        from lib.config.resolver import ConfigResolver, get_project_manager
+        from lib.config.resolver import ConfigResolver, get_project_manager, image_stage_for_task
         from lib.db import async_session_factory
 
         project: dict | None = None
@@ -254,7 +254,12 @@ async def _derive_execution_model_for_enqueue(
             # image_edit 必然 i2i 且入队即知（唯一例外，见 docs/adr/0001），按 i2i 槽解析；
             # 其余 image 任务 capability 执行时才定，取 t2i 作代表性 provider。
             capability = "i2i" if task_type == "image_edit" else "t2i"
-            resolved = await resolver.resolve_image_backend(project, payload or {}, capability=capability)
+            resolved = await resolver.resolve_image_backend(
+                project,
+                payload or {},
+                capability=capability,
+                stage=image_stage_for_task(task_type, payload or {}),
+            )
     except Exception:
         logger.debug("入队时派生执行身份失败，留 NULL 由 worker 兜底", exc_info=True)
         return None

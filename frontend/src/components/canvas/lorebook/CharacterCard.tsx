@@ -18,7 +18,7 @@ import { useAppStore } from "@/stores/app-store";
 import { useProjectsStore } from "@/stores/projects-store";
 import { errMsg } from "@/utils/async";
 import { rejectIfAssetBusy } from "./assetBusyGuard";
-import { CharacterMainToReferenceButton } from "./CharacterMainToReferenceButton";
+import { CharacterImageSlotMoveButton } from "./CharacterImageSlotMoveButton";
 import { EditableAssetName } from "./EditableAssetName";
 import { ProjectAssetDeleteButton } from "./ProjectAssetDeleteButton";
 import { VoiceSampleButton } from "./VoiceSampleButton";
@@ -289,9 +289,10 @@ export function CharacterCard({
     : null;
   const hasGlobalLink = Boolean(character.global_asset_id || character.matched_global_asset_id);
   const usingGlobalMain = hasGlobalLink && (character.global_asset_image_usage ?? "main") === "main";
-  const sheetUrl = usingGlobalMain && globalImageUrl
-    ? globalImageUrl
-    : localSheetUrl;
+  // character_sheet is the current project's main-image source of truth. The
+  // Global URL is retained only as a compatibility fallback for historical
+  // linked entries that have not yet been materialized.
+  const sheetUrl = localSheetUrl ?? (usingGlobalMain ? globalImageUrl : null);
 
   const savedReferenceUrl = character.reference_image
     ? API.getFileUrl(projectName, character.reference_image, referenceFp)
@@ -300,6 +301,11 @@ export function CharacterCard({
   const linkedReferenceUrl = character.global_asset_image_usage === "reference" ? globalImageUrl : null;
   const displayedReferenceUrl = referencePreview ?? savedReferenceUrl ?? linkedReferenceUrl;
   const hasSavedReference = Boolean(savedReferenceUrl) && !referencePreview;
+  const imageMoveDirection = sheetUrl
+    ? "main-to-reference"
+    : !referencePreview && (savedReferenceUrl || linkedReferenceUrl)
+      ? "reference-to-main"
+      : null;
 
   const savedAudioUrl = character.reference_audio
     ? API.getFileUrl(projectName, character.reference_audio, audioFp)
@@ -398,7 +404,7 @@ export function CharacterCard({
             projectName={projectName}
             resourceType="character"
             resourceId={name}
-            hasImage={Boolean(character.character_sheet) && !usingGlobalMain}
+            hasImage={Boolean(character.character_sheet)}
             busy={generating || uploadingSheet}
           />
           <AddToLibraryButton
@@ -479,11 +485,12 @@ export function CharacterCard({
           </div>
         </div>
 
-        {!readOnly && sheetUrl ? (
+        {!readOnly && imageMoveDirection ? (
           <div className="-my-1 flex justify-center">
-            <CharacterMainToReferenceButton
+            <CharacterImageSlotMoveButton
               projectName={projectName}
               characterName={name}
+              direction={imageMoveDirection}
               onReload={onReload}
               busy={generating || uploadingSheet || saving || deletingAudio}
             />

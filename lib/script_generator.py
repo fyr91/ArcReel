@@ -76,7 +76,7 @@ from lib.reference_video.draft_validation import (
     violation_items,
 )
 from lib.reference_video.duration_slots import resolve_duration_slot
-from lib.reference_video.keyframes import materialize_keyframes
+from lib.reference_video.keyframes import materialize_keyframes, without_keyframe_mentions
 from lib.reference_video.text_parser import extract_mentions
 from lib.script_models import (
     AD_TARGET_DURATION_DRIFT_THRESHOLD,
@@ -1153,7 +1153,10 @@ class ScriptGenerator:
         # 要保护），因此手工编辑过的 step1 可能带着未登记的 @[名称] 或描述行里的花括号进到这里
         # ——不在调用前判，就会付完 step2 的钱才失败，且错误指向 step2「改坏了」，而真正要改的
         # 是 step1。故在此按同一把尺预判 step1 正文，违约时指名 step1。
-        self._assert_reference_step1_text_valid(step1_units, max_refs=self._resolve_max_refs(caps))
+        # 已确认 Text 是正式文稿的内容真相。用户可能在 Web 审阅时补充了超过当前模型
+        # reference-image 上限的资产；该上限由视频请求投影在执行期确定性裁选并提示，
+        # 不能反过来阻止文稿生成或诱导 step2 删除用户确认的 @ 引用。
+        self._assert_reference_step1_text_valid(step1_units, max_refs=None)
 
     def _assert_reference_step1_text_valid(self, step1_units: list[dict], *, max_refs: int | None) -> None:
         """按机器产物的严格口径预判 step1 各 unit 正文，违约时把定位与出路指回 step1。
@@ -1255,16 +1258,13 @@ class ScriptGenerator:
                 rendered_text, keyframes = materialize_keyframes(
                     str(step1_unit["unit_id"]), flat_unit.text, descriptions
                 )
-                ordinary_ref_limit = None if max_refs is None else max(0, max_refs - len(keyframes))
-                validate_unit_text(label, flat_unit.text, self.project_json, max_refs=ordinary_ref_limit)
+                # Formal manuscript validity is independent of the currently selected
+                # video's image-input ceiling. Storyboard, Keyframes and ordinary assets
+                # are selected deterministically at request projection time; exceeding
+                # that ceiling is an advisory clamp, never a reason to rewrite confirmed
+                # Text or quarantine an otherwise valid paid step2 result.
+                validate_unit_text(label, flat_unit.text, self.project_json, max_refs=None)
                 assert_dialogue_preserved(label, step1_text, flat_unit.text)
-                planned = step1_unit.get("keyframe_plan")
-                if isinstance(planned, list) and planned and len(planned) != len(keyframes):
-                    raise DraftViolation(
-                        f"{label} 的关键分镜数量（{len(keyframes)}）与 step1 已确认规划（{len(planned)}）不一致",
-                        code="keyframe_count_changed",
-                        label=label,
-                    )
             except DraftViolation as exc:
                 violations.extend(violation_items(exc))
                 continue
@@ -1277,6 +1277,7 @@ class ScriptGenerator:
                     "text": rendered_text,
                     "duration_seconds": step1_unit["duration_seconds"],
                     "keyframes": keyframes,
+                    "storyboard_description": without_keyframe_mentions(rendered_text),
                 }
             )
 
@@ -1469,6 +1470,7 @@ class ScriptGenerator:
                 "text": rendered_text,
                 "duration_seconds": source.duration_seconds,
                 "keyframes": keyframes,
+                "storyboard_description": without_keyframe_mentions(rendered_text),
                 "transition_to_next": "cut",
                 "note": None,
                 "generated_assets": {},

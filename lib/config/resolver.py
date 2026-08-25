@@ -55,6 +55,44 @@ logger = logging.getLogger(__name__)
 # 布尔字符串解析的 truthy 值集合
 _TRUTHY = frozenset({"true", "1", "yes"})
 
+ImageGenerationStage = Literal["asset", "reference", "storyboard", "keyframe"]
+
+_IMAGE_STAGE_PROJECT_KEYS: dict[ImageGenerationStage, str] = {
+    "asset": "image_provider_asset",
+    "reference": "image_provider_reference",
+    "storyboard": "image_provider_storyboard",
+    "keyframe": "image_provider_keyframe",
+}
+
+
+def image_stage_for_task(
+    task_type: str,
+    payload: dict[str, object] | None = None,
+    resource_type: str | None = None,
+) -> ImageGenerationStage | None:
+    """Map queue/resource coordinates to the user-facing production stage."""
+
+    payload = payload or {}
+    if task_type in {"character", "scene", "prop", "product"}:
+        return "asset"
+    if task_type in {"storyboard", "grid", "grid_split", "reference_storyboard_sheet"}:
+        return "storyboard"
+    if task_type == "reference_keyframe":
+        return "keyframe"
+    if task_type == "reference_image":
+        return "reference"
+    if task_type == "image_edit":
+        edited_type = str(payload.get("resource_type") or resource_type or "")
+        if edited_type in {"character", "scene", "prop", "product"}:
+            return "asset"
+        if edited_type in {"storyboard", "reference_storyboard_sheet"}:
+            return "storyboard"
+        if edited_type == "reference_keyframe":
+            return "keyframe"
+        if edited_type == "reference_image":
+            return "reference"
+    return None
+
 
 @dataclass(frozen=True)
 class ProviderModel:
@@ -751,16 +789,18 @@ class ConfigResolver:
         payload: dict | None,
         *,
         capability: Literal["t2i", "i2i"],
+        stage: ImageGenerationStage | None = None,
     ) -> ProviderModel:
         """解析图片任务应使用的 ProviderModel。
 
-        优先级：payload > 项目桶（``image_provider_<cap>``）> 项目默认（``default_image_backend``）
+        优先级：payload > 项目制作阶段（``image_provider_<stage>``）> 旧项目能力桶
+        （``image_provider_<cap>``）> 项目默认（``default_image_backend``）
         > 全局桶（``default_image_backend_<cap>``）> 全局默认（``default_image_backend``）> 自动推断。
-        桶是可选覆盖，无值（含显式清空）回退默认层（``docs/adr/0054``）。
+        项目设置面只呈现制作阶段；旧能力桶继续作为兼容回退，不再暴露给用户。
         capability 决定走 t2i 还是 i2i 槽（见 ``docs/adr/0001``）。不做任何 provider 归一化。
         """
         async with self._open_session() as (session, svc):
-            return await self._resolve_image_provider_model(svc, session, project, payload, capability)
+            return await self._resolve_image_provider_model(svc, session, project, payload, capability, stage)
 
     async def resolve_video_backend(
         self,
@@ -1105,8 +1145,9 @@ class ConfigResolver:
         project: dict | None,
         payload: dict | None,
         capability: Literal["t2i", "i2i"],
+        stage: ImageGenerationStage | None = None,
     ) -> ProviderModel:
-        """payload 优先解析图片 ProviderModel，无 payload 时走四级骨架。
+        """payload 优先，其次项目制作阶段，再走兼容能力桶骨架。
 
         payload 层保留 ``payload>project>global`` 的规范骨架，接受 ``image_provider`` /
         ``image_model`` 键——按该格式序列化的任务据此解析。图片任务不锁定执行身份（任务周期
@@ -1121,6 +1162,10 @@ class ConfigResolver:
                 model = _payload_model_or_default(payload.get("image_model"), provider_id, "image")
                 if model is not None:
                     return ProviderModel(provider_id, model)
+        if project and stage is not None:
+            parsed = _parse_project_provider(project.get(_IMAGE_STAGE_PROJECT_KEYS[stage]), "image")
+            if parsed is not None:
+                return ProviderModel(*parsed)
         provider_id, model_id = await self._resolve_layered_backend(
             svc, session, project, _IMAGE_LAYERED_KEYS[capability]
         )

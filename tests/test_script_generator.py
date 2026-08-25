@@ -1852,19 +1852,18 @@ class TestLoadReferenceStep1:
             "unit_id": unit_id,
             "text": "甲走进屋子",
             "duration_seconds": duration,
-            "keyframe_plan": ["中景平视，甲走进屋子的核心场景静态首帧"],
         }
 
     @pytest.mark.unit
-    def test_missing_keyframe_plan_requires_resplit(self, tmp_path):
+    def test_preprocessing_does_not_require_keyframe_plan(self, tmp_path):
         sg = self._generator(tmp_path)
         self._write(
             sg,
             1,
             {"units": [{"unit_id": "E1U01", "text": "甲走进屋子", "duration_seconds": 6}]},
         )
-        with pytest.raises(ValueError, match="keyframe_plan"):
-            sg._load_reference_step1(1, [4, 6, 8])
+        units = sg._load_reference_step1(1, [4, 6, 8])
+        assert units == [{"unit_id": "E1U01", "text": "甲走进屋子", "duration_seconds": 6, "source_text": ""}]
 
     @pytest.mark.unit
     def test_loads_structured_units_verbatim(self, tmp_path):

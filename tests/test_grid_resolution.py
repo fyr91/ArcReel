@@ -20,9 +20,10 @@ class _FakeResolver:
         self.asked_capability: str | None = None
         self.asked_identity: tuple[str, str] | None = None
 
-    async def resolve_image_backend(self, project: dict, payload: Any, *, capability: str):
+    async def resolve_image_backend(self, project: dict, payload: Any, *, capability: str, stage=None):
         if self._raises:
             raise RuntimeError("no image provider configured")
+        assert stage == "storyboard"
         self.asked_capability = capability
         return type("Resolved", (), {"provider_id": "gemini", "model_id": "img-model"})()
 
