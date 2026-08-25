@@ -169,8 +169,15 @@ describe("CreateProjectModal", () => {
         generation_mode: "reference_video",
         grid_storyboard: false,
         style_template_id: "live_premium_drama",
-        video_backend: null,
-        default_image_backend: null,
+        video_backend: "croco/minimax-h3",
+        default_image_backend: "ark-agent-plan/doubao-seedream-5.0-lite",
+        image_provider_storyboard: "runware/google:nano-banana@2-lite",
+        default_text_backend: "ark-agent-plan/deepseek-v4-pro",
+        text_backend_simple: "ark-agent-plan/minimax-m3",
+        text_backend_complex: "ark-agent-plan/deepseek-v4-pro",
+        model_settings: {
+          "croco/minimax-h3": { resolution: "480p" },
+        },
         default_duration: null,
       })
     );

@@ -87,6 +87,8 @@ uv run python scripts/export_release_config.py --output .env.release
 
 The exported file is created with `0600` permissions and is ignored by Git. Transfer it through a secure channel and never commit it to the repository.
 
+New Release Branch projects default to MiniMax H3 at 480p for video, Seedream 5.0 Lite for image generation, and Nano Banana 2 Lite for Storyboards. DeepSeek V4 Pro is used for the default and complex text tiers, while MiniMax M3 is used for simple tasks. These values are persisted in the project and remain editable in Project Settings.
+
 For the complete first-run workflow, see [Getting Started](https://docs.arc-reel.com/en/guide/getting-started).
 
 ## Documentation

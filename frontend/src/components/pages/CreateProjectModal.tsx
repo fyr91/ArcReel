@@ -64,6 +64,13 @@ const STEP_CONNECTOR_INACTIVE_STYLE: CSSProperties = {
   background: "var(--color-hairline-soft)",
 };
 
+const RELEASE_VIDEO_BACKEND = "croco/minimax-h3";
+const RELEASE_IMAGE_BACKEND = "ark-agent-plan/doubao-seedream-5.0-lite";
+const RELEASE_STORYBOARD_IMAGE_BACKEND = "runware/google:nano-banana@2-lite";
+const RELEASE_TEXT_BACKEND = "ark-agent-plan/deepseek-v4-pro";
+const RELEASE_SIMPLE_TEXT_BACKEND = "ark-agent-plan/minimax-m3";
+const RELEASE_VIDEO_RESOLUTION = "480p";
+
 function StepIndicator({ current }: { current: 1 | 2 | 3 }) {
   const { t } = useTranslation("templates");
   return (
@@ -157,17 +164,17 @@ export function CreateProjectModal() {
   });
 
   const [models, setModels] = useState<ModelConfigValue>({
-    videoBackend: "",
+    videoBackend: RELEASE_VIDEO_BACKEND,
     videoProviderI2V: "",
     videoProviderR2V: "",
-    imageBackendDefault: "",
+    imageBackendDefault: RELEASE_IMAGE_BACKEND,
     imageBackendT2I: "",
     imageBackendI2I: "",
-    textBackendDefault: "",
-    textBackendSimple: "",
-    textBackendComplex: "",
+    textBackendDefault: RELEASE_TEXT_BACKEND,
+    textBackendSimple: RELEASE_SIMPLE_TEXT_BACKEND,
+    textBackendComplex: RELEASE_TEXT_BACKEND,
     defaultDuration: null,
-    videoResolution: null,
+    videoResolution: RELEASE_VIDEO_RESOLUTION,
     imageResolution: null,
   });
 
@@ -343,6 +350,7 @@ export function CreateProjectModal() {
           : {}),
         video_backend: models.videoBackend || null,
         default_image_backend: models.imageBackendDefault || null,
+        image_provider_storyboard: RELEASE_STORYBOARD_IMAGE_BACKEND,
         default_text_backend: models.textBackendDefault || null,
         text_backend_simple: models.textBackendSimple || null,
         text_backend_complex: models.textBackendComplex || null,
