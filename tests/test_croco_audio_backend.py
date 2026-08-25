@@ -15,12 +15,19 @@ pytestmark = pytest.mark.unit
 class _Client:
     def __init__(self) -> None:
         self.submission = None
+        self.max_wait_seconds = None
 
     async def submit_job(self, **kwargs):
         self.submission = kwargs
         return {"job_id": "music-job"}
 
-    async def wait_until_terminal(self, _job_id: str):
+    async def wait_until_terminal(self, _job_id: str, *, max_wait_seconds=None, on_update=None):
+        self.max_wait_seconds = max_wait_seconds
+        if on_update is not None:
+            await on_update(
+                {"status": "running", "stage": "generating", "progress": 48, "can_cancel": True},
+                {"position": 1, "queue_length": 1},
+            )
         return {"status": "succeeded"}
 
     async def list_outputs(self, _job_id: str):
@@ -64,4 +71,24 @@ async def test_croco_audio_passes_music3_structured_parameters(tmp_path: Path) -
         },
         "client_job_id": "arcreel:music:test",
     }
+    assert client.max_wait_seconds == 24 * 60 * 60
+    assert output.read_bytes() == b"music"
+
+
+async def test_croco_audio_resumes_persisted_job_without_resubmitting(tmp_path: Path) -> None:
+    backend = CrocoAudioBackend(api_key="token")
+    client = _Client()
+    backend._client = client
+    output = tmp_path / "resumed.mp3"
+
+    await backend.synthesize(
+        AudioSynthesisRequest(
+            text="Instrumental",
+            output_path=output,
+            voice="",
+            provider_job_id="existing-music-job",
+        )
+    )
+
+    assert client.submission is None
     assert output.read_bytes() == b"music"

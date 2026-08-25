@@ -245,7 +245,21 @@ class CrocoClient:
 
         started = time.monotonic()
         while True:
-            job = await self.get_job(job_id)
+            try:
+                job = await self.get_job(job_id)
+            except Exception as exc:
+                # A submitted Croco job is durable and identified by job_id.  A
+                # transient network/5xx failure while observing it must not turn
+                # the owning ArcReel task terminal or invite a duplicate submit.
+                # Keep polling within the caller's wait window; surface 4xx and
+                # other permanent errors immediately.
+                if not _should_retry(exc):
+                    raise
+                if time.monotonic() - started > max_wait_seconds:
+                    raise TimeoutError(f"Croco 任务 {job_id} 轮询超时（上游暂时不可达）") from exc
+                logger.warning("Croco job status temporarily unavailable job_id=%s", job_id, exc_info=True)
+                await asyncio.sleep(_SLOW_POLL_SECONDS)
+                continue
             status = job.get("status")
             queue = None
             if status == "queued":

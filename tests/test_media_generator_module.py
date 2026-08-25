@@ -289,6 +289,28 @@ class TestMediaGenerator:
         assert events == ["admission", "provider"]
 
     @pytest.mark.unit
+    async def test_image_postprocess_runs_before_version_tracking(self, tmp_path):
+        gen = _build_generator(tmp_path)
+        gen._image_backend = _FakeImageBackend()
+        observed: list[bytes] = []
+
+        def _postprocess(path: Path) -> None:
+            assert path.read_bytes() == b"fake-image-data"
+            path.write_bytes(b"postprocessed-image-data")
+            observed.append(path.read_bytes())
+
+        output_path, _version = await gen.generate_image_async(
+            prompt="p",
+            resource_type="storyboards",
+            resource_id="E1S01",
+            postprocess_output=_postprocess,
+        )
+
+        assert observed == [b"postprocessed-image-data"]
+        assert output_path.read_bytes() == b"postprocessed-image-data"
+        assert gen.versions.add_calls[0]["source_file"] == output_path
+
+    @pytest.mark.unit
     async def test_invalid_formal_image_call_preserves_a_previous_staged_output(self, tmp_path):
         gen = _build_generator(tmp_path)
         backend = _FakeImageBackend()

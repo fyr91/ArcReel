@@ -43,6 +43,7 @@ FIXED_TASK_TYPES = frozenset(
         "tts",
         "voice_sample",
         "grid",
+        "hyperframes_bgm",
     }
 )
 

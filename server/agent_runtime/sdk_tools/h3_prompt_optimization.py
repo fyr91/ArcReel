@@ -89,10 +89,27 @@ def optimize_h3_video_prompts_tool(ctx: ToolContext):
     return _handler
 
 
+def confirm_h3_video_prompts_tool(ctx: ToolContext):
+    @tool(
+        "confirm_h3_video_prompts",
+        "确认一批已经人工审核且仍有效的 MiniMax H3 六段式视频提示词；不会提交视频任务。",
+        _SCHEMA,
+    )
+    async def _handler(args: dict[str, Any]) -> dict[str, Any]:
+        try:
+            request = _args(args)
+            values = await H3PromptOptimizationService(ctx.pm).confirm(ctx.project_name, **request)
+            return _response("artifacts", values)
+        except Exception as exc:  # noqa: BLE001 - MCP adapters return a controlled error envelope
+            return tool_error("confirm_h3_video_prompts", exc)
+
+    return _handler
+
+
 def update_h3_video_prompt_tool(ctx: ToolContext):
     @tool(
         "update_h3_video_prompt",
-        "按用户要求编辑一个已有且仍有效的 MiniMax H3 六段式视频提示词；保存前会按当前时长和参考素材重新校验。",
+        "按用户要求编辑一个已有且仍有效的 MiniMax H3 六段式视频提示词；保存前会按当前时长和参考素材重新校验，并回到待审核状态。",
         _UPDATE_SCHEMA,
     )
     async def _handler(args: dict[str, Any]) -> dict[str, Any]:
@@ -124,4 +141,8 @@ def update_h3_video_prompt_tool(ctx: ToolContext):
     return _handler
 
 
-__all__ = ["optimize_h3_video_prompts_tool", "update_h3_video_prompt_tool"]
+__all__ = [
+    "confirm_h3_video_prompts_tool",
+    "optimize_h3_video_prompts_tool",
+    "update_h3_video_prompt_tool",
+]

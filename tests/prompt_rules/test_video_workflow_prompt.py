@@ -198,11 +198,13 @@ def test_ad_variant_names_the_registered_video_tools() -> None:
         assert f"mcp__arcreel__{tool_id}" in content
 
 
-def test_generate_video_skill_names_the_shared_h3_prompt_editor() -> None:
+def test_generate_video_skill_names_the_shared_h3_prompt_review_tools() -> None:
     content = _reference(VIDEO_SKILL)
 
     assert "update_h3_video_prompt" in ARCREEL_MCP_TOOL_IDS
     assert "mcp__arcreel__update_h3_video_prompt" in content
+    assert "confirm_h3_video_prompts" in ARCREEL_MCP_TOOL_IDS
+    assert "mcp__arcreel__confirm_h3_video_prompts" in content
 
 
 def test_asset_analysis_subagent_names_its_registered_tool() -> None:

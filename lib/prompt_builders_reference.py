@@ -85,8 +85,9 @@ def build_reference_units_split_prompt(
     """Step-1 video_unit 拆分 prompt：源文 → 扁平 unit 表（时长 + 辅助源文映射 + 书写层正文）。
 
     由 ``split_reference_video_units`` MCP tool 消费。step1 定的是**结构与内容契约**——
-    unit 边界、时长（即计费单位）、台词落位、核心资产指认与关键场景首帧规划；完整视觉展开
-    （景别 / 构图 / 运镜）留给 step2。产出受 response_schema（``build_reference_units_step1_model``，unit 时长
+    unit 边界、时长（即计费单位）、台词落位与核心资产指认；正式脚本文稿及其视觉展开
+    （景别 / 构图 / 运镜）留给 step2，关键分镜再从完成后的正式文稿中提取。产出受 response_schema
+    （``build_reference_units_step1_model``，unit 时长
     枚举硬约束）约束；unit_id / utterances 全部机器派生，不进 LLM 输出。
 
     Args:
@@ -158,9 +159,8 @@ def build_reference_units_split_prompt(
     # 上限按机械派生的 references 计数，故这里与 `reference_rule` 同口径点明说话人不计入：
     # 少这句会让模型把只出现在台词记号里的角色也算进配额，凭空压掉真正要进画面的资产。
     max_refs_rule = (
-        f"\n- **references 上限**：一个 unit 的 `@` 资产引用（去重）、`keyframe_plan` 数量与 "
-        "1 张必经用户确认的 Video Unit Storyboard Sheet 之和不超过 "
-        f"{max_reference_images}（台词记号 `@[角色]{{台词}}` 的说话人不计入——它不生成参考图）；"
+        f"\n- **references 上限**：本阶段只校验正文的 `@` 资产引用（去重），不提前规划 Keyframe；"
+        f"普通资产数不超过 {max_reference_images}（台词记号 `@[角色]{{台词}}` 的说话人不计入）；"
         "超出时把次要角色融入背景描述（不用 `@` 引用），不要压缩主体资产。"
         if max_reference_images is not None
         else ""
@@ -175,7 +175,7 @@ def build_reference_units_split_prompt(
 
 你是一位参考生视频单元架构师，本任务是把源文拆分为适配多模态参考视频模型的 video_unit 表（step1 内容拆分）。
 每个 video_unit 对应**一次视频生成调用**，正文是一段连续的画面描述，一次生成完整覆盖它。
-本阶段定的是**结构与内容契约**：unit 边界、时长（时长即计费单位）、台词落位、核心资产指认与关键场景首帧规划——用户会逐 unit 审阅确认这份契约。
+本阶段定的是**结构与内容契约**：unit 边界、时长（时长即计费单位）、台词落位、核心资产指认——用户会逐 unit 审阅确认这份契约。
 视觉编排（景别 / 构图 / 运镜扩写）由后续 step2 以你的拆分为基底生成，本阶段不写。
 
 **输出语言**：所有字符串值必须使用 {target_language}；JSON 键名保持英文。
@@ -218,17 +218,6 @@ def build_reference_units_split_prompt(
   时间 / 空间 / 情节重大切换点开新 unit。
 - **source_text**：记录该 unit 所依据的源文内容，供人工审阅与追溯。可摘录、概括或整理表达，
   但须保留与本 unit 对应的关键情节；它不进入视频提示词，也不参与逐字机械校验。
-- **keyframe_plan（不可为空）**：每个 unit 至少有一个场景，因此必须按出现顺序列出 1–5 个关键场景首帧规划。
-  第一项是 unit 视频 **00:00.000** 的开场核心动作或场景 beat 入口帧；后续项对应 unit 内明显场景建立或切换后的
-  beat 入口帧。入口帧必须是动作刚开始、意图与方向已可见、结果尚未发生的第一个稳定瞬间，不能选择同一 beat 的
-  完成结果、撞击后、摔倒后或事后状态；只有结果本身开启新的 beat 时才可成为下一关键帧。每项写清景别 / 角度、
-  构图、主体位置、环境与光线、入口姿态，不写运镜过程、连续动作、动作结果或后续角色反应。若动作链是
-  「A 开始 → B 过程 → C 结果」，首帧只能呈现 A，绝不能提前塞入 B/C。例如「妹妹追赶弟弟，弟弟跑动后摔进桂花堆」
-  的正确首帧是妹妹在后方刚开始追、弟弟在前方刚迈步、桂花堆位于前方；错误首帧是弟弟已摔倒、脸已
-  埋进桂花堆或妹妹已经发笑。它不是传统 Storyboard 图片，
-  也不是等到视频生成时再截取的首帧，而是 Video Unit 拆分契约的一部分；用户确认拆分后，step2 会据此生成正式
-  Keyframe 计划，系统先生成 Video Unit Storyboard Sheet；用户确认当前 Sheet 后才自动生成关键首帧图片。
-  若需要超过 5 项，必须在对应切换处继续拆成多个 unit，不能删掉关键画面来凑上限。
 - **时长决策序**（自上而下，高优先级是硬边界，低优先级在其内做优化）：
   1. 硬约束：`duration_seconds` 是 unit 时长（一次生成调用一个时长），必须取支持档位（{durations_str}）中的值。
      叙事需要的时长放不下时，把该 unit 按叙事顺序重拆为多个 unit，**不得违约时长**。{reference_rule}
@@ -265,14 +254,7 @@ def render_reference_units_for_step2(units: list[dict]) -> str:
     for index, unit in enumerate(units, start=1):
         duration = int(unit.get("duration_seconds") or 0)
         body = str(unit.get("text") or "")
-        raw_plan = unit.get("keyframe_plan")
-        plan = raw_plan if isinstance(raw_plan, list) else []
-        plan_lines = "\n".join(f"- {item}" for item in plan if isinstance(item, str) and item.strip())
-        blocks.append(
-            f"#### unit {index}（时长 {duration}s）\n"
-            f"关键首帧规划：\n{plan_lines or '- （缺失：返回 step1 重新拆分，不得在 step2 临时推断）'}\n"
-            f"正文：\n{body}"
-        )
+        blocks.append(f"#### unit {index}（时长 {duration}s）\n{body}")
     return "\n\n".join(blocks)
 
 
@@ -301,13 +283,13 @@ def build_reference_video_prompt(
         characters / scenes / props: 三类已注册资产字典（用于候选列表）。
         step1_units: 结构化 step1 units（``step1_reference_units.json`` 经校验后的 dict 列表），
             由 ``render_reference_units_for_step2`` 机械渲染进 prompt。
-        max_refs: 当前视频模型支持的最大参考图数；为 None 时不写入硬性数量约束。
+        max_refs: 当前视频模型支持的最大参考图数；仅用于说明下游会做确定性选择，
+            不允许 step2 为迎合该上限改写已经确认的 Text。
     """
     max_refs_line = (
-        f"\n- 单个 unit 的普通 `@` 资产引用（去重）、关键分镜数量与 1 张 Video Unit Storyboard Sheet "
-        f"之和不超过 {max_refs}（模型上限）；"
-        "台词记号 `@[角色]{台词}` 的说话人不计入——它不生成参考图，只驱动音色声明。"
-        "超出时把次要角色合并到背景描述，不用 `@` 引用。"
+        f"\n- 当前视频模型最多接收 {max_refs} 张参考图；这是后续视频请求的选择上限，不是文稿改写上限。"
+        "必须保留 step1 Text 中已有的全部 `@[名称]`，不得为迎合上限删除 `@`、降级成普通文字或删减事实；"
+        "后续执行会按稳定顺序选择可发送的参考图并给出提示。新增加的 `@[名称]` 仍只在确有必要时使用。"
         if max_refs is not None
         else ""
     )
@@ -367,16 +349,17 @@ def build_reference_video_prompt(
 
 正文将直接驱动该 unit 的视频生成，按「景别 → 构图 → 运镜 → 画面内容」四要素依次组织，写足画面信息、宁详勿略：
 
-- 每个 unit 同时输出 `keyframes`：严格根据 step1 已确认的关键首帧规划与最终视觉展开，为每次核心场景建立或
-  明显场景切换写一条视频 **00:00.000 的静态第一帧**描述。它必须是该段动作尚未推进的切入状态，而不是整段
-  情节摘要、动作高潮、动作结果或结尾画面。不得在 step2 临时新增、删减或重新决定关键场景；数量须与规划一致，
-  且为 1–5 条。
+- 先完成该 unit 的正式脚本文稿，再只从这份已完成文稿提取 1–5 个 `keyframes`。它们是确认后的 Video Unit 阶段从脚本文稿派生的
+  Keyframes，不是 step1 拆分预处理的输入。按正文中的核心场景建立或明显场景切换决定数量；
+  每条只写对应视频 **00:00.000 的静态第一帧**，必须从正文取事实，不得增加正文未出现的人物、动作、物件或效果。
 - 在正文中按同一顺序把 `[[关键分镜1]]`、`[[关键分镜2]]`……放到对应核心场景描述开始的位置。
   占位符与 `keyframes` 必须等量、连续、各出现一次；后端会把它们替换为稳定的 `@[关键分镜 ID]` 标签。
 - 关键帧描述只写单帧可见的景别、角度、构图、主体位置、环境、光线和入口姿态；不要写运镜过程、连续动作、
   「随后/最终/已经完成」的结果或未来反应。每条关键帧都是对应核心动作或场景 beat 的入口帧：动作刚开始、意图
   与方向已可见，但结果尚未发生；只有结果本身开启新的 beat 时才可作为下一关键帧。若正文是「妹妹追弟弟，弟弟
   跑动后摔进桂花堆」，首帧只画妹妹刚开始追、弟弟刚迈步，不能画弟弟摔倒、脸埋花堆或妹妹已经发笑。
+- `keyframes[].description` 中实际可见的人物、场景、道具与产品，必须使用与正式文稿相同的 `@[名称]` 语法；
+  名称只能来自候选表，且不要标记首帧中不可见或尚未出现的资产。
 
 - 景别：大全景 / 全景 / 中景 / 近景 / 特写，及拍摄角度（俯拍 / 仰拍 / 平视）。
 - 构图：主体在画面中的位置、前景与背景的关系（如中心构图、对角线构图、以公路 / 廊柱作引导线）。

@@ -12,6 +12,7 @@ MAX_KEYFRAMES_PER_UNIT = 5
 KEYFRAME_MENTION_PREFIX = "关键分镜 "
 DEFAULT_ENTRY_KEYFRAME_DESCRIPTION = "当前 Video Unit 开场场景的第一个稳定画面"
 _PLACEHOLDER_RE = re.compile(r"\[\[关键分镜([1-5])\]\]")
+_INLINE_MENTION_RE = re.compile(r"@\[关键分镜 [^\]]+\]\s*")
 
 
 def keyframe_id(unit_id: str, index: int) -> str:
@@ -31,6 +32,12 @@ def keyframe_id_from_mention_name(name: str) -> str | None:
         return None
     value = name.removeprefix(KEYFRAME_MENTION_PREFIX).strip()
     return value or None
+
+
+def without_keyframe_mentions(text: str) -> str:
+    """Return the formal manuscript prose without sibling Keyframe placement tags."""
+
+    return _INLINE_MENTION_RE.sub("", text).strip()
 
 
 def materialize_keyframes(

@@ -130,8 +130,8 @@ describe("ModelConfigSection", () => {
     );
     expect(screen.getByRole("combobox", { name: "简单任务" })).toBeInTheDocument();
     expect(screen.getByRole("combobox", { name: "复杂任务" })).toBeInTheDocument();
-    // 只剩文本这一个折叠区，视频/图片细分因无候选数据而不渲染
-    expect(container.querySelectorAll("details")).toHaveLength(1);
+    // 图片制作阶段使用完整图片模型列表，不依赖能力桶候选；视频细分仍降级隐藏
+    expect(container.querySelectorAll("details")).toHaveLength(2);
   });
 
   it("keeps configured sub-fields visible and clearable when candidates are unavailable", async () => {
@@ -141,7 +141,7 @@ describe("ModelConfigSection", () => {
     render(
       <ModelConfigSection
         candidates={null}
-        value={{ ...EMPTY_VALUE, imageBackendT2I: "gemini/nano-banana" }}
+        value={{ ...EMPTY_VALUE, imageBackendStoryboard: "gemini/nano-banana" }}
         onChange={onChange}
         providers={PROVIDERS}
         options={OPTIONS}
@@ -149,15 +149,14 @@ describe("ModelConfigSection", () => {
       />,
     );
 
-    // 已配置的「文生图」仍在，且展示的是已保存值；未配置的「图生图」无候选可选，不渲染
-    const t2i = screen.getByRole("combobox", { name: "文生图" });
-    expect(t2i).toHaveTextContent("nano-banana");
-    expect(screen.queryByRole("combobox", { name: "图生图" })).not.toBeInTheDocument();
+    const storyboard = screen.getByRole("combobox", { name: "Storyboard" });
+    expect(storyboard).toHaveTextContent("nano-banana");
+    expect(screen.getByRole("combobox", { name: "资产生成" })).toBeInTheDocument();
 
     // 清空这条覆盖不依赖候选数据
-    await user.click(t2i);
+    await user.click(storyboard);
     await user.click(screen.getByRole("option", { name: /跟随默认/ }));
-    expect(onChange).toHaveBeenCalledWith(expect.objectContaining({ imageBackendT2I: "" }));
+    expect(onChange).toHaveBeenCalledWith(expect.objectContaining({ imageBackendStoryboard: "" }));
   });
 
   it("shows an explicit error notice with a retry entry when candidatesError is set, even with no saved overrides", async () => {
@@ -243,7 +242,7 @@ describe("ModelConfigSection", () => {
       for (const summary of screen.getAllByText("按用途指定模型")) {
         await user.click(summary);
       }
-      for (const name of ["图生视频", "参考生视频", "文生图", "图生图", "简单任务", "复杂任务"]) {
+      for (const name of ["图生视频", "参考生视频", "资产生成", "参考图", "Storyboard", "关键帧", "简单任务", "复杂任务"]) {
         expect(screen.getByRole("combobox", { name })).toBeInTheDocument();
       }
       // 界面文案不出现内部术语
@@ -337,7 +336,7 @@ describe("ModelConfigSection", () => {
       );
     });
 
-    it("clears the resolution when a sub-field change moves the executing image model", async () => {
+    it("stores a production-stage image override without rewriting the default-model resolution", async () => {
       const user = userEvent.setup();
       const onChange = vi.fn();
       renderWithCandidates({
@@ -345,10 +344,10 @@ describe("ModelConfigSection", () => {
         onChange,
       });
       await user.click(screen.getAllByText("按用途指定模型")[1]);
-      await user.click(screen.getByRole("combobox", { name: "文生图" }));
-      await user.click(screen.getByRole("option", { name: /nano-banana/ }));
+      await user.click(screen.getByRole("combobox", { name: "Storyboard" }));
+      await user.click(screen.getByRole("option", { name: /veo-3/ }));
       expect(onChange).toHaveBeenCalledWith(
-        expect.objectContaining({ imageBackendT2I: "gemini/nano-banana", imageResolution: null }),
+        expect.objectContaining({ imageBackendStoryboard: "gemini/veo-3", imageResolution: "1080p" }),
       );
     });
 

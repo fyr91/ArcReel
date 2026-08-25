@@ -1,10 +1,11 @@
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { ImageIcon, Plus, Save, Trash2 } from "lucide-react";
+import { AlertTriangle, ImageIcon, Plus, Save, Trash2 } from "lucide-react";
 import { enqueueReferenceKeyframe } from "@/actions/generation";
 import { API } from "@/api";
 import { ImageModelSelect, imageSelectionFromValue } from "@/components/shared/ImageModelSelect";
 import { ImageEditButton } from "@/components/canvas/timeline/ImageEditButton";
+import { ReferenceVideoCard } from "@/components/canvas/reference/ReferenceVideoCard";
 import { VersionTimeMachine } from "@/components/canvas/timeline/VersionTimeMachine";
 import { AspectFrame } from "@/components/ui/AspectFrame";
 import { GenerateButton } from "@/components/ui/GenerateButton";
@@ -21,6 +22,7 @@ interface KeyframeCardProps {
   episode: number;
   scriptFile?: string;
   keyframe: ReferenceKeyframe;
+  unit: ReferenceVideoUnit;
   busy: boolean;
   onChanged: () => Promise<void>;
 }
@@ -30,6 +32,7 @@ function KeyframeCard({
   episode,
   scriptFile,
   keyframe,
+  unit,
   busy,
   onChanged,
 }: KeyframeCardProps) {
@@ -130,6 +133,13 @@ function KeyframeCard({
         </button>
       </header>
 
+      {keyframe.generation_input_changed && (
+        <p className="mb-3 flex items-start gap-2 rounded-lg border border-amber-400/25 bg-amber-400/5 px-3 py-2 text-xs leading-5 text-amber-200">
+          <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+          {t("reference_keyframe_manuscript_changed_hint")}
+        </p>
+      )}
+
       {imageUrl ? (
         <PreviewableImageFrame src={imageUrl} alt={keyframe.description}>
           <AspectFrame ratio="16:9">
@@ -149,16 +159,23 @@ function KeyframeCard({
         </AspectFrame>
       )}
 
-      <label className="mt-3 block text-[10px] font-semibold uppercase tracking-[0.12em] text-[var(--color-text-4)]">
+      <div className="mt-3 text-[10px] font-semibold uppercase tracking-[0.12em] text-[var(--color-text-4)]">
         {t("reference_keyframe_description")}
-        <textarea
-          value={description}
-          onChange={(event) => setDescription(event.target.value)}
-          rows={4}
-          disabled={busy}
-          className="focus-ring mt-1.5 w-full resize-y rounded-lg border border-[var(--color-hairline)] bg-[oklch(0.18_0.010_265_/_0.55)] px-3 py-2 text-[13px] font-normal leading-6 normal-case tracking-normal text-[var(--color-text)]"
-        />
-      </label>
+        <div className="mt-1.5 h-56 min-h-56 shrink-0 normal-case tracking-normal">
+          <ReferenceVideoCard
+            unit={unit}
+            projectName={projectName}
+            episode={episode}
+            value={description}
+            onChange={setDescription}
+            includeKeyframes={false}
+            showMeta={false}
+            placeholder={t("reference_keyframe_add_placeholder")}
+            ariaLabel={t("reference_keyframe_description")}
+            disabled={busy}
+          />
+        </div>
+      </div>
       {dirty && (
         <button
           type="button"
@@ -209,16 +226,6 @@ export function KeyframePreviewPanel({
   const activeIds = useActiveResourceIds("reference_keyframe", projectName);
   const keyframes = unit.keyframes ?? [];
 
-  if (unit.storyboard_sheet?.status !== "confirmed") {
-    return (
-      <div className="min-h-0 flex-1 overflow-y-auto p-3">
-        <p className="rounded-lg border border-amber-400/25 bg-amber-400/5 px-4 py-8 text-center text-xs leading-6 text-amber-200">
-          {t("reference_keyframe_storyboard_gate")}
-        </p>
-      </div>
-    );
-  }
-
   const add = async () => {
     const description = newDescription.trim();
     if (!description || adding || keyframes.length >= 5) return;
@@ -244,6 +251,7 @@ export function KeyframePreviewPanel({
             episode={episode}
             scriptFile={scriptFile}
             keyframe={keyframe}
+            unit={unit}
             busy={activeIds.has(keyframe.keyframe_id)}
             onChanged={onChanged}
           />

@@ -486,6 +486,7 @@ class MediaGenerator:
         task_id: str | None = None,
         commit_formal_output: Callable[[Path, Path, Mapping[str, Any]], int] | None = None,
         before_submit: Callable[[], Awaitable[None]] | None = None,
+        postprocess_output: Callable[[Path], None] | None = None,
         **version_metadata,
     ) -> tuple[Path, int]:
         """
@@ -515,6 +516,7 @@ class MediaGenerator:
                 task_id=task_id,
                 commit_formal_output=commit_formal_output,
                 before_submit=before_submit,
+                postprocess_output=postprocess_output,
                 **version_metadata,
             )
         )
@@ -531,6 +533,7 @@ class MediaGenerator:
         task_id: str | None = None,
         commit_formal_output: Callable[[Path, Path, Mapping[str, Any]], int] | None = None,
         before_submit: Callable[[], Awaitable[None]] | None = None,
+        postprocess_output: Callable[[Path], None] | None = None,
         **version_metadata,
     ) -> tuple[Path, int]:
         """
@@ -646,6 +649,8 @@ class MediaGenerator:
                     build_and_call=_call_image,
                     before_submit=before_submit,
                 )
+                if postprocess_output is not None:
+                    await run_noninterruptible_sync(postprocess_output, backend_output_path)
                 call.success(result)
 
             metadata: dict[str, Any] = {"aspect_ratio": aspect_ratio, **version_metadata}

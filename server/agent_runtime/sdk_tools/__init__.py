@@ -47,11 +47,13 @@ from server.agent_runtime.sdk_tools.episode_planning import (
 )
 from server.agent_runtime.sdk_tools.global_assets import list_global_assets_tool
 from server.agent_runtime.sdk_tools.h3_prompt_optimization import (
+    confirm_h3_video_prompts_tool,
     optimize_h3_video_prompts_tool,
     update_h3_video_prompt_tool,
 )
 from server.agent_runtime.sdk_tools.hyperframes import (
     generate_hyperframes_bgm_tool,
+    inspect_hyperframes_episode_tool,
     prepare_hyperframes_episode_tool,
 )
 from server.agent_runtime.sdk_tools.patch_episode_meta import patch_episode_meta_tool
@@ -65,8 +67,13 @@ from server.agent_runtime.sdk_tools.patch_script import (
 )
 from server.agent_runtime.sdk_tools.project_asset_links import manage_project_asset_link_tool
 from server.agent_runtime.sdk_tools.project_character_images import move_character_main_to_reference_tool
+from server.agent_runtime.sdk_tools.reference_keyframe_mentions import (
+    normalize_reference_keyframe_mentions_tool,
+)
+from server.agent_runtime.sdk_tools.reference_script_text_replacements import (
+    replace_reference_script_text_tool,
+)
 from server.agent_runtime.sdk_tools.reference_storyboard_sheets import (
-    confirm_reference_storyboard_sheet_tool,
     generate_reference_keyframes_tool,
     generate_reference_storyboard_sheets_tool,
 )
@@ -108,8 +115,9 @@ ARCREEL_MCP_TOOL_IDS: tuple[str, ...] = (
     "confirm_asset_sheets",
     "generate_storyboards",
     "generate_reference_storyboard_sheets",
-    "confirm_reference_storyboard_sheet",
     "generate_reference_keyframes",
+    "normalize_reference_keyframe_mentions",
+    "replace_reference_script_text",
     "edit_images",
     "generate_grid",
     "generate_video_episode",
@@ -117,11 +125,13 @@ ARCREEL_MCP_TOOL_IDS: tuple[str, ...] = (
     "generate_video_all",
     "generate_video_selected",
     "generate_narration_audio",
+    "confirm_h3_video_prompts",
     "optimize_h3_video_prompts",
     "update_h3_video_prompt",
     "analyze_video_style",
     "update_video_style",
     "prepare_hyperframes_episode",
+    "inspect_hyperframes_episode",
     "generate_hyperframes_bgm",
     "generate_episode_script",
     "confirm_script_review",
@@ -164,8 +174,9 @@ MIGRATION_BLOCKED_TOOL_IDS: frozenset[str] = frozenset(
         "confirm_asset_sheets",
         "generate_storyboards",
         "generate_reference_storyboard_sheets",
-        "confirm_reference_storyboard_sheet",
         "generate_reference_keyframes",
+        "normalize_reference_keyframe_mentions",
+        "replace_reference_script_text",
         "edit_images",
         "generate_grid",
         "generate_video_episode",
@@ -173,6 +184,7 @@ MIGRATION_BLOCKED_TOOL_IDS: frozenset[str] = frozenset(
         "generate_video_all",
         "generate_video_selected",
         "generate_narration_audio",
+        "confirm_h3_video_prompts",
         "optimize_h3_video_prompts",
         "update_h3_video_prompt",
         "analyze_video_style",
@@ -228,8 +240,9 @@ def build_arcreel_mcp_server(*, project_name: str, projects_root: Path) -> Any:
         confirm_asset_sheets_tool(ctx),
         generate_storyboards_tool(ctx),
         generate_reference_storyboard_sheets_tool(ctx),
-        confirm_reference_storyboard_sheet_tool(ctx),
         generate_reference_keyframes_tool(ctx),
+        normalize_reference_keyframe_mentions_tool(ctx),
+        replace_reference_script_text_tool(ctx),
         edit_images_tool(ctx),
         generate_grid_tool(ctx),
         generate_video_episode_tool(ctx),
@@ -237,11 +250,13 @@ def build_arcreel_mcp_server(*, project_name: str, projects_root: Path) -> Any:
         generate_video_all_tool(ctx),
         generate_video_selected_tool(ctx),
         generate_narration_audio_tool(ctx),
+        confirm_h3_video_prompts_tool(ctx),
         optimize_h3_video_prompts_tool(ctx),
         update_h3_video_prompt_tool(ctx),
         analyze_video_style_tool(ctx),
         update_video_style_tool(ctx),
         prepare_hyperframes_episode_tool(ctx),
+        inspect_hyperframes_episode_tool(ctx),
         generate_hyperframes_bgm_tool(ctx),
         generate_episode_script_tool(ctx),
         confirm_script_review_tool(ctx),

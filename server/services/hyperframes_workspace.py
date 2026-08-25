@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import html
+import json
 import logging
 import os
 import shlex
@@ -11,21 +12,23 @@ import shutil
 import socket
 import uuid
 from collections.abc import Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import BinaryIO
 from urllib.parse import urlsplit, urlunsplit
 
+from lib import PROJECT_ROOT
 from lib.json_io import atomic_write_json
 from lib.narration_delivery import POST_PRODUCTION
 from lib.path_safety import safe_join
 from lib.project_manager import ProjectManager
 from lib.speech_artifact_provenance import RenditionVariant
+from server.services.hyperframes_editing import HyperframesEditingAnalysis, analyze_hyperframes_editing
 from server.services.presentation_read_model import MaterializedEpisode, PresentationReadModelService
 
 logger = logging.getLogger(__name__)
 
-HYPERFRAMES_VERSION = "0.8.10"
+HYPERFRAMES_VERSION = "0.8.14"
 WORKSPACE_SCHEMA_VERSION = 1
 _READY_TIMEOUT_SECONDS = 60.0
 _DEFAULT_PORT_START = 12500
@@ -48,8 +51,10 @@ class HyperframesWorkspace:
     relative_path: str
     composition_path: str
     manifest_path: str
+    editing_analysis: HyperframesEditingAnalysis | None = None
 
     def to_dict(self) -> dict[str, object]:
+        analysis = self.editing_analysis
         return {
             "project_name": self.project_name,
             "episode": self.episode,
@@ -57,6 +62,8 @@ class HyperframesWorkspace:
             "workspace_path": self.relative_path,
             "composition_path": self.composition_path,
             "manifest_path": self.manifest_path,
+            "editing_state": analysis.state if analysis is not None else "unknown",
+            "editing_analysis": analysis.to_dict() if analysis is not None else None,
         }
 
 
@@ -160,7 +167,14 @@ def _composition_html(materialized: MaterializedEpisode, staged: list[dict[str, 
   <style>
     html, body {{ margin: 0; width: 100%; height: 100%; overflow: hidden; background: #0b0f14; }}
     [data-composition-id="arcreel-episode"] {{ position: relative; width: 100%; height: 100%; overflow: hidden; background: #0b0f14; color: #f4f7f8; font-family: sans-serif; }}
-    video.clip {{ width: 100%; height: 100%; object-fit: cover; }}
+    video.clip {{
+      position: absolute;
+      inset: 0;
+      display: block !important;
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+    }}
     .caption {{ position: absolute; left: 9%; right: 9%; bottom: 8%; padding: 18px 28px; box-sizing: border-box; border-radius: 16px; background: rgba(4, 8, 12, 0.72); color: #f7faf9; font-size: 42px; font-weight: 650; line-height: 1.35; text-align: center; text-shadow: 0 2px 10px rgba(0, 0, 0, 0.65); backdrop-filter: blur(10px); }}
   </style>
 </head>
@@ -175,7 +189,7 @@ def _composition_html(materialized: MaterializedEpisode, staged: list[dict[str, 
 
 
 class HyperframesWorkspaceService:
-    """Build a deterministic first edit without writing outside the ArcReel project."""
+    """Build a deterministic assembly draft without writing outside the project."""
 
     def __init__(
         self,
@@ -193,7 +207,12 @@ class HyperframesWorkspaceService:
             return None
         if not safe_join(workspace.path, "manifest.json").is_file():
             return None
-        return workspace
+        try:
+            analysis = analyze_hyperframes_editing(workspace.path)
+        except (OSError, TypeError, ValueError, json.JSONDecodeError):
+            logger.warning("HyperFrames edit analysis failed: %s", workspace.path, exc_info=True)
+            analysis = None
+        return replace(workspace, editing_analysis=analysis)
 
     async def prepare(
         self,
@@ -360,11 +379,11 @@ class HyperframesWorkspaceService:
             except Exception:
                 shutil.rmtree(staging, ignore_errors=True)
                 raise
-        return workspace
+        return self.status(project_name, episode) or workspace
 
 
 class HyperframesStudioManager:
-    """Launch the unmodified official Studio with one process per active episode."""
+    """Launch ArcReel's version-pinned Studio package with one process per episode."""
 
     def __init__(self) -> None:
         self._processes: dict[Path, _StudioProcess] = {}
@@ -372,10 +391,14 @@ class HyperframesStudioManager:
 
     @staticmethod
     def _command() -> list[str]:
-        raw = os.environ.get(
-            "ARCREEL_HYPERFRAMES_COMMAND",
-            f"npx --yes hyperframes@{HYPERFRAMES_VERSION}",
-        )
+        raw = os.environ.get("ARCREEL_HYPERFRAMES_COMMAND")
+        if raw is None:
+            executable = PROJECT_ROOT / "frontend" / "node_modules" / ".bin" / "hyperframes"
+            if not executable.is_file():
+                raise HyperframesStudioUnavailable(
+                    "ArcReel's pinned HyperFrames Studio is not installed; run pnpm install in frontend"
+                )
+            return [str(executable)]
         command = shlex.split(raw)
         if not command:
             raise HyperframesStudioUnavailable("ARCREEL_HYPERFRAMES_COMMAND is empty")

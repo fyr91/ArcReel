@@ -154,6 +154,32 @@ async def test_script_generator_uses_reference_schema_on_generate(reference_proj
     assert "duration_seconds" not in _json.dumps(schema.model_json_schema())
 
 
+@pytest.mark.integration
+def test_step2_keeps_confirmed_mentions_when_video_model_will_clamp(reference_project: Path):
+    """视频模型图片上限不反向污染正式文稿；裁选发生在视频请求投影阶段。"""
+    generator = ScriptGenerator(reference_project)
+    step1_units = [
+        {
+            "unit_id": "E1U01",
+            "text": "@[主角] 推开 @[酒馆] 的门",
+            "duration_seconds": 4,
+        }
+    ]
+
+    merged = generator._merge_reference_visual(
+        step1_units,
+        _step2_response(STEP2_UNIT_TEXT),
+        1,
+        max_refs=1,
+    )
+
+    assert extract_mentions(merged["video_units"][0]["text"]) == [
+        "主角",
+        "酒馆",
+        "关键分镜 E1U01K01",
+    ]
+
+
 @pytest.mark.asyncio
 @pytest.mark.integration
 async def test_script_generator_overrides_llm_duration_with_step1_confirmed_value(reference_project: Path):

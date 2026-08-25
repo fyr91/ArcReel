@@ -25,6 +25,12 @@ from server.agent_runtime.sdk_tools.patch_script import (
     remove_segment_tool,
     split_segment_tool,
 )
+from server.agent_runtime.sdk_tools.reference_keyframe_mentions import (
+    normalize_reference_keyframe_mentions_tool,
+)
+from server.agent_runtime.sdk_tools.reference_script_text_replacements import (
+    replace_reference_script_text_tool,
+)
 from server.agent_runtime.sdk_tools.rename_asset import rename_asset_tool
 from server.agent_runtime.sdk_tools.video_style import analyze_video_style_tool, update_video_style_tool
 
@@ -859,13 +865,13 @@ class TestInsertRemoveSplit:
 
 
 class TestPatchEpisodeMeta:
-    """patch_episode_meta：编辑剧本顶层 title，白名单兜底，写盘自动镜像到 project.json。"""
+    """patch_episode_meta：批量编辑正式文稿元数据并镜像到 project.json。"""
 
     @pytest.mark.unit
     async def test_set_title(self, ctx: ToolContext) -> None:
         out = await _call(
             patch_episode_meta_tool(ctx),
-            {"script": "episode_1.json", "field": "title", "value": "新标题"},
+            {"episode": 1, "updates": {"title": "新标题"}},
         )
         assert out.get("is_error") is not True
         assert _load(ctx)["title"] == "新标题"
@@ -878,7 +884,7 @@ class TestPatchEpisodeMeta:
     async def test_title_trimmed(self, ctx: ToolContext) -> None:
         out = await _call(
             patch_episode_meta_tool(ctx),
-            {"script": "episode_1.json", "field": "title", "value": "  去空白  "},
+            {"episode": 1, "updates": {"title": "  去空白  "}},
         )
         assert out.get("is_error") is not True
         assert _load(ctx)["title"] == "去空白"
@@ -888,7 +894,7 @@ class TestPatchEpisodeMeta:
         for blank in ("", "   ", "\t\n"):
             out = await _call(
                 patch_episode_meta_tool(ctx),
-                {"script": "episode_1.json", "field": "title", "value": blank},
+                {"episode": 1, "updates": {"title": blank}},
             )
             assert out.get("is_error") is True
         assert _load(ctx)["title"] == "标题"  # 原值未改
@@ -897,7 +903,7 @@ class TestPatchEpisodeMeta:
     async def test_non_whitelist_field_rejected(self, ctx: ToolContext) -> None:
         out = await _call(
             patch_episode_meta_tool(ctx),
-            {"script": "episode_1.json", "field": "episode", "value": 9},
+            {"episode": 1, "updates": {"episode": 9}},
         )
         assert out.get("is_error") is True
         assert _load(ctx)["episode"] == 1  # 未被改写
@@ -906,18 +912,116 @@ class TestPatchEpisodeMeta:
     async def test_non_string_value_rejected(self, ctx: ToolContext) -> None:
         out = await _call(
             patch_episode_meta_tool(ctx),
-            {"script": "episode_1.json", "field": "title", "value": 123},
+            {"episode": 1, "updates": {"title": 123}},
         )
         assert out.get("is_error") is True
         assert _load(ctx)["title"] == "标题"
 
     @pytest.mark.unit
-    async def test_rejects_path_in_script_arg(self, ctx: ToolContext) -> None:
+    async def test_batch_updates_hook_and_outline(self, ctx: ToolContext) -> None:
         out = await _call(
             patch_episode_meta_tool(ctx),
-            {"script": "../x.json", "field": "title", "value": "x"},
+            {
+                "episode": 1,
+                "updates": {
+                    "hook": "  暖阳中的花朵  ",
+                    "outline": {"story_beats": ["  制作  ", "送花"], "next_episode_teaser": ""},
+                },
+            },
         )
+        assert out.get("is_error") is not True
+        assert _load(ctx)["hook"] == "暖阳中的花朵"
+        assert _load(ctx)["outline"] == {"story_beats": ["制作", "送花"], "next_episode_teaser": ""}
+        entry = next(e for e in ctx.pm.load_project("demo")["episodes"] if e["episode"] == 1)
+        assert entry["hook"] == "暖阳中的花朵"
+        assert entry["outline"]["story_beats"] == ["制作", "送花"]
+
+
+class TestNormalizeReferenceKeyframeMentions:
+    @pytest.mark.integration
+    async def test_batch_normalizes_all_keyframe_descriptions(self, ref_ctx: ToolContext) -> None:
+        ref_ctx.pm.upsert_assets("demo", "props", {"铜胎": {"description": "瓶胎"}})
+        script = _load(ref_ctx)
+        script.pop("generation_mode", None)  # route ownership lives in project.json
+        script["video_units"][0]["keyframes"] = [
+            {"keyframe_id": "E1U1K01", "description": "角色A 拿起铜胎"},
+            {"keyframe_id": "E1U1K02", "description": "@[角色A] 放下 @铜胎"},
+        ]
+        script["video_units"][1]["keyframes"] = [{"keyframe_id": "E1U2K01", "description": "无登记资产"}]
+        ref_ctx.pm.save_script("demo", script, "episode_1.json")
+
+        out = await _call(normalize_reference_keyframe_mentions_tool(ref_ctx), {"episode": 1})
+
+        assert out.get("is_error") is not True
+        saved = _load(ref_ctx)
+        assert saved["video_units"][0]["keyframes"][0]["description"] == "@[角色A] 拿起@[铜胎]"
+        assert saved["video_units"][0]["keyframes"][1]["description"] == "@[角色A] 放下 @[铜胎]"
+        assert '"keyframes_changed": 2' in _text(out)
+        assert '"replacements": 3' in _text(out)
+
+
+class TestReplaceReferenceScriptText:
+    @pytest.mark.integration
+    async def test_exact_unit_and_keyframe_replacements_commit_once(self, ref_ctx: ToolContext) -> None:
+        script = _load(ref_ctx)
+        script["video_units"][0]["keyframes"] = [{"keyframe_id": "E1U1K01", "description": "角色A 正看向铜胎"}]
+        script["video_units"][0]["storyboard_description"] = "角色A 推门进屋"
+        ref_ctx.pm.save_script("demo", script, "episode_1.json")
+        revision = (await _call(get_episode_script_revision_tool(ref_ctx), {"script": "episode_1.json"}))["revision"]
+
+        out = await _call(
+            replace_reference_script_text_tool(ref_ctx),
+            {
+                "episode": 1,
+                "expected_revision": revision,
+                "replacements": [
+                    {
+                        "unit_id": "E1U1",
+                        "field": "text",
+                        "old": "推门进屋",
+                        "new": "直接进屋",
+                    },
+                    {
+                        "unit_id": "E1U1",
+                        "field": "storyboard_description",
+                        "old": "推门进屋",
+                        "new": "直接进屋",
+                    },
+                    {
+                        "unit_id": "E1U1",
+                        "field": "keyframe_description",
+                        "keyframe_id": "E1U1K01",
+                        "old": "正看向",
+                        "new": "尚未看向",
+                    },
+                ],
+            },
+        )
+
+        assert out.get("is_error") is not True, out
+        saved = _load(ref_ctx)["video_units"][0]
+        assert saved["text"] == "直接进屋\n环视四周"
+        assert saved["storyboard_description"] == "角色A 直接进屋"
+        assert saved["keyframes"][0]["description"] == "角色A 尚未看向铜胎"
+        assert "affected_ids=E1U1" in _text(out)
+
+    @pytest.mark.integration
+    async def test_ambiguous_old_fragment_rejects_without_write(self, ref_ctx: ToolContext) -> None:
+        before = _load(ref_ctx)
+        revision = (await _call(get_episode_script_revision_tool(ref_ctx), {"script": "episode_1.json"}))["revision"]
+
+        out = await _call(
+            replace_reference_script_text_tool(ref_ctx),
+            {
+                "episode": 1,
+                "expected_revision": revision,
+                "replacements": [{"unit_id": "E1U1", "field": "text", "old": "不存在", "new": "新文本"}],
+            },
+        )
+
         assert out.get("is_error") is True
+        assert "出现 0 次" in _text(out)
+        assert _load(ref_ctx) == before
 
 
 class TestPatchProject:

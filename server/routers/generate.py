@@ -814,7 +814,11 @@ async def generate_product(
 # ==================== 图片指令式编辑（image edit） ====================
 
 
-async def _require_i2i_image_provider_configured(project: dict, payload: dict[str, str] | None = None) -> str:
+async def _require_i2i_image_provider_configured(
+    project: dict,
+    resource_type: str,
+    payload: dict[str, str] | None = None,
+) -> str:
     """项目 i2i 槽解析不出可用供应商时直接 400，不创建任务。
 
     图片编辑必然 i2i 且入队即知（唯一例外，见 ``docs/adr/0001`` 与 CONTEXT.md「图片编辑」），
@@ -824,7 +828,14 @@ async def _require_i2i_image_provider_configured(project: dict, payload: dict[st
     from lib.db import async_session_factory
 
     try:
-        resolved = await ConfigResolver(async_session_factory).resolve_image_backend(project, payload, capability="i2i")
+        from lib.config.resolver import image_stage_for_task
+
+        resolved = await ConfigResolver(async_session_factory).resolve_image_backend(
+            project,
+            payload,
+            capability="i2i",
+            stage=image_stage_for_task("image_edit", {"resource_type": resource_type}),
+        )
     except ValueError:
         raise BadRequestError("image_edit_i2i_unavailable")
     return resolved.provider_id
@@ -889,7 +900,7 @@ async def edit_image(
     project = await asyncio.to_thread(_sync)
 
     image_override = req.image_override_payload()
-    provider_id = await _require_i2i_image_provider_configured(project, image_override)
+    provider_id = await _require_i2i_image_provider_configured(project, req.resource_type, image_override)
 
     # 结构校验 + 构造经单一守卫点（与 SDK 入队同源，规则不分叉）
     spec = TaskSpec.from_request(

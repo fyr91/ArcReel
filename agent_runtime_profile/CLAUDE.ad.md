@@ -14,7 +14,7 @@
   - reference_video 模式：每个 video unit 持有符合剧本模型结构约束的正整数编排时长，unit 内镜头不单列时长；生成预检会把编排时长投影到供应商申请档位
 - **图片分辨率**：1K
 - **视频分辨率**：1080p
-- **生成方式**：按 `generation_mode` 分两路——storyboard 模式每个镜头独立生成、以分镜图作起始帧；reference_video 模式按自包含 video unit 直出，但必须先生成并由用户确认 Video Unit Storyboard Sheet，再生成关键场景 Keyframes（见下文「生成模式」）
+- **生成方式**：按 `generation_mode` 分两路——storyboard 模式每个镜头独立生成、以分镜图作起始帧；reference_video 模式按自包含 video unit 直出，Storyboard 与 Keyframes 从正式文稿并行生成、互不作为输入（见下文「生成模式」）
 
 > **关于 extend 功能**：Veo 3.1 extend 功能仅用于延长单个镜头，
 > 每次固定 +7 秒，不适合用于串联不同镜头。不同镜头之间使用 ffmpeg 拼接。
@@ -29,7 +29,7 @@
 ### 工具调用
 
 - **业务入队 / 文本生成 / 能力查询**：统一走 `mcp__arcreel__*` 系列 SDK in-process MCP tool（角色/场景/道具/分镜/视频/宫格/集脚本/规范化剧本/视频能力查询）。它们跑在 server 主进程，不受 sandbox 网络白名单约束，agent 直接以 tool 形式调用。
-- **编辑项目 JSON**：修改剧本（`scripts/*.json`）或角色/场景/道具（`project.json`）**一律走 `mcp__arcreel__*` 编辑工具**——批量改剧本时先调用 `get_episode_script_revision`，再把其 revision 原样作为 `patch_episode_script` 的 `expected_revision`，并传有序 `operations[]`（`update` / `insert_after` / `move_after` / `remove`）；整批先预检后原子提交，失败结果用 `operation_index` 与 field location 定位，revision 冲突时重新读取再重做。改分集标题用 `patch_episode_meta`，增/删/拆分镜的便捷工具也委托同一事务编辑器；角色/场景/道具用 `patch_project`。**严禁**用 Write / Edit / Bash 直改这两类文件（已被 sandbox `denyWrite` 与 PreToolUse hook 双层拒绝）。**改 prompt 必重生**：用 `patch_episode_script` 改了某些分镜的 `image_prompt` / `video_prompt` 后，工具不会自动作废旧图/视频，必须紧接着调对应生成工具重新生成这些分镜，否则会留下「新 prompt + 旧画面」的陈旧。
+- **编辑项目 JSON**：修改剧本（`scripts/*.json`）或角色/场景/道具（`project.json`）**一律走 `mcp__arcreel__*` 编辑工具**——批量改剧本时先调用 `get_episode_script_revision`，再把其 revision 原样作为 `patch_episode_script` 的 `expected_revision`，并传有序 `operations[]`（`update` / `insert_after` / `move_after` / `remove`）；整批先预检后原子提交，失败结果用 `operation_index` 与 field location 定位，revision 冲突时重新读取再重做。分集标题、结尾钩子与导览大纲用 `patch_episode_meta` 一次批量更新，增/删/拆分镜的便捷工具也委托同一事务编辑器；角色/场景/道具用 `patch_project`。**严禁**用 Write / Edit / Bash 直改这两类文件（已被 sandbox `denyWrite` 与 PreToolUse hook 双层拒绝）。**改 prompt 必重生**：用 `patch_episode_script` 改了某些分镜的 `image_prompt` / `video_prompt` 后，工具不会自动作废旧图/视频，必须紧接着调对应生成工具重新生成这些分镜，否则会留下「新 prompt + 旧画面」的陈旧。
 - **统一视频风格**：项目只有一段 Unified Video Style 提示词。需要读取或在缺失时从已拆分剧本按画面、镜头、节奏、声音、音乐等维度分析后归并为一段提示词，调用 `analyze_video_style`；已有配置会直接返回、不重复分析。用户要求无 BGM、ASMR、镜头语言、节奏或其他项目级视频方向时，用完整的新提示词调用 `update_video_style`，不要另写第二份 Agent 风格。
 - **参考生视频 unit 边界修改**：ad 的 reference-video 路线没有 step1；新增、删除或拆分 video unit 直接使用 `insert_segment` / `remove_segment` / `split_segment`。插入和拆分产生的 `E1U01_1` 这类稳定子 ID 是合法身份，后续 unit 不重编号。
 - **Bash 用途**：仅供通用排查与文件浏览（`ls / cat / jq / python / curl` 等），以及 `manage-project` / `compose-video` 这两个 skill 内还保留的 Python 脚本。
@@ -70,7 +70,7 @@ agent session 的当前工作目录（cwd）已绑定到当前项目根，**所�
 | generation_mode | 名称（UI） | 数据主结构 | 视觉参考来源 |
 |---|---|---|---|
 | `storyboard` | 分镜图生视频 | `shots[]` + 分镜图 | 每镜头一张分镜图作起始帧 |
-| `reference_video` | 参考生视频 | 自包含 `video_units[]` | 用户确认的 Video Unit Storyboard Sheet + Keyframes + 正文 `@[名称]` 提及派生的资产图 |
+| `reference_video` | 参考生视频 | 自包含 `video_units[]` | Storyboard + Keyframes + 正文 `@[名称]` 提及派生的资产图 |
 
 宫格装配（`grid_storyboard`）对广告/短片项目**不开放**：宫格单格分辨率与商品高保真目标冲突。
 
@@ -81,7 +81,7 @@ agent session 的当前工作目录（cwd）已绑定到当前项目根，**所�
 - 一个 unit 只能承载人物发声、无归属旁白或无人声中的一种；需要切换发声归属时在规划阶段拆成相邻 unit。标记 `needs_replan` 的存量问题单元须先重新规划，生成入口会拒绝入队
 - 参考集按正文首次 mention 顺序排列，商品与角色/场景/道具同规则：每件资产有 sheet 用 sheet，没有才退到它的全部原图；不按类型排序，也不在有 sheet 时额外注入原图
 - **时长约束**：每个 unit 的 `duration_seconds` 是符合剧本模型结构约束的正整数编排时长，所有 unit 之和应贴近 `target_duration`；供应商档位由生成预检处理，不在剧本规划时量化
-- **Video Unit Storyboard Sheet 强制卡点**：每个 unit 至少有一个关键首帧规划；剧本落盘后先生成整段 Video Unit 的多格 Sheet。用户确认当前版本后系统才生成 Keyframes；重生、编辑或恢复该 Sheet 都会使确认失效。该 Sheet 与 Keyframes 均计入视频模型参考图上限
+- **同级视觉产物**：每个 unit 的正式文稿至少提取一个 Keyframe；Storyboard 与 Keyframe 图片均直接从正式文稿派生、可并行生成并分别优化。文稿或图片描述变化只提示可选重生，不使现有图片失效，也不形成相互 Gate；两者均计入视频模型参考图上限
 
 ---
 
@@ -110,7 +110,7 @@ agent session 的当前工作目录（cwd）已绑定到当前项目根，**所�
 ### 商品保真（软门禁）
 
 - **分镜开工前安排用户过目 product sheet**：商品生成了标准参考图（`product_sheet`）时，开始分镜前（参考生视频路径为首次视频生成前——该路径 sheet 直接进视频参考集，更要在产生视频费用前确认）先请用户到商品资产页确认 sheet 与真品一致（不一致就重新生成）；确认后才继续。这是工作流约定，不是系统状态机——无 sheet（仅原图）时直接开工即可
-- 商品镜头（剧本 `products_in_shot` 非空）在 storyboard 路径的**分镜生成**会**自动注入商品参考**（有 sheet 时 sheet + 原图，无 sheet 时原图直注）并附高保真还原指令，无需在 image_prompt 里复述商品外观细节；该路径的**视频生成**不再叠加商品参考图，商品一致性由分镜图承载。reference_video 路径先走强制 Video Unit Storyboard Sheet 确认与 Keyframes，再把它们和正文派生资产一起作为参考图；商品不排在该 Sheet 之前（见上文「参考生视频（reference_video）的自包含单元」）。氛围镜头零商品资产图，画风由项目级 style 承载
+- 商品镜头（剧本 `products_in_shot` 非空）在 storyboard 路径的**分镜生成**会**自动注入商品参考**（有 sheet 时 sheet + 原图，无 sheet 时原图直注）并附高保真还原指令，无需在 image_prompt 里复述商品外观细节；该路径的**视频生成**不再叠加商品参考图，商品一致性由分镜图承载。reference_video 路径把同级生成的 Storyboard、Keyframes 与正文派生资产一起作为参考图；商品不排在 Storyboard 之前（见上文「参考生视频（reference_video）的自包含单元」）。氛围镜头零商品资产图，画风由项目级 style 承载
 - 分镜生成后引导用户审核商品形象保真度，不合格的镜头重新生成分镜——在产生视频费用前拦截错误的商品形象
 
 ### 通用短片（无商品）

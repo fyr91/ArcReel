@@ -72,10 +72,10 @@ def test_build_reference_video_prompt_contains_required_sections():
     # step1 正文逐字透传，不加任何分段前缀
     assert "@[主角] 推门走进 @[酒馆]\n@[主角] 按住 @[长剑]" in prompt
     assert "（时长 8s）" in prompt
-    # 断言完整约束句：单看 "9" 会被默认 aspect_ratio "9:16" 满足，max_refs 未注入也能通过
-    assert (
-        "普通 `@` 资产引用（去重）、关键分镜数量与 1 张 Video Unit Storyboard Sheet 之和不超过 9（模型上限）"
-    ) in prompt
+    # 下游模型上限只决定视频请求如何选择图片，不能诱导 step2 改写已确认 Text。
+    assert "当前视频模型最多接收 9 张参考图" in prompt
+    assert "必须保留 step1 Text 中已有的全部 `@[名称]`" in prompt
+    assert "后续执行会按稳定顺序选择" in prompt
 
 
 def test_build_reference_video_prompt_emphasizes_no_appearance_description():
@@ -90,11 +90,14 @@ def test_build_reference_video_prompt_structures_shot_text_by_four_elements():
 
 
 def test_reference_prompts_anchor_keyframes_to_action_start_not_outcome():
-    """step1/step2 都必须把关键帧锁在 00:00 起始状态，不能把整段动作结果当首帧。"""
-    for prompt in (_split_prompt(), _step2_prompt()):
-        assert "00:00.000" in prompt
-        assert "摔进桂花堆" in prompt
-        assert "不能画弟弟摔倒" in prompt or "错误首帧" in prompt
+    """Only confirmed Video Unit generation extracts keyframes; preprocessing never plans them."""
+    assert "00:00.000" not in _split_prompt()
+    prompt = _step2_prompt()
+    assert "00:00.000" in prompt
+    assert "摔进桂花堆" in prompt
+    assert "不能画弟弟摔倒" in prompt or "错误首帧" in prompt
+    assert "`keyframes[].description`" in prompt
+    assert "必须使用与正式文稿相同的 `@[名称]`" in prompt
 
 
 def test_build_reference_video_prompt_states_structure_preserving_contract():
@@ -133,9 +136,8 @@ def test_build_reference_units_split_prompt_contains_constraints_and_candidates(
     # 能力约束：档位集合、总时长上限、references 上限、默认偏好
     assert "4, 6, 8" in prompt
     assert "12 秒" in prompt
-    assert (
-        "`@` 资产引用（去重）、`keyframe_plan` 数量与 1 张必经用户确认的 Video Unit Storyboard Sheet 之和不超过 3"
-    ) in prompt
+    assert "本阶段只校验正文的 `@` 资产引用" in prompt
+    assert "不提前规划 Keyframe" in prompt
     assert "默认取 4 秒" in prompt
     # 关键写作纪律
     assert "@[名称]" in prompt
@@ -145,10 +147,7 @@ def test_build_reference_units_split_prompt_contains_constraints_and_candidates(
     assert "不参与逐字机械校验" in prompt
     assert "source_text` 须逐字复制" not in prompt
     assert "口播语速约" in prompt
-    assert "keyframe_plan（不可为空）" in prompt
-    assert "每个 unit 至少有一个场景" in prompt
-    assert "Video Unit Storyboard Sheet" in prompt
-    assert "不是等到视频生成时再截取的首帧" in prompt
+    assert "keyframe_plan" not in prompt
 
 
 def test_build_reference_units_split_prompt_speech_rate_override():
@@ -292,3 +291,22 @@ def test_render_reference_units_for_step2_mechanical():
     assert "#### unit 2（时长 8s）" in text
     # unit_id 由序号机械派生，不下发给 step2
     assert "E1U01" not in text
+
+
+def test_render_reference_units_for_step2_ignores_legacy_preprocessing_keyframe_plan():
+    """Confirmed Text is the only content input; hidden legacy plans cannot contaminate the manuscript."""
+    text = render_reference_units_for_step2(
+        [
+            {
+                "unit_id": "E1U14",
+                "text": "景泰蓝器物静置在石台上冷却，表面光泽逐渐显现。",
+                "duration_seconds": 8,
+                "keyframe_plan": ["错误旧内容：蒸汽持续升腾并笼罩器物"],
+            }
+        ]
+    )
+
+    assert "静置在石台上冷却" in text
+    assert "光泽逐渐显现" in text
+    assert "蒸汽" not in text
+    assert "keyframe_plan" not in text

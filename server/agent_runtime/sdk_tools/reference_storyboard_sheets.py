@@ -1,4 +1,4 @@
-"""Agent tools for the mandatory reference-video Video Unit Storyboard Sheet gate."""
+"""Agent tools for sibling Storyboard Sheet and Keyframe production."""
 
 from __future__ import annotations
 
@@ -12,10 +12,7 @@ from lib.generation_result import normalize_requested_ids
 from server.agent_runtime.sdk_tools._context import ToolContext, tool_error, validate_script_filename
 from server.services.image_model_selection import IMAGE_MODEL_TOOL_PROPERTIES, image_override_from_args
 from server.services.reference_keyframe_tasks import reference_keyframe_task_specs
-from server.services.reference_storyboard_sheet_tasks import (
-    confirm_storyboard_sheet_and_enqueue_keyframes,
-    reference_storyboard_sheet_task_specs,
-)
+from server.services.reference_storyboard_sheet_tasks import reference_storyboard_sheet_task_specs
 
 
 def _response(payload: object, *, is_error: bool = False) -> dict[str, Any]:
@@ -31,8 +28,9 @@ def generate_reference_storyboard_sheets_tool(ctx: ToolContext):
     @tool(
         "generate_reference_storyboard_sheets",
         "为 reference_video 剧本生成必须审阅的 Video Unit Storyboard Sheet（每个单元一张多格叙事预览）。"
-        "这不是 generate_storyboards 的逐镜头分镜图。生成后只能处于待确认状态；"
-        "不得直接生成关键帧。unit_ids 省略时仅补齐尚无 Sheet 的单元。",
+        "它与 Keyframes 都直接来自正式 Video Unit 文稿，互不作为输入，可以并行生成。"
+        "每个 unit 的 storyboard_description 使用与正式文稿相同的 @[角色]/@[场景]/@[道具] 语法；"
+        "这不是 generate_storyboards 的逐镜头分镜图。unit_ids 省略时仅补齐尚无 Sheet 的单元。",
         {
             "type": "object",
             "properties": {
@@ -42,6 +40,11 @@ def generate_reference_storyboard_sheets_tool(ctx: ToolContext):
                     "type": "array",
                     "items": {"type": "string"},
                     "description": "指定生成或重生的 Video Unit ID；省略时只补齐缺失项",
+                },
+                "instructions": {
+                    "type": "string",
+                    "maxLength": 4000,
+                    "description": "可选，本次生成/重生成必须落实的用户审核意见；只影响分镜表达，不得改写脚本事实",
                 },
             },
             "required": ["script"],
@@ -58,6 +61,7 @@ def generate_reference_storyboard_sheets_tool(ctx: ToolContext):
                 unit_ids=set(requested) if requested is not None else None,
                 missing_only=requested is None,
                 image_override=image_override_from_args(args),
+                instructions=args.get("instructions"),
             )
             enqueued, failures = await batch_enqueue_only(project_name=ctx.project_name, specs=specs)
             return _response(
@@ -68,7 +72,7 @@ def generate_reference_storyboard_sheets_tool(ctx: ToolContext):
                         for item in enqueued
                     ],
                     "failures": [item.model_dump(mode="json") for item in failures],
-                    "next_step": "用户必须确认每个当前 Video Unit Storyboard Sheet，确认操作才会批量入队该单元关键帧。",
+                    "next_step": "可同时调用 generate_reference_keyframes；两者完成后分别审核，互不等待。",
                 },
                 is_error=bool(failures),
             )
@@ -78,49 +82,13 @@ def generate_reference_storyboard_sheets_tool(ctx: ToolContext):
     return _handler
 
 
-def confirm_reference_storyboard_sheet_tool(ctx: ToolContext):
-    @tool(
-        "confirm_reference_storyboard_sheet",
-        "确认一个 Video Unit 当前的 Video Unit Storyboard Sheet；这是关键帧生成的强制卡点。"
-        "只有用户已明确确认该 Sheet 时才可调用，成功后自动批量入队该单元的全部关键帧。",
-        {
-            "type": "object",
-            "properties": {
-                "script": {"type": "string", "description": "剧本文件名，例如 episode_1.json"},
-                "unit_id": {"type": "string", "description": "用户已确认当前 Video Unit Storyboard Sheet 的 Video Unit ID"},
-            },
-            "required": ["script", "unit_id"],
-        },
-    )
-    async def _handler(args: dict[str, Any]) -> dict[str, Any]:
-        try:
-            script_file = validate_script_filename(args["script"])
-            unit_id = str(args["unit_id"]).strip()
-            if not unit_id:
-                raise ValueError("unit_id 不能为空")
-            sheet, task_ids = await confirm_storyboard_sheet_and_enqueue_keyframes(
-                ctx.project_name,
-                script_file,
-                unit_id,
-            )
-            return _response(
-                {
-                    "unit_id": unit_id,
-                    "storyboard_sheet": sheet,
-                    "keyframe_task_ids": task_ids,
-                }
-            )
-        except Exception as exc:  # noqa: BLE001
-            return tool_error("confirm_reference_storyboard_sheet", exc)
-
-    return _handler
-
-
 def generate_reference_keyframes_tool(ctx: ToolContext):
     @tool(
         "generate_reference_keyframes",
-        "仅为已确认 Video Unit Storyboard Sheet 的 reference_video 单元生成或重试关键首帧。"
-        "这不是 Storyboard 工具；keyframe_ids 省略时只补齐尚无图片的关键帧。",
+        "为 reference_video 正式文稿已提取的 Keyframes 生成或重试关键首帧。"
+        "它与 Video Unit Storyboard Sheet 同级、互不作为输入，可以并行生成；"
+        "每条 Keyframe description 使用与正式文稿相同的 @[角色]/@[场景]/@[道具] 语法；"
+        "keyframe_ids 省略时只补齐尚无图片的关键帧。",
         {
             "type": "object",
             "properties": {
@@ -166,7 +134,6 @@ def generate_reference_keyframes_tool(ctx: ToolContext):
 
 
 __all__ = [
-    "confirm_reference_storyboard_sheet_tool",
     "generate_reference_keyframes_tool",
     "generate_reference_storyboard_sheets_tool",
 ]

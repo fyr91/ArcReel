@@ -1,8 +1,12 @@
-"""MiniMax H3 execution progress projection tests."""
+"""MiniMax generation progress projection tests."""
 
 import pytest
 
-from lib.task_execution_progress import h3_execution_progress, h3_progress_from_provider
+from lib.task_execution_progress import (
+    h3_execution_progress,
+    h3_progress_from_provider,
+    music_progress_from_provider,
+)
 
 pytestmark = pytest.mark.unit
 
@@ -29,3 +33,15 @@ def test_h3_queue_projection_exposes_ahead_count_and_total():
 def test_h3_progress_clamps_provider_percentage():
     assert h3_execution_progress("running", progress=108.6)["progress"] == 100
     assert h3_execution_progress("running", progress=-2)["progress"] == 0
+
+
+def test_music_queue_projection_has_its_own_stable_kind():
+    progress = music_progress_from_provider(
+        {"status": "queued", "stage": "waiting_for_route", "can_cancel": True, "progress": 0},
+        {"position": 2, "queue_length": 2},
+    )
+
+    assert progress["kind"] == "minimax_music"
+    assert progress["phase"] == "queued"
+    assert progress["queue_position"] == 2
+    assert progress["queue_ahead"] == 1

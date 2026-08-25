@@ -493,6 +493,38 @@ class TestSessionManagerMore:
         await engine.dispose()
 
     @pytest.mark.asyncio
+    async def test_file_access_hook_blocks_image_read_for_text_only_agent_model(self, tmp_path):
+        own_project = tmp_path / "projects" / "alpha"
+        own_project.mkdir(parents=True)
+        image = own_project / "keyframe.png"
+        image.write_bytes(b"png")
+
+        engine = create_async_engine("sqlite+aiosqlite:///:memory:")
+        async with engine.begin() as conn:
+            await conn.run_sync(Base.metadata.create_all)
+        factory = async_sessionmaker(engine, expire_on_commit=False)
+        mgr = sm_mod.SessionManager(
+            project_root=tmp_path,
+            meta_store=SessionMetaStore(session_factory=factory),
+        )
+        hook = mgr._options_assembler._build_file_access_hook(
+            own_project,
+            image_input_supported=False,
+        )
+
+        result = await hook(
+            {"tool_name": "Read", "tool_input": {"file_path": str(image)}},
+            None,
+            None,
+        )
+
+        output = result["hookSpecificOutput"]
+        assert output["permissionDecision"] == "deny"
+        assert "不支持图片输入" in output["permissionDecisionReason"]
+
+        await engine.dispose()
+
+    @pytest.mark.asyncio
     async def test_file_access_hook_blocks_write_to_readonly_dir(self, tmp_path):
         """Hook denies Write to lib/, allows own project."""
         own_project = tmp_path / "projects" / "alpha"

@@ -413,7 +413,7 @@ async def _extract_provider(task: dict[str, Any]) -> str:
 
             project = await asyncio.to_thread(get_project_manager().load_project, project_name)
 
-        from lib.config.resolver import ConfigResolver
+        from lib.config.resolver import ConfigResolver, image_stage_for_task
         from lib.db import async_session_factory
 
         resolver = ConfigResolver(async_session_factory)
@@ -430,7 +430,16 @@ async def _extract_provider(task: dict[str, Any]) -> str:
             resolved = await resolver.resolve_audio_backend(project, payload)
         else:
             capability = "i2i" if task.get("task_type") == "image_edit" else "t2i"
-            resolved = await resolver.resolve_image_backend(project, payload, capability=capability)
+            resolved = await resolver.resolve_image_backend(
+                project,
+                payload,
+                capability=capability,
+                stage=image_stage_for_task(
+                    str(task.get("task_type") or ""),
+                    payload,
+                    str(task.get("resource_type") or ""),
+                ),
+            )
     except Exception:
         logger.debug("provider 解析失败，回退 DEFAULT_PROVIDER 仅供限流路由", exc_info=True)
         return DEFAULT_PROVIDER
@@ -1107,9 +1116,13 @@ class GenerationWorker:
                     await self.queue.mark_task_cancelled(task_id, cancelled_by="user")
                 continue
 
-            # audio（TTS）同步、不持久化 job_id、无 resume 入口——与 image 同样降级为
-            # [restart_lost]，不重新提交以免重复计费。
+            # HyperFrames BGM 持久化远端 job_id，可安全 requeue 后从同一 job 续接，
+            # 不会二次提交或重复计费。普通 TTS 仍没有 resume 入口。
             if media_type == "audio":
+                if task_type == "hyperframes_bgm" and task.get("provider_job_id"):
+                    await self._requeue_single_task(task_id)
+                    logger.info("孤儿 HyperFrames BGM running → resume queue: %s", task_id)
+                    continue
                 logger.warning("孤儿 audio running → [restart_lost]: %s", task_id)
                 rows = await self.queue.mark_task_failed(
                     task_id,

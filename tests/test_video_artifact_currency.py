@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import hashlib
 from contextlib import asynccontextmanager, contextmanager
 from copy import deepcopy
 from pathlib import Path
@@ -8,6 +9,7 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
+from lib import media_artifact_currency
 from lib.artifact_manifest import (
     ArtifactBasis,
     ArtifactBasisDescriptor,
@@ -883,6 +885,42 @@ def test_storyboard_current_basis_tracks_speech_and_ignores_provider_metadata(tm
         )
         != expected
     )
+
+
+def test_current_reference_audio_paths_include_execution_proven_global_link(tmp_path: Path) -> None:
+    project_path = tmp_path / "demo"
+    project_path.mkdir()
+    asset_id = "asset-1"
+    content = b"global-reference-audio"
+    audio = tmp_path / "_global_assets" / "character" / "catalog" / asset_id / "voice.mp3"
+    audio.parent.mkdir(parents=True)
+    audio.write_bytes(content)
+    project = {
+        "characters": {
+            "Alice": {
+                "global_asset_id": asset_id,
+                "global_asset_voice_source": "reference_audio",
+            }
+        }
+    }
+    metadata = {
+        "execution_provider_media": [
+            {
+                "role": "reference_audio",
+                "logical_name": "Alice",
+                "source_locator": f"_global_assets/character/catalog/{asset_id}/voice.mp3",
+                "sha256": hashlib.sha256(content).hexdigest(),
+                "size_bytes": len(content),
+            }
+        ]
+    }
+
+    assert media_artifact_currency._current_reference_audio_paths(project, project_path, metadata) == {
+        "Alice": audio
+    }
+
+    project["characters"]["Alice"]["global_asset_id"] = "another-asset"
+    assert media_artifact_currency._current_reference_audio_paths(project, project_path, metadata) == {}
 
 
 def test_current_video_basis_rejects_an_episode_rebound_to_another_script(tmp_path: Path) -> None:

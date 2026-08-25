@@ -1,4 +1,4 @@
-"""v10→v11: give legacy reference-video units a non-empty keyframe plan."""
+"""v10→v11: add formal keyframes and the Storyboard Sheet state."""
 
 from __future__ import annotations
 
@@ -52,9 +52,9 @@ def _seed_step1_unit(unit: object) -> object:
     if not isinstance(unit, dict):
         return unit
     migrated = copy.deepcopy(unit)
-    plan = migrated.get("keyframe_plan")
-    if not isinstance(plan, list) or not plan:
-        migrated["keyframe_plan"] = [DEFAULT_ENTRY_KEYFRAME_DESCRIPTION]
+    # Keyframe extraction belongs to the confirmed Video Unit stage, not the
+    # preprocessing contract.  Drop the retired fork field if a v10 draft has it.
+    migrated.pop("keyframe_plan", None)
     ReferenceStep1Unit.model_validate(migrated)
     return migrated
 

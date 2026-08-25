@@ -499,6 +499,85 @@ def test_narration_progresses_through_storyboard_video_to_export(tmp_path: Path)
 
 
 @pytest.mark.integration
+def test_explicit_episode_can_export_while_later_source_remains_unplanned(tmp_path: Path) -> None:
+    """A targeted episode is exportable from its own durable facts.
+
+    Remaining source text is a project-level planning concern.  It must still
+    drive the unscoped project status back to episode planning, but it must not
+    hide an already complete episode's HyperFrames/export action.
+    """
+
+    pm, project_path = _make_project(tmp_path, "narration")
+    planned_text = "第一集原文"
+    source_text = f"{planned_text}\n第二集仍待规划"
+    _write_source_and_complete(pm, project_path, source_text)
+
+    def _plan(project: dict) -> None:
+        project["episodes"] = [
+            {
+                "episode": 1,
+                "title": "第一集",
+                "script_file": "scripts/episode_1.json",
+                "ledger_status": "planned",
+                "source_range": {
+                    "source_file": "source/novel.txt",
+                    "start": 0,
+                    "end": len(planned_text),
+                },
+            }
+        ]
+        project["planning_cursor"] = {
+            "source_file": "source/novel.txt",
+            "offset": len(planned_text),
+        }
+        project[SOURCE_FINGERPRINTS_KEY] = compute_source_fingerprints(discover_sources(project_path))
+
+    pm.update_project("demo", _plan)
+    _write_episode_source(project_path, 1, planned_text)
+    draft_dir = project_path / "drafts" / "episode_1"
+    draft_dir.mkdir(parents=True)
+    step1_path = draft_dir / "step1_segments.json"
+    atomic_write_json(step1_path, {"episode": 1, "segments": []})
+    step1_revision = script_review.content_fingerprint(step1_path)
+    assert step1_revision is not None
+    pm.update_project(
+        "demo",
+        lambda project: script_review.apply_confirmation(
+            project,
+            1,
+            step1_revision,
+            "2026-08-25T00:00:00Z",
+        ),
+    )
+    _write_registered_script(
+        project_path,
+        {
+            "episode": 1,
+            "title": "第一集",
+            "content_mode": "narration",
+            "segments": [
+                _valid_narration_segment(
+                    novel_text=planned_text,
+                    generated_assets=_complete_episode_media(project_path),
+                )
+            ],
+            "metadata": {script_review.SCRIPT_STEP1_REVISION_FIELD: step1_revision},
+        },
+    )
+    _register_produced_artifacts(project_path)
+    service = WorkflowStateService(pm)
+
+    episode_status = service.get_status("demo", episode=1)
+    assert episode_status.state == "EXPORT_READY"
+    assert episode_status.next_action.type == "export"
+
+    project_status = service.get_status("demo")
+    assert project_status.state == "EPISODE_PLAN"
+    assert project_status.next_action.type == "plan_episodes"
+    assert project_status.next_action.reason == "source text remains unplanned"
+
+
+@pytest.mark.integration
 def test_narration_audio_manifest_state_unreadable_does_not_block_export(tmp_path: Path, monkeypatch) -> None:
     """旁白 TTS 只作为信息报告，不参与状态推进：即便 Manifest 判定该条 TTS 状态不可读
     （BLOCKED），也不能让它借道共享 blockers 列表把工作流钉在 VIDEO——视频齐备时仍须
@@ -1400,6 +1479,34 @@ def test_schema8_manifest_reports_current_stale_missing_and_blocked_without_file
     assert blocked.state == "VIDEO"
     assert blocked.artifacts["storyboards"]["state"] == "blocked"
     assert any(item.code == "artifact_symlink" for item in blocked.blockers)
+
+
+@pytest.mark.integration
+def test_character_reference_image_satisfies_asset_sheet_stage_without_generated_sheet(tmp_path: Path) -> None:
+    pm, project_path = _make_project(tmp_path, "ad")
+    reference_path = "characters/refs/Alice.png"
+    _write_artifact(project_path, reference_path)
+
+    pm.update_project(
+        "demo",
+        lambda project: project.update(
+            characters={
+                "Alice": {
+                    "description": "red coat",
+                    "character_sheet": "",
+                    "reference_image": reference_path,
+                }
+            }
+        ),
+    )
+
+    status = WorkflowStateService(pm).get_status("demo")
+
+    assert status.artifacts["asset_sheets"]["character"] == {
+        "current_ids": ["Alice"],
+        "missing_ids": [],
+        "stale_ids": [],
+    }
 
 
 @pytest.mark.integration

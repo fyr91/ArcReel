@@ -194,7 +194,6 @@ class TestReferenceUnitsStep1Model:
             "duration_seconds": 6,
             "source_text": "他起身。",
             "text": "镜头1：@[甲] 起身",
-            "keyframe_plan": ["全景平视，@[甲] 位于画面中央"],
         }
         unit.update(overrides)
         return unit
@@ -204,10 +203,8 @@ class TestReferenceUnitsStep1Model:
         unit_def = next(d for d in schema.get("$defs", {}).values() if "text" in d.get("properties", {}))
         assert unit_def["properties"]["duration_seconds"]["enum"] == [4, 6, 8]
         # 机械可派生的字段一律不进 LLM 输出 schema
-        assert set(unit_def["properties"]) == {"duration_seconds", "source_text", "text", "keyframe_plan"}
-        assert "keyframe_plan" in unit_def["required"]
-        assert unit_def["properties"]["keyframe_plan"]["minItems"] == 1
-        assert unit_def["properties"]["keyframe_plan"]["maxItems"] == 5
+        assert set(unit_def["properties"]) == {"duration_seconds", "source_text", "text"}
+        assert "keyframe_plan" not in unit_def["properties"]
 
     def test_member_duration_accepted(self):
         draft = self._model().model_validate({"units": [self._unit()]})
@@ -221,19 +218,10 @@ class TestReferenceUnitsStep1Model:
         with pytest.raises(ValidationError):
             self._model().model_validate({"units": []})
 
-    @pytest.mark.parametrize("keyframe_plan", [None, [], ["   "]])
-    def test_missing_or_blank_keyframe_plan_rejected(self, keyframe_plan):
-        unit = self._unit()
-        if keyframe_plan is None:
-            unit.pop("keyframe_plan")
-        else:
-            unit["keyframe_plan"] = keyframe_plan
-        with pytest.raises(ValidationError):
-            self._model().model_validate({"units": [unit]})
-
-    def test_more_than_five_keyframes_rejected(self):
-        with pytest.raises(ValidationError):
-            self._model().model_validate({"units": [self._unit(keyframe_plan=[str(i) for i in range(6)])]})
+    def test_legacy_keyframe_plan_is_discarded(self):
+        unit = self._unit(keyframe_plan=["旧的预处理关键帧规划"])
+        validated = self._model().model_validate({"units": [unit]}).model_dump()
+        assert "keyframe_plan" not in validated["units"][0]
 
     def test_blank_required_text_rejected(self):
         with pytest.raises(ValidationError):

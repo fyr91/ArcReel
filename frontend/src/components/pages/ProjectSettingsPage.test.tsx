@@ -587,7 +587,7 @@ describe("ProjectSettingsPage – style picker", () => {
 
     renderAt("/app/projects/demo/settings");
 
-      expect(await screen.findByText(/按 Video Unit 生成并确认 Video Unit Storyboard Sheet/)).toBeInTheDocument();
+    expect(await screen.findByText(/并行生成 Video Unit Storyboard Sheet 与 Keyframes/)).toBeInTheDocument();
     expect(screen.getByText(/生成方式创建后不可更改/)).toBeInTheDocument();
     expect(screen.queryByRole("radio", { name: /参考生视频|分镜图生视频/ })).not.toBeInTheDocument();
     // 参考路线下不呈现宫格开关
@@ -848,6 +848,7 @@ describe("ProjectSettingsPage – 按用途指定模型", () => {
       project: {
         title: "Demo",
         video_provider_i2v: "gemini/veo-3",
+        image_provider_storyboard: "gemini/nano-banana",
         episodes: [],
         characters: {},
         clues: {},
@@ -864,6 +865,8 @@ describe("ProjectSettingsPage – 按用途指定模型", () => {
     // 已配置的细分项让所在通道初始展开，值可见
     const i2v = await screen.findByRole("combobox", { name: /^(图生视频|Image to video)$/ });
     expect(i2v).toHaveTextContent(/veo-3/);
+    const storyboard = screen.getByRole("combobox", { name: /^Storyboard$/ });
+    expect(storyboard).toHaveTextContent(/nano-banana/);
 
     fireEvent.click(screen.getByRole("radio", { name: /横屏 16:9|16:9/ }));
     fireEvent.click(screen.getByRole("button", { name: /^(保存|Save)$/i }));
@@ -875,8 +878,10 @@ describe("ProjectSettingsPage – 按用途指定模型", () => {
           video_provider_i2v: "gemini/veo-3",
           video_provider_r2v: null,
           default_image_backend: null,
-          image_provider_t2i: null,
-          image_provider_i2i: null,
+          image_provider_asset: null,
+          image_provider_reference: null,
+          image_provider_storyboard: "gemini/nano-banana",
+          image_provider_keyframe: null,
         }),
       );
     });

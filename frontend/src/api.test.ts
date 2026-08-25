@@ -413,6 +413,10 @@ describe("API", () => {
       await API.updateShot("demo", "E1S01", "episode_1.json", { voiceover_text: "新口播" });
       await API.reorderShots("demo", "episode_1.json", ["E1S02", "E1S01"]);
       await API.updateEpisode("demo", 3, { title: "新标题" });
+      await API.normalizeReferenceKeyframeMentions("demo", 3);
+      await API.replaceReferenceScriptText("demo", 3, `sha256-v1:${"0".repeat(64)}`, [
+        { unit_id: "E1U01", field: "text", old: "旧", new: "新" },
+      ]);
 
       await API.getSystemConfig();
       await API.getSystemVersion();
@@ -1497,6 +1501,29 @@ describe("API.referenceVideos", () => {
     expect(body.unit_ids).toEqual(["E1U2", "E1U1"]);
   });
 
+  it("generateReferenceStoryboardSheet sends user review instructions", async () => {
+    fetchMock.mockResolvedValueOnce(
+      new Response(JSON.stringify({ success: true, task_id: "sheet-1", deduped: false, message: "queued" }), {
+        status: 200,
+      }),
+    );
+
+    await API.generateReferenceStoryboardSheet(
+      "proj",
+      1,
+      "E1U18",
+      { imageProvider: "ark", imageModel: "seedream" },
+      "  第四格必须揉妹妹头顶。  ",
+    );
+
+    const body = JSON.parse(fetchMock.mock.calls[0]![1]!.body as string) as Record<string, unknown>;
+    expect(body).toEqual({
+      image_provider: "ark",
+      image_model: "seedream",
+      instructions: "第四格必须揉妹妹头顶。",
+    });
+  });
+
   it("generateReferenceVideoUnit returns task id", async () => {
     fetchMock.mockResolvedValueOnce(new Response(JSON.stringify({ task_id: "t-1", deduped: false }), { status: 202 }));
     const res = await API.generateReferenceVideoUnit("proj", 1, "E1U1", {
@@ -1626,5 +1653,35 @@ describe("uploadFile (source) onConflict", () => {
       expect(err).not.toBeInstanceOf(ConflictError);
       expect((err as Error).message).toContain("a.txt");
     }
+  });
+});
+
+describe("HyperFrames background music API", () => {
+  it("submits the shared asynchronous task endpoint", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      mockResponse({
+        jsonData: {
+          task_id: "bgm-1",
+          status: "queued",
+          resource_id: "episode_01",
+        },
+      }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    const result = await API.generateHyperframesBackgroundMusic("demo project", 1, {
+      direction: "restrained instrumental",
+      seed: 7,
+    });
+
+    expect(result.task_id).toBe("bgm-1");
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/api/v1/projects/demo%20project/hyperframes/episodes/1/background-music",
+      expect.objectContaining({ method: "POST" }),
+    );
+    expect(JSON.parse(fetchMock.mock.calls[0][1].body as string)).toEqual({
+      direction: "restrained instrumental",
+      seed: 7,
+    });
   });
 });

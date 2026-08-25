@@ -10,6 +10,7 @@ from lib.reference_video.text_parser import (
     resolve_references,
     split_speech_line,
     strip_speech_marks,
+    wrap_registered_asset_mentions,
 )
 
 pytestmark = pytest.mark.unit
@@ -54,6 +55,20 @@ def test_extract_mentions_without_any_mention():
 def test_extract_mentions_keeps_unregistered_names():
     """解析层不认识资产表：未登记的名字照常派生，登记判定归 ``resolve_references``。"""
     assert extract_mentions("@张三 看向 @未登记的东西") == ["张三", "未登记的东西"]
+
+
+def test_wrap_registered_asset_mentions_is_literal_and_idempotent():
+    text = "彩釉铜胎旁是铜胎，@[鳄鱼爸爸] 看向 @铜丝卷；unknownHero 与 Heroic 保持原样。"
+    normalized, count = wrap_registered_asset_mentions(
+        text,
+        {"彩釉铜胎", "铜胎", "鳄鱼爸爸", "铜丝卷", "Hero"},
+    )
+    assert normalized == ("@[彩釉铜胎]旁是@[铜胎]，@[鳄鱼爸爸] 看向 @[铜丝卷]；unknownHero 与 Heroic 保持原样。")
+    assert count == 3
+    assert wrap_registered_asset_mentions(normalized, {"彩釉铜胎", "铜胎", "鳄鱼爸爸", "铜丝卷"}) == (
+        normalized,
+        0,
+    )
 
 
 def test_extract_mentions_rejects_non_ascii_legacy_letters():

@@ -17,7 +17,7 @@ def _write(path: Path, payload: dict) -> None:
     path.write_text(json.dumps(payload, ensure_ascii=False), encoding="utf-8")
 
 
-def test_reference_video_migration_seeds_stable_keyframe_and_step1_plan(tmp_path: Path) -> None:
+def test_reference_video_migration_seeds_formal_keyframe_but_not_preprocessing_plan(tmp_path: Path) -> None:
     project_dir = tmp_path / "demo"
     _write(
         project_dir / "project.json",
@@ -69,7 +69,7 @@ def test_reference_video_migration_seeds_stable_keyframe_and_step1_plan(tmp_path
         }
     ]
     assert unit["text"].startswith("@[关键分镜 E1U01K01]")
-    assert step1["units"][0]["keyframe_plan"] == ["当前 Video Unit 开场场景的第一个稳定画面"]
+    assert "keyframe_plan" not in step1["units"][0]
     assert "storyboard_sheet" not in unit
     assert list(project_dir.glob("project.json.bak.v10-*"))
     assert list((project_dir / "scripts").glob("episode_1.json.bak.v10-*"))

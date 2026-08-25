@@ -74,6 +74,8 @@ import type {
   ReferenceStep1Draft,
   VideoCapabilities,
   HyperframesWorkspaceStatus,
+  GenerateHyperframesBgmRequest,
+  HyperframesBgmTaskResponse,
   PrepareHyperframesWorkspaceRequest,
 } from "@/types";
 import type { GenerationRoute } from "@/utils/generation-mode";
@@ -441,6 +443,10 @@ export interface CreateProjectPayload {
   image_backend?: string | null;
   /** 项目默认图片模型。创建向导只暴露默认层（docs/adr/0054），能力桶留给项目设置页。 */
   default_image_backend?: string | null;
+  image_provider_asset?: string | null;
+  image_provider_reference?: string | null;
+  image_provider_storyboard?: string | null;
+  image_provider_keyframe?: string | null;
   text_backend_simple?: string | null;
   text_backend_complex?: string | null;
   default_text_backend?: string | null;
@@ -1389,17 +1395,58 @@ class API {
     );
   }
 
-  /** 更新分集顶层元数据（当前仅 title）。以剧本顶层 title 为唯一真相源，后端会镜像到 project.json。 */
+  /** 更新正式文稿顶层的分集元数据；后端会原子镜像到 project.json。 */
   static async updateEpisode(
     projectName: string,
     episode: number,
-    updates: { title: string }
+    updates: {
+      title?: string;
+      hook?: string | null;
+      outline?: { story_beats?: string[]; next_episode_teaser?: string } | null;
+    }
   ): Promise<SuccessResponse> {
     return this.request(
       `/projects/${encodeURIComponent(projectName)}/episodes/${episode}`,
       {
         method: "PATCH",
         body: JSON.stringify(updates),
+      }
+    );
+  }
+
+  /** 批量把本集 Keyframe 描述中的已登记资产名称规范为 @[名称]。 */
+  static async normalizeReferenceKeyframeMentions(
+    projectName: string,
+    episode: number
+  ): Promise<SuccessResponse & {
+    units_changed: number;
+    keyframes_changed: number;
+    replacements: number;
+  }> {
+    return this.request(
+      `/projects/${encodeURIComponent(projectName)}/episodes/${episode}/keyframes/normalize-asset-mentions`,
+      { method: "POST" }
+    );
+  }
+
+  /** 对正式 reference-video 文稿做一次 revisioned 原子精确替换。 */
+  static async replaceReferenceScriptText(
+    projectName: string,
+    episode: number,
+    expectedRevision: string,
+    replacements: Array<{
+      unit_id: string;
+      field: "text" | "storyboard_description" | "keyframe_description";
+      keyframe_id?: string;
+      old: string;
+      new: string;
+    }>
+  ): Promise<ScriptEditResult> {
+    return this.request(
+      `/projects/${encodeURIComponent(projectName)}/episodes/${episode}/reference-script/exact-replacements`,
+      {
+        method: "POST",
+        body: JSON.stringify({ expected_revision: expectedRevision, replacements }),
       }
     );
   }
@@ -3257,6 +3304,7 @@ class API {
     unitId: string,
     patch: {
       prompt?: string;
+      storyboard_description?: string;
       duration_seconds?: number;
       transition_to_next?: TransitionType;
       note?: string | null;
@@ -3366,12 +3414,17 @@ class API {
     episode: number,
     unitId: string,
     selection: ImageModelSelection = {},
+    instructions?: string,
   ): Promise<{ success: boolean; task_id: string; deduped: boolean; message: string }> {
     return this.request(
       `/projects/${encodeURIComponent(projectName)}/reference-videos/episodes/${episode}/units/${encodeURIComponent(unitId)}/storyboard-sheet/generate`,
       {
         method: "POST",
-        body: JSON.stringify({ image_provider: selection.imageProvider, image_model: selection.imageModel }),
+        body: JSON.stringify({
+          image_provider: selection.imageProvider,
+          image_model: selection.imageModel,
+          instructions: instructions?.trim() || undefined,
+        }),
       },
     );
   }
@@ -3383,7 +3436,6 @@ class API {
   ): Promise<{
     success: boolean;
     storyboard_sheet: ReferenceStoryboardSheet;
-    task_ids: string[];
     message: string;
   }> {
     return this.request(
@@ -3536,6 +3588,17 @@ class API {
     return this.request(
       `/projects/${encodeURIComponent(projectName)}/hyperframes/episodes/${episode}/studio`,
       { method: "POST" },
+    );
+  }
+
+  static async generateHyperframesBackgroundMusic(
+    projectName: string,
+    episode: number,
+    payload: GenerateHyperframesBgmRequest,
+  ): Promise<HyperframesBgmTaskResponse> {
+    return this.request(
+      `/projects/${encodeURIComponent(projectName)}/hyperframes/episodes/${episode}/background-music`,
+      { method: "POST", body: JSON.stringify(payload) },
     );
   }
 
