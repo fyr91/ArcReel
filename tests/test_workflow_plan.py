@@ -95,6 +95,11 @@ def test_rules_exhaust_the_six_content_and_generation_mode_combinations() -> Non
     for content_mode, generation_mode in WORKFLOW_RULES:
         rule = workflow_rule(content_mode, generation_mode)
         step_ids = [step.id for step in rule.steps]
+        if content_mode == "ad":
+            assert step_ids.index("final_script") < step_ids.index("asset_sheets")
+        else:
+            assert step_ids.index("asset_inventory") < step_ids.index("asset_sheets")
+            assert step_ids.index("asset_sheets") < step_ids.index("episode_plan")
         assert step_ids.index("script_structure") < step_ids.index("storyboard")
         assert step_ids.index("storyboard") < step_ids.index("video_unit_storyboard_sheet")
         assert step_ids.index("video_unit_storyboard_sheet") < step_ids.index("reference_keyframes")
@@ -110,6 +115,25 @@ def test_rules_exhaust_the_six_content_and_generation_mode_combinations() -> Non
         assert next(step for step in rule.steps if step.id == "narration_delivery").applicable is True
         prompt_step = next(step for step in rule.steps if step.id == "video_prompt_optimization")
         assert prompt_step.applicable is (generation_mode == "reference_video")
+
+
+@pytest.mark.parametrize("content_mode", ["narration", "drama"])
+def test_episodic_plan_keeps_asset_sheets_ready_before_episode_planning(content_mode: str) -> None:
+    status = _status(
+        content_mode=content_mode,
+        state="ASSET_SHEETS",
+        action="generate_asset_sheets",
+        requested_ids=["阿离"],
+    )
+    status.target = None
+
+    plan = build_workflow_plan(status)
+
+    assert _step(plan, "asset_inventory").state is WorkflowStepState.COMPLETED
+    assert _step(plan, "asset_sheets").state is WorkflowStepState.READY
+    assert _step(plan, "episode_plan").state is WorkflowStepState.PENDING
+    assert plan.next_action.type == "generate_asset_sheets"
+    assert plan.next_action.requested_ids == ["阿离"]
 
 
 @pytest.mark.parametrize("content_mode,generation_mode", sorted(WORKFLOW_RULES))

@@ -273,6 +273,52 @@ def test_narration_empty_inventory_completes_and_advances_to_episode_plan(tmp_pa
 
 
 @pytest.mark.integration
+@pytest.mark.parametrize("mode", ["narration", "drama"])
+def test_episodic_inventory_generates_missing_asset_sheets_before_episode_plan(
+    tmp_path: Path,
+    mode: str,
+) -> None:
+    pm, project_path = _make_project(tmp_path, mode)
+    _write_source_and_complete(pm, project_path)
+
+    def _add_assets(project: dict) -> None:
+        project["characters"] = {"阿离": {"description": "白衣少年"}}
+        project["scenes"] = {"庭院": {"description": "青砖庭院"}}
+        project["props"] = {"玉佩": {"description": "白玉挂件"}}
+        # 商品图不属于剧集型项目的必需资产设计阶段。
+        project["products"] = {"茶杯": {"description": "透明茶杯"}}
+
+    pm.update_project("demo", _add_assets)
+
+    missing = WorkflowStateService(pm).get_status("demo")
+
+    assert missing.target is None
+    assert missing.state == "ASSET_SHEETS"
+    assert missing.next_action.type == "generate_asset_sheets"
+    assert missing.next_action.requested_ids == ["阿离", "庭院", "玉佩"]
+    assert missing.artifacts["asset_sheets"]["product"]["missing_ids"] == ["茶杯"]
+
+    character_sheet = "characters/阿离.png"
+    scene_sheet = "scenes/庭院.png"
+    prop_sheet = "props/玉佩.png"
+    for path in (character_sheet, scene_sheet, prop_sheet):
+        _write_artifact(project_path, path)
+
+    def _attach_sheets(project: dict) -> None:
+        project["characters"]["阿离"]["character_sheet"] = character_sheet
+        project["scenes"]["庭院"]["scene_sheet"] = scene_sheet
+        project["props"]["玉佩"]["prop_sheet"] = prop_sheet
+
+    pm.update_project("demo", _attach_sheets)
+    _register_produced_artifacts(project_path)
+
+    complete = WorkflowStateService(pm).get_status("demo")
+
+    assert complete.state == "EPISODE_PLAN"
+    assert complete.next_action.type == "plan_episodes"
+
+
+@pytest.mark.integration
 def test_drama_target_comes_from_ledger_not_derived_filenames(tmp_path: Path) -> None:
     pm, project_path = _make_project(tmp_path, "drama")
     _write_source_and_complete(pm, project_path)
