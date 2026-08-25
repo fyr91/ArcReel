@@ -69,7 +69,7 @@ def _client(monkeypatch, fake_pm):
 
 
 class TestCharactersRouter:
-    def test_web_and_agent_move_main_to_reference_have_identical_results(
+    def test_web_and_agent_image_slot_round_trip_have_identical_results(
         self,
         tmp_path,
         monkeypatch,
@@ -126,6 +126,28 @@ class TestCharactersRouter:
         assert (agent_pm.get_project_path("demo") / agent_character["reference_image"]).read_bytes() == image.getvalue()
         assert web_manifest.get_entry(key) is None
         assert agent_manifest.get_entry(key) is None
+
+        with _client(monkeypatch, web_pm) as client:
+            response = client.post("/api/v1/projects/demo/characters/Alice/reference-to-main")
+
+        async def _move_back_via_agent():
+            return await move_character_main_to_reference_tool(agent_ctx).handler(
+                {"character_name": "Alice", "direction": "reference_to_main"}
+            )
+
+        agent_result = asyncio.run(_move_back_via_agent())
+
+        assert response.status_code == 200, response.text
+        assert agent_result.get("is_error") is not True
+        web_character = web_pm.load_project("demo")["characters"]["Alice"]
+        agent_character = agent_pm.load_project("demo")["characters"]["Alice"]
+        assert web_character == agent_character
+        assert web_character["character_sheet"] == "characters/Alice.png"
+        assert web_character["reference_image"] == ""
+        assert (web_pm.get_project_path("demo") / web_character["character_sheet"]).read_bytes() == image.getvalue()
+        assert (agent_pm.get_project_path("demo") / agent_character["character_sheet"]).read_bytes() == image.getvalue()
+        assert web_manifest.get_entry(key) is not None
+        assert agent_manifest.get_entry(key) is not None
 
     def test_web_and_agent_delete_have_identical_persistence_and_claim_side_effects(
         self,

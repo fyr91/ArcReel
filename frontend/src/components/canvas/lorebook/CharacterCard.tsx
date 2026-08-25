@@ -18,7 +18,7 @@ import { useAppStore } from "@/stores/app-store";
 import { useProjectsStore } from "@/stores/projects-store";
 import { errMsg } from "@/utils/async";
 import { rejectIfAssetBusy } from "./assetBusyGuard";
-import { CharacterMainToReferenceButton } from "./CharacterMainToReferenceButton";
+import { CharacterImageSlotMoveButton } from "./CharacterImageSlotMoveButton";
 import { EditableAssetName } from "./EditableAssetName";
 import { ProjectAssetDeleteButton } from "./ProjectAssetDeleteButton";
 import { VoiceSampleButton } from "./VoiceSampleButton";
@@ -300,6 +300,11 @@ export function CharacterCard({
   const linkedReferenceUrl = character.global_asset_image_usage === "reference" ? globalImageUrl : null;
   const displayedReferenceUrl = referencePreview ?? savedReferenceUrl ?? linkedReferenceUrl;
   const hasSavedReference = Boolean(savedReferenceUrl) && !referencePreview;
+  const imageMoveDirection = sheetUrl
+    ? "main-to-reference"
+    : !referencePreview && (savedReferenceUrl || linkedReferenceUrl)
+      ? "reference-to-main"
+      : null;
 
   const savedAudioUrl = character.reference_audio
     ? API.getFileUrl(projectName, character.reference_audio, audioFp)
@@ -479,11 +484,12 @@ export function CharacterCard({
           </div>
         </div>
 
-        {!readOnly && sheetUrl ? (
+        {!readOnly && imageMoveDirection ? (
           <div className="-my-1 flex justify-center">
-            <CharacterMainToReferenceButton
+            <CharacterImageSlotMoveButton
               projectName={projectName}
               characterName={name}
+              direction={imageMoveDirection}
               onReload={onReload}
               busy={generating || uploadingSheet || saving || deletingAudio}
             />

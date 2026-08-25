@@ -116,6 +116,8 @@ MESSAGES = {
     "character_not_found": "角色「{name}」不存在",
     "character_main_image_missing": "角色「{name}」当前没有可转为参考图的主图",
     "character_main_image_changed": "角色「{name}」的主图刚刚发生变化，请刷新后重试",
+    "character_reference_image_missing": "角色「{name}」当前没有可转为主图的参考图",
+    "character_reference_image_changed": "角色「{name}」的参考图刚刚发生变化，请刷新后重试",
     "character_task_submitted": "角色「{name}」资产图生成任务已提交",
     "voice_sample_voice_required": "请先选择音色",
     "voice_sample_text_too_long": "试听文案不能超过 {max_length} 个字符",

@@ -235,7 +235,7 @@ describe("ReferenceVideoCard combobox ARIA", () => {
     renderCard();
     const ta = screen.getByRole("combobox");
     expect(ta).toHaveAttribute("aria-expanded", "false");
-    expect(ta).toHaveAttribute("aria-controls", "reference-editor-picker");
+    expect(ta.getAttribute("aria-controls")).toMatch(/^reference-editor-picker-/);
     expect(ta).toHaveAttribute("aria-autocomplete", "list");
     // aria-label 是短名，不是长 placeholder
     expect(ta.getAttribute("aria-label")).toBe("Unit 提示词");
@@ -257,8 +257,9 @@ describe("ReferenceVideoCard combobox ARIA", () => {
     const unit = mkUnit({ text: "@未知人 出现" });
     renderCard(unit);
     const ta = screen.getByRole("combobox");
-    expect(ta).toHaveAttribute("aria-describedby", "reference-editor-unknown-desc");
-    const desc = document.getElementById("reference-editor-unknown-desc");
+    const descriptionId = ta.getAttribute("aria-describedby");
+    expect(descriptionId).toMatch(/^reference-editor-unknown-desc-/);
+    const desc = document.getElementById(descriptionId!);
     expect(desc).not.toBeNull();
     expect(desc).toHaveAttribute("aria-live", "polite");
     expect(desc?.textContent).toContain("未知人");

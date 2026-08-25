@@ -3157,6 +3157,18 @@ class API {
     );
   }
 
+  static async moveCharacterReferenceToMain(projectName: string, characterName: string) {
+    return this.request<{
+      success: true;
+      project_asset: Record<string, unknown>;
+      source: "global" | "project";
+      main_path: string;
+    }>(
+      `/projects/${encodeURIComponent(projectName)}/characters/${encodeURIComponent(characterName)}/reference-to-main`,
+      { method: "POST" },
+    );
+  }
+
   static async createAsset(payload: AssetCreatePayload & { image?: File }) {
     const form = new FormData();
     form.append("type", payload.type);
