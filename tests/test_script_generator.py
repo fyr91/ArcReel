@@ -1062,8 +1062,12 @@ class TestAddMetadataRewritesEpisodePrefix:
 
         out = sg._add_metadata(data, episode=1)
 
-        assert out[case.kind][0]["needs_replan"] is True
-        assert {key: value for key, value in out[case.kind][0].items() if key != "needs_replan"} == original
+        if case.route_id == "drama-reference_video":
+            assert "needs_replan" not in out[case.kind][0]
+            assert out[case.kind][0] == original
+        else:
+            assert out[case.kind][0]["needs_replan"] is True
+            assert {key: value for key, value in out[case.kind][0].items() if key != "needs_replan"} == original
 
     @pytest.mark.unit
     def test_reference_video_rewrites_unit_ids(self, tmp_path: Path) -> None:

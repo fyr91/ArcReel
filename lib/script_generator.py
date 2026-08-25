@@ -1475,7 +1475,7 @@ class ScriptGenerator:
                 "note": None,
                 "generated_assets": {},
             }
-            if video_unit_replan_problems(unit):
+            if video_unit_replan_problems(unit, content_mode=self.content_mode):
                 unit["needs_replan"] = True
             units.append(unit)
 
@@ -1586,7 +1586,12 @@ class ScriptGenerator:
         for item in raw_rewrite_items if isinstance(raw_rewrite_items, list) else []:
             if not isinstance(item, dict):
                 continue
-            admission = admit_script_unit(kind, item, ignore_marker=True)
+            admission = admit_script_unit(
+                kind,
+                item,
+                ignore_marker=True,
+                content_mode=self.content_mode,
+            )
             if admission.allowed:
                 item.pop("needs_replan", None)
             else:

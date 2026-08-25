@@ -28,7 +28,10 @@ def _facts() -> VideoArtifactCurrencyFacts:
         kind_version=1,
         inputs={
             "mode": "character_speech",
-            "utterances": [{"speaker": "阿离", "text": "走。"}],
+            "utterances": [
+                {"speaker": "阿离", "text": "走。"},
+                {"speaker": None, "text": "远处有人低声回应。"},
+            ],
             "voices": [{"speaker": "阿离", "voice_style": "", "reference_audio_digest": None}],
         },
     )

@@ -118,10 +118,10 @@ class SubtitleUtteranceEvidence:
         if not normalized_text:
             raise ValueError("subtitle utterance text must be non-empty")
         normalized_speaker = (
-            asset_name_comparison_key(self.speaker or "") if self.owner is SpeechOwner.CHARACTER else None
+            asset_name_comparison_key(self.speaker or "") or None
+            if self.owner is SpeechOwner.CHARACTER
+            else None
         )
-        if self.owner is SpeechOwner.CHARACTER and not normalized_speaker:
-            raise ValueError("character subtitle utterance requires a speaker")
         if self.owner is SpeechOwner.NARRATOR and self.speaker is not None:
             raise ValueError("narrator subtitle utterance cannot have a speaker")
         object.__setattr__(self, "text", normalized_text)
@@ -212,17 +212,17 @@ def build_video_speech_basis(
             inputs={"mode": mode.value},
         )
 
-    utterances: list[dict[str, str]] = []
+    utterances: list[dict[str, str | None]] = []
     speaker_order: list[str] = []
     for utterance in preparation.utterances:
         if utterance.owner is not SpeechOwner.CHARACTER:
             raise ValueError("character speech preparation contains a non-character utterance")
-        speaker = asset_name_comparison_key(utterance.speaker or "")
+        speaker = asset_name_comparison_key(utterance.speaker or "") or None
         text = _canonical_text(utterance.text)
-        if not speaker or not text:
-            raise ValueError("character speech basis requires non-empty speaker and text")
+        if not text:
+            raise ValueError("character speech basis requires non-empty text")
         utterances.append({"speaker": speaker, "text": text})
-        if speaker not in speaker_order:
+        if speaker is not None and speaker not in speaker_order:
             speaker_order.append(speaker)
 
     return ArtifactBasis.build(

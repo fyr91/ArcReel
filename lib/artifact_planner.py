@@ -43,6 +43,7 @@ from lib.speech_composition import (
     SpeechPreparation,
     SpeechUnitSnapshot,
     admit_script_unit,
+    video_unit_replan_problems,
 )
 from lib.speech_presentation import (
     PresentationMedia,
@@ -843,7 +844,14 @@ class TargetStatePlanner:
         versions = self._load_versions()
         for episode in self.episodes:
             for item in episode.items:
-                if item.get("needs_replan") is True:
+                if (
+                    video_unit_replan_problems(
+                        item,
+                        content_mode=episode.script.get("content_mode") or self.project.get("content_mode"),
+                    )
+                    if episode.kind == "video_units"
+                    else item.get("needs_replan") is True
+                ):
                     continue
                 resource_id = str(item[episode.id_field])
                 assets = item.get("generated_assets")
@@ -967,7 +975,14 @@ class TargetStatePlanner:
         self._plan_typed_media()
         for episode in self.episodes:
             for item in episode.items:
-                if item.get("needs_replan") is True:
+                if (
+                    video_unit_replan_problems(
+                        item,
+                        content_mode=episode.script.get("content_mode") or self.project.get("content_mode"),
+                    )
+                    if episode.kind == "video_units"
+                    else item.get("needs_replan") is True
+                ):
                     continue
                 resource_id = str(item[episode.id_field])
                 for variant in (POST_PRODUCTION, USE_TTS):
@@ -1088,7 +1103,11 @@ class TargetStatePlanner:
 
         current_subtitle: ArtifactBasis | None = None
         current_presentation: ArtifactBasis | None = None
-        admission = admit_script_unit(episode.kind, item)
+        admission = admit_script_unit(
+            episode.kind,
+            item,
+            content_mode=episode.script.get("content_mode") or self.project.get("content_mode"),
+        )
         if admission.allowed:
             live_transition = item.get("transition_to_next")
             current_transition = live_transition if isinstance(live_transition, str) else "cut"
@@ -1222,9 +1241,9 @@ class TargetStatePlanner:
                     return None
                 speaker_required = False
             elif owner == "character":
-                if not isinstance(speaker, str) or not speaker.strip():
+                if speaker is not None and (not isinstance(speaker, str) or not speaker.strip()):
                     return None
-                speaker_required = True
+                speaker_required = speaker is not None
             else:
                 return None
             if not isinstance(text, str) or not text.strip():
@@ -1237,7 +1256,10 @@ class TargetStatePlanner:
                     location=SpeechFieldLocation(("cues", index)),
                 )
             )
-        preparation = SpeechComposition.prepare(SpeechUnitSnapshot(resource_id, tuple(entries)))
+        preparation = SpeechComposition.prepare(
+            SpeechUnitSnapshot(resource_id, tuple(entries)),
+            speakerless_as_dialogue=True,
+        )
         mode = presentation.get("speech_mode")
         if preparation.problems or preparation.mode is None or preparation.mode.value != mode:
             return None

@@ -332,10 +332,14 @@ def test_patch_unit_derives_non_character_references_before_speech_admission(cli
 @pytest.mark.integration
 @pytest.mark.parametrize(
     "case",
-    [case for case in SPEECH_CONTRACT_CASES if case.generation_mode == "reference_video"],
+    [
+        case
+        for case in SPEECH_CONTRACT_CASES
+        if case.generation_mode == "reference_video" and case.content_mode != "drama"
+    ],
     ids=lambda case: case.route_id,
 )
-def test_three_reference_route_web_manual_edits_atomically_reject_mixed_speech_on_save(
+def test_non_drama_reference_route_web_manual_edits_atomically_reject_mixed_speech_on_save(
     client: TestClient, tmp_path: Path, case: SpeechContractCase
 ):
     uid = _seed_unit(client)
@@ -364,6 +368,33 @@ def test_three_reference_route_web_manual_edits_atomically_reject_mixed_speech_o
     after = client.get("/api/v1/projects/demo/reference-videos/episodes/1/units").json()["units"][0]
     assert after["text"] == before["text"]
     assert after["generated_assets"] == before["generated_assets"]
+
+
+@pytest.mark.integration
+def test_drama_reference_route_saves_dialogue_and_voiceover_as_one_speech_lane(
+    client: TestClient,
+    tmp_path: Path,
+) -> None:
+    uid = _seed_unit(client)
+    from server.routers import reference_videos as router_mod
+
+    pm = router_mod.get_project_manager()
+    project_file = tmp_path / "projects" / "demo" / "project.json"
+    project = json.loads(project_file.read_text(encoding="utf-8"))
+    project["content_mode"] = "drama"
+    project_file.write_text(json.dumps(project, ensure_ascii=False), encoding="utf-8")
+    script = pm.load_script("demo", "episode_1.json")
+    script["content_mode"] = "drama"
+    pm.save_script("demo", script, "episode_1.json")
+
+    response = client.patch(
+        f"/api/v1/projects/demo/reference-videos/episodes/1/units/{uid}",
+        json={"prompt": "镜头1：张三推门\n@[张三]：{快走。}\n{风吹过旷野。}"},
+    )
+
+    assert response.status_code == 200, response.text
+    assert response.json()["unit"]["text"].endswith("@[张三]：{快走。}\n{风吹过旷野。}")
+    assert response.json()["unit"].get("needs_replan") is None
 
 
 @pytest.mark.integration
@@ -633,10 +664,14 @@ def test_generate_unit_use_tts_returns_the_current_cross_tier_quote_before_enque
 @pytest.mark.integration
 @pytest.mark.parametrize(
     "case",
-    [case for case in SPEECH_CONTRACT_CASES if case.generation_mode == "reference_video"],
+    [
+        case
+        for case in SPEECH_CONTRACT_CASES
+        if case.generation_mode == "reference_video" and case.content_mode != "drama"
+    ],
     ids=lambda case: case.route_id,
 )
-def test_three_reference_route_web_video_entries_share_structured_speech_admission(
+def test_non_drama_reference_route_web_video_entries_share_structured_speech_admission(
     client: TestClient,
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,

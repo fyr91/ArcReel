@@ -328,6 +328,11 @@ class TestPatchEpisodeScript:
             {"script": "episode_1.json", "edits": {item_id: edits}},
         )
 
+        if content_mode == "drama" and generation_mode == "reference_video":
+            assert out.get("is_error") is not True
+            assert _load(tool_ctx)[kind][0]["text"] == edits["text"]
+            assert _load(tool_ctx)[kind][0].get("needs_replan") is not True
+            return
         assert out.get("is_error") is True
         detail = out["speech_admission"]
         assert detail["unit_id"] == item_id

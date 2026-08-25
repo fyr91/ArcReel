@@ -280,7 +280,12 @@ def resolve_reference_batch_targets(
     return targets, selection, states
 
 
-def reference_unit_task_spec(unit: object, script_file: str) -> TaskSpec:
+def reference_unit_task_spec(
+    unit: object,
+    script_file: str,
+    *,
+    content_mode: str | None = None,
+) -> TaskSpec:
     """单 unit 的 TaskSpec 构造，供批量准入、批量入队与时长预检共用同一份结构校验
     （见 ADR-0001）——``TaskSpec.from_request`` 是「是否可入队」的唯一真相源，几处判断
     不能各自维护一份、由此产生分歧（如预检放行了入队会拒绝的空提示词 unit）。
@@ -292,7 +297,7 @@ def reference_unit_task_spec(unit: object, script_file: str) -> TaskSpec:
         raise ValueError("unit 必须是对象")
     unit_id = str(unit.get("unit_id") or "")
     if unit.get("needs_replan") is True:
-        require_script_unit_admitted("video_units", unit)
+        require_script_unit_admitted("video_units", unit, content_mode=content_mode)
     text = unit.get("text")
     if not isinstance(text, str):
         # 容器校验落在入队校验这一处：脏值（导入 / Agent 裸写 script 产生的 dict、数字）
@@ -308,7 +313,7 @@ def reference_unit_task_spec(unit: object, script_file: str) -> TaskSpec:
         prompt=text,
         script_file=script_file,
     )
-    require_script_unit_admitted("video_units", unit)
+    require_script_unit_admitted("video_units", unit, content_mode=content_mode)
     return spec
 
 

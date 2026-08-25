@@ -127,6 +127,16 @@ def test_optimizer_user_prompt_includes_unified_video_style_rules() -> None:
     assert "non_diegetic_music as N/A" in prompt
 
 
+def test_optimizer_user_prompt_preserves_drama_dialogue_and_voiceover_without_extra_markers() -> None:
+    text = "@[阿离]：{快走。}\n{风吹过旷野。}"
+    prompt = _optimizer_user_prompt({"unit": {"unit_id": "E1U01", "text": text}})
+
+    assert "@[阿离]：{快走。}" in prompt
+    assert "{风吹过旷野。}" in prompt
+    assert "Background Voice" not in prompt
+    assert "(S1)" not in prompt
+
+
 def test_parser_requires_six_ordered_sections_and_valid_request_facts() -> None:
     sections = parse_h3_prompt(_prompt(), duration_seconds=8, picture_count=1, audio_count=1)
     assert list(sections.model_dump()) == [

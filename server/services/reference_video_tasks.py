@@ -362,7 +362,10 @@ async def execute_reference_video_task(
         unit = next((u for u in units if isinstance(u, dict) and u.get("unit_id") == resource_id), None)
         if unit is None:
             raise ValueError(f"unit not found: {resource_id}")
-        if video_unit_replan_problems(unit):
+        if video_unit_replan_problems(
+            unit,
+            content_mode=script.get("content_mode") or project.get("content_mode"),
+        ):
             raise ValueError(f"unit needs replanning: {resource_id}")
         return project, project_path, script, unit, script_input
 
@@ -657,7 +660,11 @@ async def execute_reference_video_task(
     checkpoint_hook: Callable[[int], Awaitable[Mapping[str, object] | None]] | None = None
     if task_id is not None:
         artifact_episode = script_input.episode
-        artifact_speech_preparation = admit_script_unit("video_units", unit).preparation
+        artifact_speech_preparation = admit_script_unit(
+            "video_units",
+            unit,
+            content_mode=script.get("content_mode") or project.get("content_mode"),
+        ).preparation
         artifact_duration_basis = build_video_duration_basis(effective_duration)
         image_inputs = tuple(
             ProviderMediaInput(

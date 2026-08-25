@@ -35,6 +35,7 @@ from lib.script_skeleton import (
     SKELETONS,
     resolve_kind_items,
 )
+from lib.speech_composition import video_unit_replan_problems
 from server.sse_channel import IDLE, DropSubscriber, SseChannel
 
 logger = logging.getLogger(__name__)
@@ -773,7 +774,11 @@ class ProjectEventService:
             characters, scenes, props, products = self._item_entities(item, chars_field)
             items[item_id] = {
                 "duration_seconds": item.get("duration_seconds"),
-                "needs_replan": bool(item.get("needs_replan")),
+                "needs_replan": (
+                    bool(video_unit_replan_problems(item, content_mode=content_mode))
+                    if kind == "video_units"
+                    else bool(item.get("needs_replan"))
+                ),
                 "segment_break": bool(item.get("segment_break")),
                 "characters": characters,
                 "scenes": scenes,

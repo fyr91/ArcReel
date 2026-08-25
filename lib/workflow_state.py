@@ -39,6 +39,7 @@ from lib.project_migration_failure import (
 from lib.script_models import get_generated_assets, script_duration_total
 from lib.script_skeleton import SKELETONS, STORYBOARD_ITEM_ID_PATTERN, ensure_route_skeleton, resolve_kind_items
 from lib.source_revision import SourceRevisionResult, SourceScope, compute_source_revision
+from lib.speech_composition import video_unit_replan_problems
 from lib.version_manager import VersionManager
 from lib.workflow_rules import workflow_rule
 
@@ -809,6 +810,7 @@ class WorkflowStateService:
         episode: int,
         resolver: ArtifactCurrencyResolver | None,
         blockers: list[WorkflowBlocker],
+        content_mode: str | None = None,
         manual_video_versions: VersionManager | None = None,
         manual_video_resource_type: str | None = None,
     ) -> dict[str, Any]:
@@ -820,7 +822,7 @@ class WorkflowStateService:
             resource_id = item.get(id_field)
             if not isinstance(resource_id, str) or not resource_id:
                 continue
-            if kind == "video_units" and item.get("needs_replan") is True:
+            if kind == "video_units" and video_unit_replan_problems(item, content_mode=content_mode):
                 collection["stale_ids"].append(resource_id)
                 continue
             artifact_path = get_generated_assets(item).get(field)
@@ -965,6 +967,7 @@ class WorkflowStateService:
                     episode=number,
                     resolver=currency,
                     blockers=[],
+                    content_mode=project.get("content_mode"),
                 ),
                 total=len(items),
             )
@@ -980,6 +983,7 @@ class WorkflowStateService:
                 episode=number,
                 resolver=currency,
                 blockers=[],
+                content_mode=project.get("content_mode"),
                 manual_video_versions=VersionManager(project_path) if currency is not None else None,
                 manual_video_resource_type=(
                     "reference_videos" if project.get("generation_mode") == "reference_video" else "videos"
@@ -1511,6 +1515,7 @@ class WorkflowStateService:
                                 episode=target.episode,
                                 resolver=currency,
                                 blockers=blockers,
+                                content_mode=mode,
                             )
                             if generation_mode == "storyboard"
                             else _not_applicable_collection()
@@ -1523,6 +1528,7 @@ class WorkflowStateService:
                             episode=target.episode,
                             resolver=currency,
                             blockers=blockers,
+                            content_mode=mode,
                             manual_video_versions=VersionManager(project_path) if currency is not None else None,
                             manual_video_resource_type=(
                                 "reference_videos" if generation_mode == "reference_video" else "videos"
@@ -1544,6 +1550,7 @@ class WorkflowStateService:
                                 episode=target.episode,
                                 resolver=currency,
                                 blockers=audio_blockers,
+                                content_mode=mode,
                             )
                             if mode == "narration" and generation_mode == "storyboard"
                             else _not_applicable_collection()
@@ -1563,7 +1570,8 @@ class WorkflowStateService:
                         elif replan_ids := [
                             str(item.get(SKELETONS[kind].id_field))
                             for item in items
-                            if kind == "video_units" and item.get("needs_replan") is True
+                            if kind == "video_units"
+                            and video_unit_replan_problems(item, content_mode=mode)
                         ]:
                             state = "VIDEO"
                             next_action = _action(

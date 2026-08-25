@@ -121,7 +121,11 @@ def build_current_video_artifact_basis(
     )
     if item is None:
         return None
-    admission = admit_script_unit(kind, item)
+    admission = admit_script_unit(
+        kind,
+        item,
+        content_mode=script.get("content_mode") or project.get("content_mode"),
+    )
     if not admission.allowed:
         return None
 

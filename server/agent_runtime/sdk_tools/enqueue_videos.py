@@ -677,6 +677,7 @@ def _build_reference_specs(
     units: list[Any],
     script_filename: str,
     skip_ids: list[str] | None,
+    content_mode: str | None = None,
 ) -> tuple[list[TaskSpec], dict[str, int], list[UnitAdmissionTicket]]:
     """Build the reference-route specs, refusing each unit that cannot be requested."""
 
@@ -693,7 +694,7 @@ def _build_reference_specs(
         # 裸 ValueError）都记为受阻，不让一个坏 unit 中断整批。TaskSpecValidationError
         # 是 ValueError 子类，捕 ValueError 同时覆盖两者。
         try:
-            spec = reference_unit_task_spec(unit, script_filename)
+            spec = reference_unit_task_spec(unit, script_filename, content_mode=content_mode)
         except SpeechAdmissionError as exc:
             refused.append(speech_admission_ticket(unit_id, exc))
             continue
@@ -865,7 +866,10 @@ async def _generate_reference_units(
             continue
         candidate = output_dir / f"{unit_id}.mp4"
         reusable = False
-        if candidate.exists() and not video_unit_replan_problems(unit):
+        if candidate.exists() and not video_unit_replan_problems(
+            unit,
+            content_mode=script.get("content_mode") or project.get("content_mode"),
+        ):
             try:
                 reusable = reuse_existing(unit)
             except ArtifactManifestError:
@@ -1003,7 +1007,12 @@ async def _run_reference_batch(
         states=states,
         resolver=currency,
         checkpoint_path=checkpoint_path,
-        build_specs=lambda u, skip: _build_reference_specs(units=u, script_filename=script_filename, skip_ids=skip),
+        build_specs=lambda u, skip: _build_reference_specs(
+            units=u,
+            script_filename=script_filename,
+            skip_ids=skip,
+            content_mode=script.get("content_mode") or project.get("content_mode"),
+        ),
         project=project,
         script=script,
         script_filename=script_filename,

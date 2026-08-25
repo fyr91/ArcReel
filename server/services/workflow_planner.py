@@ -163,7 +163,11 @@ class WorkflowPlanner:
             return []
         problems = []
         for item in facts.items:
-            admission = admit_script_unit(facts.kind, item)
+            admission = admit_script_unit(
+                facts.kind,
+                item,
+                content_mode=facts.script.get("content_mode") or facts.project.get("content_mode"),
+            )
             problems.extend(speech_admission_problems(admission))
         return problems
 
@@ -312,7 +316,11 @@ class WorkflowPlanner:
                 operation=status.next_action.type,
                 selection=selection.mode,
                 confirmed_request_durations=request.confirmed_request_durations,
-                spec_check=lambda unit: reference_unit_task_spec(unit, facts.script_file),
+                spec_check=lambda unit: reference_unit_task_spec(
+                    unit,
+                    facts.script_file,
+                    content_mode=facts.script.get("content_mode") or facts.project.get("content_mode"),
+                ),
                 extra_tickets=extra,
             )
             return admission.to_payload()

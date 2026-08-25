@@ -806,7 +806,14 @@ class CostEstimationService:
 
             # text 非字符串（如裸写 "text": true/1）同样不能让单条脏数据中断整次估算。
             text = unit.get("text")
-            enqueueable = isinstance(text, str) and bool(text.strip()) and not video_unit_replan_problems(unit)
+            enqueueable = (
+                isinstance(text, str)
+                and bool(text.strip())
+                and not video_unit_replan_problems(
+                    unit,
+                    content_mode=script.get("content_mode") or project.get("content_mode"),
+                )
+            )
 
             est_video: CostBreakdown = {}
             request_quote: VideoRequestQuote | None = None

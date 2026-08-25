@@ -13,6 +13,7 @@ from lib.reference_video.request_projection import (
     ReferenceRequestOptions,
     ReferenceUnitRequestProjector,
     ResolvedReferenceAsset,
+    materialize_current_reference_request_options,
     resolve_reference_assets,
     unit_reference_declarations,
 )
@@ -442,6 +443,32 @@ async def test_projection_carries_shared_narration_delivery_blockers() -> None:
         "action": "configure_tts",
     }
     assert result.to_advisory_payload()["narration_delivery"] == delivery.to_payload()
+
+
+@pytest.mark.asyncio
+async def test_drama_reference_voiceover_never_enters_the_tts_resolution_lane(tmp_path: Path) -> None:
+    class _NoTtsResolver:
+        async def resolve_tts_synthesis_settings(self, _project):
+            raise AssertionError("Drama provider speech must not resolve TTS")
+
+    unit = {
+        "unit_id": "E1U1",
+        "text": "@[阿离]：{快走。}\n{风吹过旷野。}",
+        "duration_seconds": 8,
+    }
+    result = await materialize_current_reference_request_options(
+        project={"content_mode": "drama"},
+        script={"episode": 1, "content_mode": "drama", "video_units": [unit]},
+        unit=unit,
+        project_path=tmp_path,
+        options=ReferenceRequestOptions(narration_delivery=USE_TTS),
+        resolver=_NoTtsResolver(),
+        episode=1,
+    )
+
+    assert result.narration_preparation is not None
+    assert result.narration_preparation.tts_status.value == "not_applicable"
+    assert [problem.code for problem in result.narration_preparation.problems] == ["tts_not_applicable"]
 
 
 @pytest.mark.asyncio

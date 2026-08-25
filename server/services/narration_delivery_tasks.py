@@ -460,7 +460,11 @@ async def prepare_current_storyboard_narrated_video_duration(
         planned = configured if isinstance(configured, int) and not isinstance(configured, bool) else None
     if planned is None or planned <= 0:
         planned = candidate.supported_durations[0]
-    preparation = admit_script_unit(resolve_script_kind(script), item).preparation
+    preparation = admit_script_unit(
+        resolve_script_kind(script),
+        item,
+        content_mode=script.get("content_mode") or project.get("content_mode"),
+    ).preparation
     active = tts_in_progress
     if active is None:
         active = await tts_task_in_progress(
@@ -927,7 +931,16 @@ async def _prepare_current_task_narration_delivery(
             script=script,
             script_filename=script_file,
         ) or ProjectManager.resolve_episode_from_script(script, script_file)
-        return project, project_path, episode, admit_script_unit(kind, item).preparation
+        return (
+            project,
+            project_path,
+            episode,
+            admit_script_unit(
+                kind,
+                item,
+                content_mode=script.get("content_mode") or project.get("content_mode"),
+            ).preparation,
+        )
 
     project, project_path, episode, preparation = await asyncio.to_thread(_load)
     return await prepare_current_narration_delivery(

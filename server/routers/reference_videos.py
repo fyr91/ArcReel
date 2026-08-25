@@ -350,10 +350,21 @@ def _build_unit_dict(
     return unit
 
 
-def _require_unit_ready(unit: dict, *, ignore_marker: bool = False, allow_blank_draft: bool = False) -> None:
+def _require_unit_ready(
+    unit: dict,
+    *,
+    content_mode: str | None = None,
+    ignore_marker: bool = False,
+    allow_blank_draft: bool = False,
+) -> None:
     if allow_blank_draft and not str(unit.get("text") or "").strip():
         return
-    admission = admit_script_unit("video_units", unit, ignore_marker=ignore_marker)
+    admission = admit_script_unit(
+        "video_units",
+        unit,
+        ignore_marker=ignore_marker,
+        content_mode=content_mode,
+    )
     if not admission.allowed:
         raise HTTPException(status_code=409, detail=admission.to_dict())
 
@@ -799,7 +810,7 @@ async def precheck_unit_duration(
     """
     project, script, script_file = _load_episode_script(project_name, episode, _t)
     unit = _find_unit(script, unit_id, _t)
-    _require_unit_ready(unit)
+    _require_unit_ready(unit, content_mode=script.get("content_mode") or project.get("content_mode"))
     tts_in_progress = (
         await tts_task_in_progress(
             project_name=project_name,
@@ -988,7 +999,7 @@ async def generate_unit(
 ) -> dict[str, Any]:
     project, script, script_file = _load_episode_script(project_name, episode, _t)
     unit = _find_unit(script, unit_id, _t)  # raises 404 if missing
-    _require_unit_ready(unit)
+    _require_unit_ready(unit, content_mode=script.get("content_mode") or project.get("content_mode"))
     guard_prompt = str(unit.get("text") or "")
     request_options = (req or GenerateUnitRequest()).projection_options()
     tts_in_progress = (
@@ -1163,7 +1174,11 @@ async def generate_units_batch(
             GenerationSelectionMode.EXPLICIT if requested_ids is not None else GenerationSelectionMode.MISSING_ONLY
         ),
         confirmed_request_durations=body.confirmed_request_durations,
-        spec_check=lambda unit: reference_unit_task_spec(unit, script_file),
+        spec_check=lambda unit: reference_unit_task_spec(
+            unit,
+            script_file,
+            content_mode=script.get("content_mode") or project.get("content_mode"),
+        ),
         # 产物状态不可读的 unit 被选目标环节排除在外，但它属于这次请求：不带进准入，
         # 同批健康的 unit 会照常入队，剩下这一个被无声略过。
         extra_tickets=[*unmatched, *malformed, *artifact_state_tickets(selection.unavailable)],
@@ -1177,7 +1192,14 @@ async def generate_units_batch(
         payload["deduped"] = False
         return payload
 
-    specs = [reference_unit_task_spec(unit, script_file) for unit in targets]
+    specs = [
+        reference_unit_task_spec(
+            unit,
+            script_file,
+            content_mode=script.get("content_mode") or project.get("content_mode"),
+        )
+        for unit in targets
+    ]
     for spec in specs:
         spec.source = "webui"
         # 确认过的档位按 unit 记进请求事实：它是本次请求的一部分，而不是全批共用的一个值。

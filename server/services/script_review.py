@@ -51,7 +51,13 @@ class ScriptReviewError(Exception):
         self.admission = admission
 
 
-def _require_changed_speech_admitted(kind: str, previous: object, candidate: object) -> None:
+def _require_changed_speech_admitted(
+    kind: str,
+    previous: object,
+    candidate: object,
+    *,
+    content_mode: str | None = None,
+) -> None:
     """Reject only new or edited speech content, leaving legacy mixed metadata editable."""
 
     if kind == "drama":
@@ -77,7 +83,12 @@ def _require_changed_speech_admitted(kind: str, previous: object, candidate: obj
             if isinstance(old, dict) and old.get("needs_replan") is True:
                 unit["needs_replan"] = True
             continue
-        admission = admit_script_unit(skeleton, unit, ignore_marker=True)
+        admission = admit_script_unit(
+            skeleton,
+            unit,
+            ignore_marker=True,
+            content_mode=content_mode,
+        )
         if not admission.allowed:
             raise ScriptReviewError("speech_admission", admission=admission)
         unit.pop("needs_replan", None)
@@ -404,7 +415,12 @@ class ScriptReviewService:
         try:
             validated = model.model_validate(content).model_dump()
         except ValidationError as exc:
-            _require_changed_speech_admitted(kind, _read_json(path), content)
+            _require_changed_speech_admitted(
+                kind,
+                _read_json(path),
+                content,
+                content_mode=project.get("content_mode"),
+            )
             raise ScriptReviewError("invalid_content", str(exc)) from exc
         if kind == "drama":
             for scene in validated["scenes"]:
@@ -417,7 +433,12 @@ class ScriptReviewService:
             if kind == "reference_video":
                 # 写盘经单一出口：锁、基线比对、step2 隔离草稿清理都在 write_step1_locked 一处。
                 with script_review.step1_write_lock(project_path, episode):
-                    _require_changed_speech_admitted(kind, _read_json(path), validated)
+                    _require_changed_speech_admitted(
+                        kind,
+                        _read_json(path),
+                        validated,
+                        content_mode=project.get("content_mode"),
+                    )
                     script_review.write_step1_locked(project_path, episode, validated, expected_fingerprint=expected)
             else:
                 # 与 _read_step1_migrated 共享同一把 per-path 锁：保存与迁移的读改写相互互斥。
@@ -426,7 +447,12 @@ class ScriptReviewService:
                 # 比对既已在此做过，落盘出口不再重复比对（默认 UNCHECKED）。
                 with script_review.formal_step1_lock(project_path, episode, path):
                     script_review.assert_base_fingerprint(path, expected)
-                    _require_changed_speech_admitted(kind, _read_json(path), validated)
+                    _require_changed_speech_admitted(
+                        kind,
+                        _read_json(path),
+                        validated,
+                        content_mode=project.get("content_mode"),
+                    )
                     script_review.write_formal_step1_locked(project_path, episode, path, validated)
         except script_review.Step1WriteConflict as exc:
             raise ScriptReviewError("conflict", str(exc)) from exc
@@ -490,16 +516,27 @@ class ScriptReviewService:
                 for unit in validated.model_dump()[root]:
                     if unit.get("needs_replan") is not True:
                         continue
-                    admission = admit_script_unit(skeleton, unit)
-                    raise ScriptReviewError("speech_admission", admission=admission)
+                    admission = admit_script_unit(
+                        skeleton,
+                        unit,
+                        content_mode=project.get("content_mode"),
+                    )
+                    if not admission.allowed:
+                        raise ScriptReviewError("speech_admission", admission=admission)
+                    unit.pop("needs_replan", None)
 
             if kind == "reference_video":
                 # 指纹按刚写盘的这份对象直接算，确认记录与实际写入内容一致。
                 dumped = validated.model_dump()
                 for unit in dumped["units"]:
-                    admission = admit_script_unit("video_units", unit)
+                    admission = admit_script_unit(
+                        "video_units",
+                        unit,
+                        content_mode=project.get("content_mode"),
+                    )
                     if not admission.allowed:
                         raise ScriptReviewError("speech_admission", admission=admission)
+                    unit.pop("needs_replan", None)
                 # 单一写盘出口（已持同一把 per-path 锁，不再套 step1_write_lock）；同临界区
                 # 读改写无并发窗口，不做基线比对。内容真的变了时，step2 隔离草稿的基底随之
                 # 失效，由出口按变更清理。

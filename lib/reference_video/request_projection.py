@@ -889,7 +889,11 @@ async def materialize_current_reference_request_options(
         )
     if not isinstance(episode, int) or isinstance(episode, bool):
         raise ValueError("reference video script requires an integer episode for TTS delivery")
-    admission = admit_script_unit("video_units", unit)
+    admission = admit_script_unit(
+        "video_units",
+        unit,
+        content_mode=script.get("content_mode") or project.get("content_mode"),
+    )
     preparation = await prepare_current_narration_delivery(
         project=project,
         episode=episode,

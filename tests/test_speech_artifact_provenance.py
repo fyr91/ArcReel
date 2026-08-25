@@ -94,6 +94,28 @@ def test_character_video_speech_basis_tracks_ordered_text_speaker_and_used_voice
     )
 
 
+def test_character_video_speech_basis_tracks_speakerless_drama_dialogue_without_voice_profile() -> None:
+    basis = build_video_speech_basis(
+        _character_speech(("阿离", "快走。"), (None, "风吹过旷野。")),
+        voices=(CharacterVoiceEvidence(speaker="阿离", voice_style="清亮"),),
+    )
+
+    assert basis.to_evidence_dict()["inputs"] == {
+        "mode": "character_speech",
+        "utterances": [
+            {"speaker": "阿离", "text": "快走。"},
+            {"speaker": None, "text": "风吹过旷野。"},
+        ],
+        "voices": [
+            {
+                "speaker": "阿离",
+                "voice_style": "清亮",
+                "reference_audio_digest": None,
+            }
+        ],
+    }
+
+
 def test_character_video_speech_basis_ignores_unreferenced_character_voice() -> None:
     preparation = _character_speech(("阿离", "快走。"))
     baseline = build_video_speech_basis(

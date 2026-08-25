@@ -4737,7 +4737,11 @@ async def test_generate_video_episode_storyboard_batch_blocks_on_mixed_speech(
 
 
 @pytest.mark.unit
-@pytest.mark.parametrize("case", SPEECH_CONTRACT_CASES, ids=lambda case: case.route_id)
+@pytest.mark.parametrize(
+    "case",
+    [case for case in SPEECH_CONTRACT_CASES if case.route_id != "drama-reference_video"],
+    ids=lambda case: case.route_id,
+)
 async def test_six_route_agent_single_video_generation_returns_structured_admission_without_enqueuing(
     fake_ctx: ToolContext,
     monkeypatch,

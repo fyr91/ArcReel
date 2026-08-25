@@ -518,19 +518,18 @@ class TestReferenceVideoGateFlow:
         assert json.loads(path.read_text(encoding="utf-8"))["units"][0]["text"] == "@[酒馆] 的木门被风吹开。"
 
     @pytest.mark.unit
-    async def test_confirm_rejects_speech_problem_in_an_unmarked_unit(self, tmp_path):
-        """发声准入对全部 unit 生效，不只对标了 needs_replan 的那些：一个 unit 里既有人物
-        台词又有无归属旁白，两条音轨在同一段视频上无从叠加，须在确认这一关就拒。"""
+    async def test_confirm_allows_drama_dialogue_and_voiceover_in_one_reference_unit(self, tmp_path):
+        """Drama 的命名台词与匿名背景声音共用供应商发声通道，不进入独立旁白链。"""
         pm = _make_project(tmp_path, "drama", generation_mode="reference_video")
         svc = ScriptReviewService(pm)
         candidate = _rv_step1()
         candidate["units"][0]["text"] = "@[阿离] 立于屋檐下。@[阿离]{雨要停了。}\n{雨声渐歇。}"
         _write_rv_step1(pm, candidate)
 
-        with pytest.raises(ScriptReviewError) as exc:
-            await svc.confirm("demo", 1)
+        confirmed = await svc.confirm("demo", 1)
 
-        assert exc.value.code == "speech_admission"
+        assert confirmed["status"] == "confirmed"
+        assert confirmed["content"]["units"][0]["text"].endswith("@[阿离]{雨要停了。}\n{雨声渐歇。}")
 
     @pytest.mark.integration
     async def test_reference_duration_tiers_narrows_raw_set_by_resolution_constraint(self, tmp_path, monkeypatch):

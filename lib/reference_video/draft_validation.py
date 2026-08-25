@@ -272,7 +272,11 @@ def validate_unit_text(
             label=label,
         )
     canonical_unit_id = unit_id if unit_id is not None else label.removeprefix("unit ").strip()
-    admission = admit_script_unit("video_units", {"unit_id": canonical_unit_id, "text": text})
+    admission = admit_script_unit(
+        "video_units",
+        {"unit_id": canonical_unit_id, "text": text},
+        content_mode=project.get("content_mode"),
+    )
     if not admission.allowed:
         raise DraftViolations([_speech_problem_violation(problem) for problem in admission.problems])
     return refs

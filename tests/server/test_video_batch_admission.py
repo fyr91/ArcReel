@@ -19,8 +19,13 @@ from lib.narration_delivery import (
     prepare_narrated_video_duration,
 )
 from lib.reference_video.request_projection import ReferenceRequestOptions
+from lib.speech_composition import SpeechAdmissionError
 from server.services import video_batch_admission as admission_mod
-from server.services.video_batch_admission import admit_reference_video_batch, admit_storyboard_video_batch
+from server.services.video_batch_admission import (
+    admit_reference_video_batch,
+    admit_storyboard_video_batch,
+    reference_unit_task_spec,
+)
 
 pytestmark = pytest.mark.unit
 
@@ -67,6 +72,19 @@ def _preparation(*, problems=(), tts_status=NarrationTtsStatus.CURRENT, actual=9
         supported_durations=(4, 8, 12),
         confirmed_request_duration_seconds=None,
     )
+
+
+def test_reference_task_spec_treats_drama_voiceover_as_dialogue_without_relaxing_other_modes() -> None:
+    unit = {
+        "unit_id": "E1U01",
+        "duration_seconds": 6,
+        "text": "@[阿离]：{快走。}\n{风吹过旷野。}",
+    }
+
+    assert reference_unit_task_spec(unit, "episode_1.json", content_mode="drama").resource_id == "E1U01"
+    for content_mode in ("narration", "ad"):
+        with pytest.raises(SpeechAdmissionError):
+            reference_unit_task_spec(unit, "episode_1.json", content_mode=content_mode)
 
 
 async def test_storyboard_post_production_admits_without_consulting_tts(monkeypatch, tmp_path: Path):

@@ -26,7 +26,15 @@ pytestmark = pytest.mark.unit
 def test_six_content_route_combinations_share_one_structured_speech_admission(
     case: SpeechContractCase,
 ) -> None:
-    admission = admit_script_unit(case.kind, case.unit())
+    admission = admit_script_unit(case.kind, case.unit(), content_mode=case.content_mode)
+    if case.route_id == "drama-reference_video":
+        assert admission.allowed is True
+        assert admission.mode is SpeechMode.CHARACTER_SPEECH
+        assert [(item.owner, item.speaker, item.text) for item in admission.preparation.utterances] == [
+            (SpeechOwner.CHARACTER, "阿离", "快走。"),
+            (SpeechOwner.CHARACTER, None, "风吹过旷野。"),
+        ]
+        return
     expected_locations = tuple(SpeechFieldLocation(path) for path in case.expected_locations)
     if case.generation_mode == "reference_video":
         expected_locations = tuple(
@@ -45,6 +53,33 @@ def test_six_content_route_combinations_share_one_structured_speech_admission(
             expected_locations,
         )
     ]
+
+
+def test_drama_reference_legacy_mixed_marker_is_ignored_only_for_dialogue_plus_voiceover() -> None:
+    admission = admit_script_unit(
+        "video_units",
+        {
+            "unit_id": "E2U03",
+            "needs_replan": True,
+            "text": "@[阿离]：{快走。}\n{风吹过旷野。}",
+        },
+        content_mode="drama",
+    )
+
+    assert admission.allowed is True
+    assert admission.mode is SpeechMode.CHARACTER_SPEECH
+
+
+@pytest.mark.parametrize("content_mode", ["narration", "ad"])
+def test_non_drama_reference_dialogue_plus_voiceover_remains_blocked(content_mode: str) -> None:
+    admission = admit_script_unit(
+        "video_units",
+        {"unit_id": "E2U03", "text": "@[阿离]：{快走。}\n{风吹过旷野。}"},
+        content_mode=content_mode,
+    )
+
+    assert admission.allowed is False
+    assert [problem.code for problem in admission.problems] == [SpeechProblemCode.MIXED_SPEECH]
 
 
 def test_speech_admission_serializes_stable_problem_codes_and_locations() -> None:

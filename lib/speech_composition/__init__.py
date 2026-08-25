@@ -170,14 +170,22 @@ class SpeechComposition:
     """Derive unit-wide speech facts from a content-neutral snapshot."""
 
     @staticmethod
-    def prepare(snapshot: SpeechUnitSnapshot) -> SpeechPreparation:
+    def prepare(
+        snapshot: SpeechUnitSnapshot,
+        *,
+        speakerless_as_dialogue: bool = False,
+    ) -> SpeechPreparation:
         problems = list(snapshot.problems)
         utterances: list[SpeechUtterance] = []
         for entry in snapshot.entries:
             speaker = entry.speaker.strip() if isinstance(entry.speaker, str) else ""
             if entry.speaker_required and not speaker:
                 problems.append(_empty_speaker_problem(snapshot.unit_id, entry.location))
-            owner = SpeechOwner.CHARACTER if speaker or entry.speaker_required else SpeechOwner.NARRATOR
+            owner = (
+                SpeechOwner.CHARACTER
+                if speaker or entry.speaker_required or speakerless_as_dialogue
+                else SpeechOwner.NARRATOR
+            )
             utterances.append(
                 SpeechUtterance(
                     owner=owner,
@@ -516,6 +524,7 @@ def admit_script_unit(
     unit: Mapping[str, object],
     *,
     ignore_marker: bool = False,
+    content_mode: str | None = None,
 ) -> SpeechAdmission:
     """Evaluate one script unit through the adapter registered for its skeleton."""
 
@@ -526,7 +535,22 @@ def admit_script_unit(
     source = dict(unit)
     if ignore_marker:
         source.pop("needs_replan", None)
-    return SpeechAdmission(SpeechComposition.prepare(adapter(source)))
+    speakerless_as_dialogue = skeleton_kind == "video_units" and content_mode == "drama"
+    if speakerless_as_dialogue and source.get("needs_replan") is True:
+        # Older Drama reference units were marked only because Dialogue + VoiceOver
+        # was classified as mixed speech.  Clear that legacy marker for this one
+        # mechanically identifiable case while preserving every other replan reason.
+        unmarked = dict(source)
+        unmarked.pop("needs_replan", None)
+        legacy = SpeechComposition.prepare(adapter(unmarked))
+        if {problem.code for problem in legacy.problems} == {SpeechProblemCode.MIXED_SPEECH}:
+            source = unmarked
+    return SpeechAdmission(
+        SpeechComposition.prepare(
+            adapter(source),
+            speakerless_as_dialogue=speakerless_as_dialogue,
+        )
+    )
 
 
 def require_script_unit_admitted(
@@ -534,10 +558,16 @@ def require_script_unit_admitted(
     unit: Mapping[str, object],
     *,
     ignore_marker: bool = False,
+    content_mode: str | None = None,
 ) -> SpeechAdmission:
     """Return admission or raise a structured blocker before any side effect."""
 
-    admission = admit_script_unit(skeleton_kind, unit, ignore_marker=ignore_marker)
+    admission = admit_script_unit(
+        skeleton_kind,
+        unit,
+        ignore_marker=ignore_marker,
+        content_mode=content_mode,
+    )
     if not admission.allowed:
         raise SpeechAdmissionError(admission)
     return admission
@@ -547,19 +577,26 @@ def video_unit_replan_problems(
     unit: Mapping[str, object],
     *,
     ignore_marker: bool = False,
+    content_mode: str | None = None,
 ) -> tuple[SpeechProblem, ...]:
     """Return the shared planning blockers for a self-contained video unit.
 
     ``ignore_marker`` is for repair flows that must evaluate the edited content without
     letting the durable ``needs_replan`` marker make itself impossible to clear.
     """
-    return admit_script_unit("video_units", unit, ignore_marker=ignore_marker).problems
+    return admit_script_unit(
+        "video_units",
+        unit,
+        ignore_marker=ignore_marker,
+        content_mode=content_mode,
+    ).problems
 
 
 def refresh_video_unit_replan_state(
     unit: dict[str, object],
     *,
     allow_clear: bool = True,
+    content_mode: str | None = None,
 ) -> None:
     """Refresh ``needs_replan`` after a planning edit."""
     duration = unit.get("duration_seconds")
@@ -573,7 +610,7 @@ def refresh_video_unit_replan_state(
     ):
         unit["needs_replan"] = True
         return
-    if video_unit_replan_problems(unit, ignore_marker=True):
+    if video_unit_replan_problems(unit, ignore_marker=True, content_mode=content_mode):
         unit["needs_replan"] = True
     elif allow_clear:
         unit.pop("needs_replan", None)

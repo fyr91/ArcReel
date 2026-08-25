@@ -567,7 +567,7 @@ def _admission_for(script: dict[str, Any], item_id: str) -> SpeechAdmission | No
     items, id_field, kind = resolve_items(script)
     for item in items:
         if isinstance(item, dict) and str(item.get(id_field)) == item_id:
-            return admit_script_unit(kind, item)
+            return admit_script_unit(kind, item, content_mode=script.get("content_mode"))
     return None
 
 
@@ -585,7 +585,12 @@ def _apply_operation(
         except ScriptEditError as exc:
             raise _OperationApplyError(str(exc), location=("id",)) from exc
         item = items[item_index]
-        before_content_admission = admit_script_unit(kind, item, ignore_marker=True)
+        before_content_admission = admit_script_unit(
+            kind,
+            item,
+            ignore_marker=True,
+            content_mode=script.get("content_mode"),
+        )
         for field, value in operation.fields.items():
             try:
                 patch_field(script, item_id, field, value)
@@ -597,9 +602,14 @@ def _apply_operation(
         roots = {field.split(".", 1)[0] for field in operation.fields}
         if kind == "video_units":
             if roots & {"text", "duration_seconds"}:
-                refresh_video_unit_replan_state(item)
+                refresh_video_unit_replan_state(item, content_mode=script.get("content_mode"))
         else:
-            after_content_admission = admit_script_unit(kind, item, ignore_marker=True)
+            after_content_admission = admit_script_unit(
+                kind,
+                item,
+                ignore_marker=True,
+                content_mode=script.get("content_mode"),
+            )
             if (
                 after_content_admission.preparation != before_content_admission.preparation
                 and after_content_admission.allowed
@@ -637,7 +647,7 @@ def _apply_operation(
             else:
                 item["end_frame_image"] = removed["end_frame_image"]
         if kind == "video_units":
-            refresh_video_unit_replan_state(item)
+            refresh_video_unit_replan_state(item, content_mode=script.get("content_mode"))
         items.insert(insert_at, item)
         return item_id, None, _admission_for(script, item_id)
 
@@ -674,7 +684,7 @@ def _apply_operation(
 def _admissions(script: dict[str, Any]) -> dict[str, SpeechAdmission]:
     items, id_field, kind = resolve_items(script)
     return {
-        str(item.get(id_field)): admit_script_unit(kind, item)
+        str(item.get(id_field)): admit_script_unit(kind, item, content_mode=script.get("content_mode"))
         for item in items
         if isinstance(item, dict) and isinstance(item.get(id_field), str)
     }

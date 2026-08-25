@@ -282,16 +282,19 @@ def _validate_speech_inputs(basis: ArtifactBasis) -> None:
         raise ValueError("character video speech basis requires utterances and voices")
     speaker_order: list[str] = []
     for utterance in utterances:
+        speaker = utterance.get("speaker") if isinstance(utterance, Mapping) else object()
         if (
             not isinstance(utterance, Mapping)
             or set(utterance) != {"speaker", "text"}
-            or not _nonempty(utterance["speaker"])
-            or asset_name_comparison_key(utterance["speaker"]) != utterance["speaker"]
+            or not (
+                speaker is None
+                or (_nonempty(speaker) and asset_name_comparison_key(speaker) == speaker)
+            )
             or not _nonempty(utterance["text"])
         ):
             raise ValueError("character video speech utterance is not canonical")
-        if utterance["speaker"] not in speaker_order:
-            speaker_order.append(utterance["speaker"])
+        if isinstance(speaker, str) and speaker not in speaker_order:
+            speaker_order.append(speaker)
     if len(voices) != len(speaker_order):
         raise ValueError("character video speech voices do not match ordered speakers")
     for speaker, voice in zip(speaker_order, voices, strict=True):
