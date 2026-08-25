@@ -77,9 +77,19 @@ cd frontend && pnpm install && cd ..
 ./scripts/dev.sh
 ```
 
-Open <http://localhost:5173> and sign in with the ArcReel username and password assigned by an administrator in the data middle platform. The production cloud account service is bundled, so no `.env` setup is required.
+Open <http://localhost:5173>. On first local startup, ArcReel creates `.env` from `.env.example` and defaults to the login-free release configuration import mode. If Agent, provider, or Supabase settings are missing, the app prompts you to drop the administrator-provided `.env.release` file. The local backend parses it in memory, writes secrets to the local configuration database, and never stores the uploaded file or commits it to Git.
 
-After signing in, ArcReel automatically retrieves the provider API keys assigned to that account, and the user can start creating projects.
+When a deployment enables the data middle platform account service, users instead sign in with the ArcReel credentials assigned by an administrator. ArcReel then retrieves the provider configuration assigned to that account automatically.
+
+Administrators can export a private bundle from an already configured ArcReel instance:
+
+```bash
+uv run python scripts/export_release_config.py --output .env.release
+```
+
+The exported file is created with `0600` permissions and is ignored by Git. Transfer it through a secure channel and never commit it to the repository.
+
+Projects created with release configuration default to MiniMax H3 at 480p for video, Seedream 5.0 Lite for image generation, and Nano Banana 2 Lite for Storyboards. DeepSeek V4 Pro is used for the default and complex text tiers, while MiniMax M3 is used for simple tasks. These values are persisted in the project and remain editable in Project Settings.
 
 For the complete first-run workflow, see [Getting Started](https://docs.arc-reel.com/en/guide/getting-started).
 

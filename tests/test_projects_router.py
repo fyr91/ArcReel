@@ -16,6 +16,15 @@ from lib.artifact_manifest import ArtifactKey, ArtifactManifestEntry, ProjectArt
 from lib.i18n.zh import errors as zh_errors
 from lib.project_change_hints import get_project_change_source
 from lib.project_manager import EmptySourceError, ProjectManager
+from lib.release_defaults import (
+    RELEASE_COMPLEX_TEXT_BACKEND,
+    RELEASE_IMAGE_BACKEND,
+    RELEASE_SIMPLE_TEXT_BACKEND,
+    RELEASE_STORYBOARD_IMAGE_BACKEND,
+    RELEASE_TEXT_BACKEND,
+    RELEASE_VIDEO_BACKEND,
+    RELEASE_VIDEO_RESOLUTION,
+)
 from lib.script_batch_edit import (
     InsertAfterOperation,
     MoveAfterOperation,
@@ -1831,6 +1840,31 @@ class TestProjectsRouter:
             assert data["text_backend_complex"] == "gemini-aistudio/gemini-2.5-pro"
             assert data["default_text_backend"] == "gemini-aistudio/gemini-2.5"
             assert data["default_duration"] == 8
+
+    @pytest.mark.unit
+    def test_create_project_uses_release_model_defaults(self, tmp_path, monkeypatch):
+        fake_pm = _FakePM(tmp_path)
+        client = _client(monkeypatch, fake_pm)
+
+        with client:
+            resp = client.post(
+                "/api/v1/projects",
+                json={
+                    "generation_mode": "storyboard",
+                    "title": "Release 默认项目",
+                    "name": "release-defaults",
+                },
+            )
+
+        assert resp.status_code == 200
+        data = fake_pm.project_data["release-defaults"]
+        assert data["video_backend"] == RELEASE_VIDEO_BACKEND
+        assert data["default_image_backend"] == RELEASE_IMAGE_BACKEND
+        assert data["image_provider_storyboard"] == RELEASE_STORYBOARD_IMAGE_BACKEND
+        assert data["default_text_backend"] == RELEASE_TEXT_BACKEND
+        assert data["text_backend_simple"] == RELEASE_SIMPLE_TEXT_BACKEND
+        assert data["text_backend_complex"] == RELEASE_COMPLEX_TEXT_BACKEND
+        assert data["model_settings"] == {RELEASE_VIDEO_BACKEND: {"resolution": RELEASE_VIDEO_RESOLUTION}}
 
     @pytest.mark.unit
     def test_create_project_with_image_default_layer(self, tmp_path, monkeypatch):

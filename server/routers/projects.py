@@ -45,6 +45,15 @@ from lib.json_io import domain_error_on_value_error
 from lib.profile_manifest import ContentMode
 from lib.project_change_hints import project_change_source
 from lib.project_manager import EmptySourceError, EpisodeScriptReboundError, SourceKind, get_project_manager
+from lib.release_defaults import (
+    RELEASE_COMPLEX_TEXT_BACKEND,
+    RELEASE_IMAGE_BACKEND,
+    RELEASE_SIMPLE_TEXT_BACKEND,
+    RELEASE_STORYBOARD_IMAGE_BACKEND,
+    RELEASE_TEXT_BACKEND,
+    RELEASE_VIDEO_BACKEND,
+    release_project_model_settings,
+)
 from lib.script_batch_edit import ScriptBatchEditCommand, ScriptBatchEditor, script_revision
 from lib.speech_rate import MAX_SPEECH_RATE_UPS, MIN_SPEECH_RATE_UPS, SPEECH_RATE_FIELD, is_valid_speech_rate
 from lib.style_templates import is_known_template, resolve_template_prompt
@@ -208,7 +217,7 @@ class CreateProjectRequest(BaseModel):
     style_description: str | None = None
     # 已保存自定义风格卡片的关联 ID；项目仍保存 description/image 快照。
     style_preset_id: str | None = None
-    video_backend: str | None = None
+    video_backend: str | None = RELEASE_VIDEO_BACKEND
     # 视频能力桶（docs/adr/0054）项目级覆盖：i2v = 图生视频 / 宫格，r2v = 参考生视频；
     # 空值 = 回退项目默认（video_backend）与全局层
     video_provider_i2v: str | None = None
@@ -219,13 +228,13 @@ class CreateProjectRequest(BaseModel):
     image_provider_i2i: str | None = None
     image_provider_asset: str | None = None
     image_provider_reference: str | None = None
-    image_provider_storyboard: str | None = None
+    image_provider_storyboard: str | None = RELEASE_STORYBOARD_IMAGE_BACKEND
     image_provider_keyframe: str | None = None
-    default_image_backend: str | None = None
+    default_image_backend: str | None = RELEASE_IMAGE_BACKEND
     # 文本任务档位（docs/adr/0051）项目级覆盖 + 项目默认模型；空值 = 继承全局
-    text_backend_simple: str | None = None
-    text_backend_complex: str | None = None
-    default_text_backend: str | None = None
+    text_backend_simple: str | None = RELEASE_SIMPLE_TEXT_BACKEND
+    text_backend_complex: str | None = RELEASE_COMPLEX_TEXT_BACKEND
+    default_text_backend: str | None = RELEASE_TEXT_BACKEND
     model_settings: dict[str, dict[str, str | None]] | None = None
 
 
@@ -664,6 +673,8 @@ async def create_project(
             extras = {field: value for field in _PROJECT_BACKEND_FIELDS if (value := getattr(req, field))}
             if req.model_settings is not None:
                 extras["model_settings"] = req.model_settings
+            elif req.video_backend == RELEASE_VIDEO_BACKEND:
+                extras["model_settings"] = release_project_model_settings()
             if not req.style_template_id and (style_description := (req.style_description or "").strip()):
                 extras["style_description"] = style_description
             if not req.style_template_id and req.style_preset_id:

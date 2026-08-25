@@ -77,9 +77,19 @@ cd frontend && pnpm install && cd ..
 ./scripts/dev.sh
 ```
 
-访问 <http://localhost:5173>，直接使用管理员在数据中台分配的 ArcReel 账号和密码登录。正式云端账号服务已内置，无需创建或修改 `.env`。
+访问 <http://localhost:5173>。本地首次启动会自动从 `.env.example` 创建 `.env`，默认使用无登录的 release 配置导入模式。当 Agent、渠道或 Supabase 配置缺失时，页面会提示拖入管理员提供的 `.env.release` 文件。配置文件只由本地后端在内存中解析，密钥会写入本地配置数据库，文件本身不会被保存或提交到 Git。
 
-登录后会自动获取管理员为该账号分配的供应商 API Key，然后即可创建项目开始制作。
+如果部署方启用数据中台账号服务，用户则使用管理员分配的 ArcReel 账号和密码登录；登录后会自动获取该账号的供应商配置。
+
+管理员可从已完成配置的 ArcReel 实例导出私有配置包：
+
+```bash
+uv run python scripts/export_release_config.py --output .env.release
+```
+
+导出的文件权限为 `0600` 且已被 Git ignore；请通过安全渠道交给使用者，不要提交到仓库。
+
+release 配置新建项目默认使用 MiniMax H3（480p）生成视频、Seedream 5.0 Lite 生成图片、Nano Banana 2 Lite 生成 Storyboard；默认文本模型和复杂任务使用 DeepSeek V4 Pro，简单任务使用 MiniMax M3。所有值都会写入项目配置，之后仍可在项目设置中修改。
 
 完整的首次使用流程见 [完整入门教程](https://docs.arc-reel.com/guide/getting-started)。
 
