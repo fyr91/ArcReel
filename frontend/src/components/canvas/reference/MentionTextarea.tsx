@@ -16,6 +16,28 @@ import { MENTION_RE } from "@/utils/reference-mentions";
 import type { MentionReferenceKind } from "@/types/reference-video";
 
 const MENTION_SPAN_CLASS = "rounded-sm";
+const BARE_MENTION_CHARACTER_RE = /[\w\u4e00-\u9fff]/;
+
+interface ActiveMention {
+  start: number;
+  end: number;
+}
+
+/** Return the full editable mention range, including text to the right of the caret. */
+function activeMentionRange(value: string, start: number, cursor: number): ActiveMention {
+  if (value[start + 1] === "[") {
+    for (let end = cursor; end < value.length; end += 1) {
+      const character = value[end];
+      if (character === "]") return { start, end: end + 1 };
+      if (character === "\n" || character === "\r") break;
+    }
+    return { start, end: cursor };
+  }
+
+  let end = cursor;
+  while (end < value.length && BARE_MENTION_CHARACTER_RE.test(value[end])) end += 1;
+  return { start, end };
+}
 
 function renderHighlightedTokens(
   tokens: Token[],
@@ -123,7 +145,7 @@ export function MentionTextarea({
   const [pickerOpen, setPickerOpen] = useState(false);
   const [pickerQuery, setPickerQuery] = useState("");
   const [activeOptionId, setActiveOptionId] = useState<string | null>(null);
-  const [atStart, setAtStart] = useState<number | null>(null);
+  const [activeMention, setActiveMention] = useState<ActiveMention | null>(null);
   const instanceId = useId().replace(/:/g, "");
   const listboxId = `${MENTION_PICKER_DEFAULT_ID}-${instanceId}`;
   const unknownDescriptionId = `reference-editor-unknown-desc-${instanceId}`;
@@ -161,7 +183,7 @@ export function MentionTextarea({
   const closePicker = useCallback(() => {
     setPickerOpen(false);
     setPickerQuery("");
-    setAtStart(null);
+    setActiveMention(null);
     setActiveOptionId(null);
   }, []);
 
@@ -175,7 +197,7 @@ export function MentionTextarea({
           const rawQuery = nextValue.slice(index + 1, cursor);
           const isWrapped = rawQuery.startsWith("[");
           if (!isWrapped && !/^[\w\u4e00-\u9fff]*$/.test(rawQuery)) break;
-          setAtStart(index);
+          setActiveMention(activeMentionRange(nextValue, index, cursor));
           setPickerQuery(isWrapped ? rawQuery.slice(1) : rawQuery);
           setPickerOpen(true);
           return;
@@ -185,7 +207,7 @@ export function MentionTextarea({
       if (character === "]" || /\s/.test(character)) break;
       index -= 1;
     }
-    setAtStart(null);
+    setActiveMention(null);
     setPickerOpen(false);
     setPickerQuery("");
   }, []);
@@ -223,15 +245,17 @@ export function MentionTextarea({
   const handlePickerSelect = useCallback(
     (reference: { type: MentionReferenceKind; name: string }) => {
       const textarea = taRef.current;
-      const start = atStart;
-      if (!textarea || start === null) {
+      const range = activeMention;
+      if (!textarea || range === null) {
         closePicker();
         return;
       }
-      const before = value.slice(0, start);
-      const cursor = textarea.selectionStart ?? value.length;
-      const insert = `@[${reference.name}] `;
-      const next = before + insert + value.slice(cursor);
+      const before = value.slice(0, range.start);
+      const after = value.slice(range.end);
+      const caret = textarea.selectionStart ?? range.end;
+      const needsTrailingSpace = range.end === caret && !/^\s/.test(after);
+      const insert = `@[${reference.name}]${needsTrailingSpace ? " " : ""}`;
+      const next = before + insert + after;
       onChange(next);
       closePicker();
       requestAnimationFrame(() => {
@@ -240,7 +264,7 @@ export function MentionTextarea({
         textarea.setSelectionRange(position, position);
       });
     },
-    [atStart, closePicker, onChange, value],
+    [activeMention, closePicker, onChange, value],
   );
 
   const handleScroll = () => {
@@ -258,7 +282,7 @@ export function MentionTextarea({
           className="pointer-events-none absolute inset-0 m-0 overflow-hidden whitespace-pre-wrap break-words p-3 font-mono text-sm leading-6"
         >
           {pickerOpen
-            ? renderHighlightedTokens(tokens, atStart, setAnchorEl, voiceoverLabel)
+            ? renderHighlightedTokens(tokens, activeMention?.start ?? null, setAnchorEl, voiceoverLabel)
             : staticHighlightedNodes}
           {value.endsWith("\n") ? "\u200b" : null}
         </pre>
