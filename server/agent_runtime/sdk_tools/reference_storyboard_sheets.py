@@ -63,7 +63,11 @@ def generate_reference_storyboard_sheets_tool(ctx: ToolContext):
                 image_override=image_override_from_args(args),
                 instructions=args.get("instructions"),
             )
-            enqueued, failures = await batch_enqueue_only(project_name=ctx.project_name, specs=specs)
+            enqueued, failures = await batch_enqueue_only(
+                project_name=ctx.project_name,
+                specs=specs,
+                user_id=ctx.user_id,
+            )
             return _response(
                 {
                     "requested": requested,
@@ -115,7 +119,11 @@ def generate_reference_keyframes_tool(ctx: ToolContext):
                 missing_only=requested is None,
                 image_override=image_override_from_args(args),
             )
-            enqueued, failures = await batch_enqueue_only(project_name=ctx.project_name, specs=specs)
+            enqueued, failures = await batch_enqueue_only(
+                project_name=ctx.project_name,
+                specs=specs,
+                user_id=ctx.user_id,
+            )
             return _response(
                 {
                     "requested": requested,

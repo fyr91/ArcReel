@@ -5,14 +5,14 @@ from lib.db.models.api_call import ApiCall
 from lib.db.models.api_key import ApiKey
 from lib.db.models.asset import Asset, AssetAlias, AssetResource
 from lib.db.models.background_job import BackgroundJob
-from lib.db.models.config import ProviderConfig, SystemSetting
+from lib.db.models.config import ManagedProviderConfig, ProviderConfig, SystemSetting
 from lib.db.models.credential import ProviderCredential
 from lib.db.models.custom_provider import CustomProvider, CustomProviderModel
 from lib.db.models.session import AgentSession
 from lib.db.models.session_event import AgentSessionEventLogEntry
 from lib.db.models.session_message_link import AgentSessionUserMessageLink
 from lib.db.models.task import Task, WorkerLease
-from lib.db.models.user import User
+from lib.db.models.user import AccountCenterConnection, AccountCenterLoginTicket, ArcReelCloudSession, User
 
 __all__ = [
     "Task",
@@ -23,8 +23,12 @@ __all__ = [
     "AgentSessionUserMessageLink",
     "ApiKey",
     "ProviderConfig",
+    "ManagedProviderConfig",
     "SystemSetting",
     "User",
+    "AccountCenterLoginTicket",
+    "AccountCenterConnection",
+    "ArcReelCloudSession",
     "ProviderCredential",
     "CustomProvider",
     "CustomProviderModel",

@@ -26,7 +26,7 @@ from lib.artifact_activation import (
 )
 from lib.artifact_manifest import ArtifactKey
 from lib.asset_types import ASSET_SPECS, resolve_asset_key
-from lib.config.resolver import ConfigResolver, video_bucket_for_generation_mode
+from lib.config.resolver import ConfigResolver, image_stage_for_task, video_bucket_for_generation_mode
 from lib.generation_queue import get_generation_queue
 from lib.generation_queue_client import TaskSpec
 from lib.i18n import Translator
@@ -316,8 +316,8 @@ async def generate_video(
     # 上面的路线闸门已挡掉参考路线，此处对能到达的项目恒为 i2v。解析闸预检让能力缺失 /
     # 悬空引用在提交入口即返回修复指引，而非任务面板里的异步失败。
     _video_bucket = video_bucket_for_generation_mode(project.get("generation_mode"))
-    await require_video_bucket_capability(project, _video_bucket)
-    await require_audio_switch_supported(project, _video_bucket)
+    await require_video_bucket_capability(project, _video_bucket, user_id=user.id)
+    await require_audio_switch_supported(project, _video_bucket, user_id=user.id)
 
     delivery_projection: NarratedVideoDurationPreparation | None = None
     delivery_payload: dict[str, object] | None = None
@@ -344,6 +344,7 @@ async def generate_video(
                 # 当前盘上单元重投影，否则客户端旧快照可能先通过、执行时才要求另一档确认。
                 planned_duration_seconds=current_planned_duration,
                 confirmed_request_duration_seconds=req.confirmed_request_duration_seconds,
+                user_id=user.id,
             )
         except ProjectionResolutionError as exc:
             raise BadRequestError(exc.code, **exc.params) from exc
@@ -403,7 +404,7 @@ async def generate_video(
 # ==================== 旁白配音（TTS）生成 ====================
 
 
-async def _require_audio_provider_configured(project: dict) -> str:
+async def _require_audio_provider_configured(project: dict, *, user_id: str) -> str:
     """未配置任何 audio 供应商时直接 400，让用户在生成入口就看到清晰提示。
 
     解析失败（无全局默认且 auto-resolve 找不到 ready 的 audio 供应商）即视为未配置；
@@ -413,7 +414,7 @@ async def _require_audio_provider_configured(project: dict) -> str:
     from lib.db import async_session_factory
 
     try:
-        resolved = await ConfigResolver(async_session_factory).resolve_audio_backend(project, None)
+        resolved = await ConfigResolver(async_session_factory, user_id=user_id).resolve_audio_backend(project, None)
     except ValueError:
         raise BadRequestError("audio_provider_not_configured")
     return resolved.provider_id
@@ -480,7 +481,7 @@ async def generate_tts(
 
     project, segment = await asyncio.to_thread(_sync)
 
-    provider_id = await _require_audio_provider_configured(project)
+    provider_id = await _require_audio_provider_configured(project, user_id=user.id)
 
     active_narrated_video = await active_narrated_video_resource_ids(
         project_name=project_name,
@@ -543,7 +544,7 @@ async def generate_tts_batch(
     if not missing_ids:
         return {"success": True, "task_ids": [], "deduped": False, "message": _t("tts_batch_none_missing")}
 
-    provider_id = await _require_audio_provider_configured(project)
+    provider_id = await _require_audio_provider_configured(project, user_id=user.id)
 
     task_ids: list[str] = []
     deduped_flags: list[bool] = []
@@ -572,7 +573,7 @@ async def generate_tts_batch(
 
 
 @router.get("/projects/{project_name}/audio-backend/voices")
-async def get_audio_backend_voices(project_name: str, _t: Translator):
+async def get_audio_backend_voices(project_name: str, user: CurrentUser, _t: Translator):
     """返回当前项目实际生效的 audio backend 音色枚举，供 TTS 试听弹窗选择音色。
 
     未配置任何 audio 供应商时返回 configured=false + 空列表，不 400——前端据此禁用
@@ -580,7 +581,7 @@ async def get_audio_backend_voices(project_name: str, _t: Translator):
     """
     project = await asyncio.to_thread(get_project_manager().load_project, project_name)
     try:
-        await _require_audio_provider_configured(project)
+        await _require_audio_provider_configured(project, user_id=user.id)
     except BadRequestError:
         return {"configured": False, "provider_id": None, "model": None, "voices": []}
 
@@ -588,6 +589,7 @@ async def get_audio_backend_voices(project_name: str, _t: Translator):
         project_name,
         None,
         project=project,
+        user_id=user.id,
         audio=AudioLaneRequest(),
     )
     audio = ctx.audio
@@ -633,13 +635,14 @@ async def generate_character_voice_sample(
 
 
 @router.get("/projects/{project_name}/characters/{name}/voice-sample/candidate")
-async def get_character_voice_sample_candidate(project_name: str, name: str):
+async def get_character_voice_sample_candidate(project_name: str, name: str, user: CurrentUser):
     """Return an active or unconfirmed succeeded candidate for Web preview."""
     task = await latest_character_voice_candidate(
         project_name,
         name,
         manager=get_project_manager(),
         queue=get_generation_queue(),
+        user_id=user.id,
     )
     return {"candidate": task}
 
@@ -649,6 +652,7 @@ async def confirm_character_voice_sample(
     project_name: str,
     name: str,
     req: ConfirmVoiceSampleRequest,
+    user: CurrentUser,
     _t: Translator,
 ):
     """Promote the preview only after an explicit Web confirmation."""
@@ -659,6 +663,7 @@ async def confirm_character_voice_sample(
         source="webui",
         manager=get_project_manager(),
         queue=get_generation_queue(),
+        user_id=user.id,
     )
     return {
         "success": True,
@@ -818,6 +823,8 @@ async def _require_i2i_image_provider_configured(
     project: dict,
     resource_type: str,
     payload: dict[str, str] | None = None,
+    *,
+    user_id: str,
 ) -> str:
     """项目 i2i 槽解析不出可用供应商时直接 400，不创建任务。
 
@@ -828,9 +835,7 @@ async def _require_i2i_image_provider_configured(
     from lib.db import async_session_factory
 
     try:
-        from lib.config.resolver import image_stage_for_task
-
-        resolved = await ConfigResolver(async_session_factory).resolve_image_backend(
+        resolved = await ConfigResolver(async_session_factory, user_id=user_id).resolve_image_backend(
             project,
             payload,
             capability="i2i",
@@ -900,7 +905,12 @@ async def edit_image(
     project = await asyncio.to_thread(_sync)
 
     image_override = req.image_override_payload()
-    provider_id = await _require_i2i_image_provider_configured(project, req.resource_type, image_override)
+    provider_id = await _require_i2i_image_provider_configured(
+        project,
+        req.resource_type,
+        image_override,
+        user_id=user.id,
+    )
 
     # 结构校验 + 构造经单一守卫点（与 SDK 入队同源，规则不分叉）
     spec = TaskSpec.from_request(
