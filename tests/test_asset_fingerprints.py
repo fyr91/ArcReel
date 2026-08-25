@@ -44,6 +44,28 @@ class TestComputeAssetFingerprints:
         assert "props/玉佩.png" in result
         assert "products/手镯.png" in result
 
+    @pytest.mark.parametrize(
+        ("subdir", "filename"),
+        [
+            ("keyframes", "E1K01.png"),
+            ("storyboard_sheets", "E1U01.png"),
+        ],
+    )
+    def test_includes_reference_route_images(self, tmp_path, subdir, filename):
+        media_dir = tmp_path / subdir
+        media_dir.mkdir()
+        path = media_dir / filename
+        path.write_bytes(b"v1")
+
+        relative_path = f"{subdir}/{filename}"
+        first = compute_asset_fingerprints(tmp_path)
+        assert relative_path in first
+
+        time.sleep(0.1)
+        path.write_bytes(b"v2")
+        second = compute_asset_fingerprints(tmp_path)
+        assert second[relative_path] != first[relative_path]
+
     def test_includes_root_level_assets(self, tmp_path):
         (tmp_path / "style_reference.png").write_bytes(b"style")
         result = compute_asset_fingerprints(tmp_path)

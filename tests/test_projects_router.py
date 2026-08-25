@@ -1720,6 +1720,13 @@ class TestProjectsRouter:
     def test_get_project_includes_asset_fingerprints(self, tmp_path, monkeypatch):
         """项目 API 应返回 asset_fingerprints 字段"""
         fake_pm = _FakePM(tmp_path)
+        for subdir, filename in (
+            ("keyframes", "E1K01.png"),
+            ("storyboard_sheets", "E1U01.png"),
+        ):
+            media_dir = tmp_path / "ready" / subdir
+            media_dir.mkdir()
+            (media_dir / filename).write_bytes(b"png")
         client = _client(monkeypatch, fake_pm)
 
         with client:
@@ -1728,6 +1735,8 @@ class TestProjectsRouter:
             data = resp.json()
             assert "asset_fingerprints" in data
             assert "storyboards/scene_E1S01.png" in data["asset_fingerprints"]
+            assert "keyframes/E1K01.png" in data["asset_fingerprints"]
+            assert "storyboard_sheets/E1U01.png" in data["asset_fingerprints"]
             assert isinstance(data["asset_fingerprints"]["storyboards/scene_E1S01.png"], int)
 
     @pytest.mark.unit
