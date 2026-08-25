@@ -196,8 +196,6 @@ class WorkflowPlanner:
             sheet = item.get("storyboard_sheet")
             if not isinstance(sheet, dict) or not _existing_file(sheet.get("image_path")):
                 missing_sheets.append(unit_id)
-            elif sheet.get("status") != "confirmed":
-                pending_sheets.append(unit_id)
             else:
                 confirmed_sheets.append(unit_id)
 

@@ -1,9 +1,10 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { CheckCircle2, Images, Loader2 } from "lucide-react";
+import { AlertTriangle, Images, Loader2, Save } from "lucide-react";
 import { enqueueReferenceStoryboardSheet } from "@/actions/generation";
 import { API } from "@/api";
 import { ImageEditButton } from "@/components/canvas/timeline/ImageEditButton";
+import { ReferenceVideoCard } from "@/components/canvas/reference/ReferenceVideoCard";
 import { VersionTimeMachine } from "@/components/canvas/timeline/VersionTimeMachine";
 import { ImageModelSelect, imageSelectionFromValue } from "@/components/shared/ImageModelSelect";
 import { GenerateButton } from "@/components/ui/GenerateButton";
@@ -13,6 +14,12 @@ import { useProjectsStore } from "@/stores/projects-store";
 import { useActiveResourceIds } from "@/stores/tasks-store";
 import { errMsg } from "@/utils/async";
 import type { ReferenceVideoUnit } from "@/types";
+
+function defaultStoryboardDescription(unit: ReferenceVideoUnit): string {
+  return (
+    unit.storyboard_description ?? unit.text.replace(/@\[关键分镜 [^\]]+\]\s*/g, "").trim()
+  );
+}
 
 interface StoryboardSheetPanelProps {
   projectName: string;
@@ -31,11 +38,10 @@ export function StoryboardSheetPanel({
 }: StoryboardSheetPanelProps) {
   const { t } = useTranslation("dashboard");
   const [model, setModel] = useState("");
-  const [confirming, setConfirming] = useState(false);
+  const [description, setDescription] = useState(() => defaultStoryboardDescription(unit));
+  const [saving, setSaving] = useState(false);
   const activeIds = useActiveResourceIds("reference_storyboard_sheet", projectName);
-  const keyframeActiveIds = useActiveResourceIds("reference_keyframe", projectName);
   const busy = activeIds.has(unit.unit_id);
-  const keyframesBusy = (unit.keyframes ?? []).some((item) => keyframeActiveIds.has(item.keyframe_id));
   const sheet = unit.storyboard_sheet;
   const fingerprint = useProjectsStore((state) =>
     sheet?.image_path ? state.getAssetFingerprint(sheet.image_path) : null,
@@ -43,6 +49,12 @@ export function StoryboardSheetPanel({
   const imageUrl = sheet?.image_path
     ? API.getFileUrl(projectName, sheet.image_path, fingerprint)
     : null;
+  const savedDescription = defaultStoryboardDescription(unit);
+  const dirty = description.trim() !== savedDescription;
+
+  useEffect(() => {
+    setDescription(defaultStoryboardDescription(unit));
+  }, [unit.storyboard_description, unit.text]);
 
   const generate = async () => {
     try {
@@ -57,17 +69,19 @@ export function StoryboardSheetPanel({
     }
   };
 
-  const confirm = async () => {
-    if (!sheet || sheet.status === "confirmed" || confirming || busy) return;
-    setConfirming(true);
+  const save = async () => {
+    const next = description.trim();
+    if (!next || !dirty || saving || busy) return;
+    setSaving(true);
     try {
-      const response = await API.confirmReferenceStoryboardSheet(projectName, episode, unit.unit_id);
-      useAppStore.getState().pushToast(response.message, "success");
+      await API.patchReferenceVideoUnit(projectName, episode, unit.unit_id, {
+        storyboard_description: next,
+      });
       await onChanged();
     } catch (error) {
       useAppStore.getState().pushToast(errMsg(error), "error");
     } finally {
-      setConfirming(false);
+      setSaving(false);
     }
   };
 
@@ -82,33 +96,30 @@ export function StoryboardSheetPanel({
             {t("reference_storyboard_sheet_title")}
           </strong>
           <span className="flex-1" />
-          {sheet?.status === "confirmed" ? (
-            <span className="inline-flex items-center gap-1 text-xs text-emerald-300">
-              <CheckCircle2 className="h-3.5 w-3.5" aria-hidden="true" />
-              {t("reference_storyboard_sheet_confirmed_badge")}
-            </span>
-          ) : sheet ? (
-            <span className="text-xs text-amber-300">
-              {t("reference_storyboard_sheet_pending_badge")}
-            </span>
-          ) : null}
           <ImageEditButton
             projectName={projectName}
             resourceType="reference_storyboard_sheet"
             resourceId={unit.unit_id}
             scriptFile={scriptFile}
             hasImage={Boolean(sheet?.image_path)}
-            busy={busy || confirming || keyframesBusy}
+            busy={busy}
           />
           <VersionTimeMachine
             projectName={projectName}
             resourceType="storyboard_sheets"
             resourceId={unit.unit_id}
             iconOnly
-            busy={busy || confirming || keyframesBusy}
+            busy={busy}
             onRestore={onChanged}
           />
         </header>
+
+        {sheet?.generation_input_changed && (
+          <p className="mb-3 flex items-start gap-2 rounded-lg border border-amber-400/25 bg-amber-400/5 px-3 py-2 text-xs leading-5 text-amber-200">
+            <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+            {t("reference_storyboard_sheet_manuscript_changed_hint")}
+          </p>
+        )}
 
         {imageUrl ? (
           <PreviewableImageFrame src={imageUrl} alt={t("reference_storyboard_sheet_title")}>
@@ -136,6 +147,35 @@ export function StoryboardSheetPanel({
           {t("reference_storyboard_sheet_help")}
         </p>
 
+        <div className="mt-3 text-[10px] font-semibold uppercase tracking-[0.12em] text-[var(--color-text-4)]">
+          {t("reference_storyboard_sheet_description")}
+          <div className="mt-1.5 h-56 min-h-56 shrink-0 normal-case tracking-normal">
+            <ReferenceVideoCard
+              unit={unit}
+              projectName={projectName}
+              episode={episode}
+              value={description}
+              onChange={setDescription}
+              includeKeyframes={false}
+              showMeta={false}
+              placeholder={t("reference_storyboard_sheet_description_placeholder")}
+              ariaLabel={t("reference_storyboard_sheet_description")}
+              disabled={busy}
+            />
+          </div>
+        </div>
+        {dirty && (
+          <button
+            type="button"
+            onClick={() => void save()}
+            disabled={saving || busy || !description.trim()}
+            className="focus-ring mt-2 inline-flex items-center gap-1.5 rounded-md border border-[var(--color-hairline)] px-2.5 py-1 text-xs text-[var(--color-text-2)] disabled:opacity-40"
+          >
+            <Save className="h-3.5 w-3.5" aria-hidden="true" />
+            {t("common:save")}
+          </button>
+        )}
+
         <div className="mt-3 grid gap-2 sm:grid-cols-[minmax(0,1fr)_auto]">
           <ImageModelSelect value={model} onChange={setModel} capability="any" />
           <GenerateButton
@@ -150,17 +190,6 @@ export function StoryboardSheetPanel({
           />
         </div>
 
-        {sheet && sheet.status !== "confirmed" && (
-          <button
-            type="button"
-            onClick={() => void confirm()}
-            disabled={busy || confirming || keyframesBusy}
-            className="focus-ring mt-3 inline-flex w-full items-center justify-center gap-2 rounded-lg bg-[var(--color-accent)] px-4 py-2.5 text-sm font-semibold text-[var(--color-accent-contrast)] disabled:opacity-40"
-          >
-            {confirming && <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />}
-            {t("reference_storyboard_sheet_confirm_and_generate")}
-          </button>
-        )}
       </article>
     </div>
   );

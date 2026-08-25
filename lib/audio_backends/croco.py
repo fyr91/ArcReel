@@ -6,6 +6,7 @@ MiniMax Music 3 是音乐/BGM 生成，不接受输入素材；caption 由 Audio
 
 from __future__ import annotations
 
+import asyncio
 import logging
 
 from lib.audio_backends.base import (
@@ -15,7 +16,13 @@ from lib.audio_backends.base import (
     VoiceOption,
 )
 from lib.croco_shared import CrocoClient
+from lib.generation_queue import get_generation_queue
 from lib.providers import PROVIDER_CROCO
+from lib.task_execution_progress import (
+    music_execution_progress,
+    music_progress_from_provider,
+    persist_music_execution_progress,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -23,6 +30,10 @@ DEFAULT_MODEL = "minimax-music-3"
 
 _OPERATION = "audio.generate"
 _CONTRACT_VERSION = "1"
+# Music generation runs on the user's own GPU queue.  A healthy queued job must
+# outlive the shared client's 30-minute interactive default; otherwise ArcReel
+# would mark it failed while Croco still owns and may later finish the paid job.
+_MUSIC_JOB_MAX_WAIT_SECONDS = 24 * 60 * 60
 
 
 class CrocoAudioBackend:
@@ -66,16 +77,50 @@ class CrocoAudioBackend:
             parameters["tiled_decode"] = request.tiled_decode
         if request.output_format is not None:
             parameters["output_format"] = request.output_format
-        job = await self._client.submit_job(
-            model_id=self._model,
-            operation=_OPERATION,
-            contract_version=_CONTRACT_VERSION,
-            parameters=parameters,
-            client_job_id=request.client_job_id,
-        )
-        job_id = job["job_id"]
+        if request.provider_job_id:
+            job_id = request.provider_job_id
+        else:
+            job = await self._client.submit_job(
+                model_id=self._model,
+                operation=_OPERATION,
+                contract_version=_CONTRACT_VERSION,
+                parameters=parameters,
+                client_job_id=request.client_job_id,
+            )
+            job_id = job["job_id"]
+            if request.task_id is not None:
+                await get_generation_queue().persist_provider_job_id(request.task_id, job_id)
+            await persist_music_execution_progress(
+                request.task_id,
+                music_progress_from_provider(job),
+            )
 
-        terminal = await self._client.wait_until_terminal(job_id)
+        async def _on_update(job: dict, queue: dict | None) -> None:
+            await persist_music_execution_progress(
+                request.task_id,
+                music_progress_from_provider(job, queue),
+            )
+
+        try:
+            terminal = await self._client.wait_until_terminal(
+                job_id,
+                max_wait_seconds=_MUSIC_JOB_MAX_WAIT_SECONDS,
+                on_update=_on_update,
+            )
+        except asyncio.CancelledError:
+            await persist_music_execution_progress(
+                request.task_id,
+                music_execution_progress(
+                    "cancelling",
+                    provider_status="canceling",
+                    can_cancel=False,
+                ),
+            )
+            try:
+                await asyncio.shield(self._client.cancel_job(job_id))
+            except Exception:
+                logger.exception("Croco 远端音乐任务取消失败 job_id=%s", job_id)
+            raise
         if terminal.get("status") != "succeeded":
             raise RuntimeError(f"Croco 音乐任务未成功: status={terminal.get('status')} error={terminal.get('error')}")
 
@@ -87,6 +132,16 @@ class CrocoAudioBackend:
             raise RuntimeError("Croco 音乐任务缺少 audio 产物")
 
         await self._client.download_output(job_id, "audio", request.output_path)
+        await persist_music_execution_progress(
+            request.task_id,
+            music_execution_progress(
+                "completed",
+                provider_status="succeeded",
+                stage=terminal.get("stage") if isinstance(terminal.get("stage"), str) else None,
+                progress=100,
+                can_cancel=False,
+            ),
+        )
         logger.info("Croco 音乐生成完成: %s", request.output_path)
 
         return AudioSynthesisResult(

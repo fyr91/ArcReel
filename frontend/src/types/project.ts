@@ -186,8 +186,13 @@ export interface ProjectData {
   video_provider_i2v?: string | null;
   video_provider_r2v?: string | null;
   image_backend?: string | null;
-  /** 项目默认图片模型；图片能力桶留空时回退到它，再回退全局层 */
+  /** 项目默认图片模型；制作阶段未指定时回退到它，再回退全局层 */
   default_image_backend?: string | null;
+  image_provider_asset?: string | null;
+  image_provider_reference?: string | null;
+  image_provider_storyboard?: string | null;
+  image_provider_keyframe?: string | null;
+  /** 旧项目兼容字段，不再在项目设置中呈现。 */
   image_provider_t2i?: string | null;
   image_provider_i2i?: string | null;
   /** 生成模式，创建时锁定、之后不可更改。 */

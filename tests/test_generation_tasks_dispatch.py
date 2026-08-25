@@ -14,6 +14,11 @@ def test_task_executors_registered_for_reference_video():
 
 
 @pytest.mark.unit
+def test_task_executors_registered_for_hyperframes_bgm():
+    assert "hyperframes_bgm" in _TASK_EXECUTORS
+
+
+@pytest.mark.unit
 def test_task_change_action_registered_for_reference_video():
     # entity_type 不再是静态 spec：按剧本骨架种类动态解析（见
     # test_generation_tasks_service.py 里对 emit_generation_success_batch 的骨架覆盖用例），
@@ -84,6 +89,36 @@ async def test_execute_generation_task_passes_claimed_provider_to_reference_prox
     assert result == {"ok": True}
     assert captured["claimed_provider_id"] == "ark"
     assert captured["script_file"] == "scripts/frozen.json"
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_execute_generation_task_passes_provider_job_to_hyperframes_bgm(monkeypatch):
+    from server.services import generation_tasks
+
+    captured: dict[str, object] = {}
+
+    async def _fake_bgm_proxy(project_name, resource_id, payload, **kwargs):
+        captured.update(project_name=project_name, resource_id=resource_id, payload=payload, **kwargs)
+        return {"ok": True}
+
+    monkeypatch.setattr(generation_tasks, "_execute_hyperframes_bgm_task_proxy", _fake_bgm_proxy)
+
+    result = await generation_tasks.execute_generation_task(
+        {
+            "task_id": "bgm-1",
+            "task_type": "hyperframes_bgm",
+            "project_name": "demo",
+            "resource_id": "episode_01",
+            "payload": {"episode": 1, "direction": "calm"},
+            "user_id": "u1",
+            "provider_job_id": "music-job-1",
+        }
+    )
+
+    assert result == {"ok": True}
+    assert captured["provider_job_id"] == "music-job-1"
+    assert captured["task_id"] == "bgm-1"
 
 
 @pytest.mark.unit

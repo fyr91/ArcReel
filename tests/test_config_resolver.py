@@ -1189,6 +1189,25 @@ class TestResolveImageBackend:
         assert (i2i.provider_id, i2i.model_id) == ("ark", "proj-i2i")
 
     @pytest.mark.unit
+    async def test_project_production_stage_wins_over_legacy_capability_and_default(self):
+        resolver = ConfigResolver.__new__(ConfigResolver)
+        fake_svc = _FakeConfigService(settings={})
+        project = {
+            "image_provider_storyboard": "runware/google:nano-banana@2-lite",
+            "image_provider_i2i": "ark/legacy-i2i",
+            "default_image_backend": "openai/project-default",
+        }
+        resolved = await resolver._resolve_image_provider_model(
+            fake_svc,
+            None,
+            project,
+            {},
+            "i2i",
+            "storyboard",
+        )
+        assert (resolved.provider_id, resolved.model_id) == ("runware", "google:nano-banana@2-lite")
+
+    @pytest.mark.unit
     async def test_project_bucket_wins_over_project_default(self):
         """项目桶优先于项目默认（default_image_backend）。"""
         resolver = ConfigResolver.__new__(ConfigResolver)

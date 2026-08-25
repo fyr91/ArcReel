@@ -8,6 +8,9 @@ from fastapi import APIRouter, HTTPException, Path, Request
 from pydantic import BaseModel
 
 from lib.project_manager import get_project_manager
+from server.auth import CurrentUser
+from server.services.hyperframes_music import HyperframesMusicUnavailable
+from server.services.hyperframes_music_tasks import enqueue_hyperframes_bgm_task
 from server.services.hyperframes_workspace import (
     HyperframesStudioUnavailable,
     HyperframesWorkspaceService,
@@ -22,6 +25,11 @@ EpisodeNumber = Annotated[int, Path(ge=1)]
 
 class PrepareHyperframesRequest(BaseModel):
     narration_delivery: Literal["post_production", "use_tts"] = "post_production"
+
+
+class GenerateHyperframesBgmRequest(BaseModel):
+    direction: str
+    seed: int | None = None
 
 
 def get_hyperframes_workspace_service() -> HyperframesWorkspaceService:
@@ -96,6 +104,27 @@ async def start_hyperframes_studio(project_name: str, episode: EpisodeNumber, re
     except HyperframesStudioUnavailable as exc:
         raise HTTPException(status_code=503, detail=str(exc)) from exc
     return _payload(workspace, studio_url=studio_url)
+
+
+@router.post("/projects/{project_name}/hyperframes/episodes/{episode}/background-music")
+async def generate_hyperframes_background_music(
+    project_name: str,
+    episode: EpisodeNumber,
+    payload: GenerateHyperframesBgmRequest,
+    user: CurrentUser,
+):
+    try:
+        return await enqueue_hyperframes_bgm_task(
+            get_project_manager(),
+            project_name,
+            episode,
+            direction=payload.direction,
+            seed=payload.seed,
+            source="webui",
+            user_id=user.id,
+        )
+    except HyperframesMusicUnavailable as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
 
 
 __all__ = ["get_hyperframes_workspace_service", "router"]

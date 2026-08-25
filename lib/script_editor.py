@@ -18,6 +18,7 @@ import logging
 from copy import deepcopy
 from typing import Any
 
+from lib.reference_video.keyframes import without_keyframe_mentions
 from lib.script_skeleton import resolve_kind_items
 
 logger = logging.getLogger(__name__)
@@ -134,20 +135,46 @@ def _set_nested(obj: dict[str, Any], field_path: str, value: Any) -> None:
     cur[parts[-1]] = value
 
 
-def _invalidate_storyboard_sheet_confirmation(item: dict[str, Any]) -> None:
+def _manuscript_body(text: object) -> str:
+    """Compare authored manuscript content without sibling Keyframe placement markers."""
+
+    return " ".join(without_keyframe_mentions(str(text or "")).split())
+
+
+def _mark_derived_visuals_for_manuscript_review(item: dict[str, Any]) -> None:
+    """Advisory only: keep current assets, confirmations, and generation eligibility intact."""
+
     sheet = item.get("storyboard_sheet")
-    if isinstance(sheet, dict):
-        sheet["status"] = "pending_review"
-        sheet["confirmed_at"] = None
+    if isinstance(sheet, dict) and sheet.get("image_path"):
+        sheet["generation_input_changed"] = True
+    for keyframe in item.get("keyframes") or []:
+        if isinstance(keyframe, dict) and keyframe.get("image_path"):
+            keyframe["generation_input_changed"] = True
 
 
 def patch_field(script: dict[str, Any], item_id: str, field_path: str, value: Any) -> dict[str, Any]:
     """按 id 定位一个分镜，设置其（可嵌套的）字段。纯 setter，不触碰 generated_assets。"""
     items, id_field, kind = resolve_items(script)
     idx = _find_index(items, id_field, item_id)
+    previous_manuscript = _manuscript_body(items[idx].get("text")) if kind == "video_units" else ""
+    previous_storyboard_description = (
+        str(items[idx].get("storyboard_description") or "").strip() if kind == "video_units" else ""
+    )
     _set_nested(items[idx], field_path, value)
-    if kind == "video_units" and field_path.split(".", 1)[0] in {"text", "duration_seconds", "keyframes"}:
-        _invalidate_storyboard_sheet_confirmation(items[idx])
+    if (
+        kind == "video_units"
+        and field_path == "text"
+        and _manuscript_body(items[idx].get("text")) != previous_manuscript
+    ):
+        _mark_derived_visuals_for_manuscript_review(items[idx])
+    if (
+        kind == "video_units"
+        and field_path == "storyboard_description"
+        and str(items[idx].get("storyboard_description") or "").strip() != previous_storyboard_description
+    ):
+        sheet = items[idx].get("storyboard_sheet")
+        if isinstance(sheet, dict) and sheet.get("image_path"):
+            sheet["generation_input_changed"] = True
     return script
 
 

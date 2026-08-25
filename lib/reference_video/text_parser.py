@@ -5,6 +5,7 @@
 
 from __future__ import annotations
 
+import re
 import unicodedata
 from collections.abc import Collection, Iterable, Iterator
 from dataclasses import dataclass
@@ -282,6 +283,66 @@ def extract_mentions(text: str) -> list[str]:
                 seen.add(name)
                 result.append(name)
     return result
+
+
+def wrap_registered_asset_mentions(text: str, names: Collection[str]) -> tuple[str, int]:
+    """Wrap literal registered asset names with the canonical ``@[name]`` syntax.
+
+    This is a mechanical authoring aid for formal manuscript and Keyframe
+    descriptions. Existing wrapped mentions are preserved, registered legacy
+    ``@name`` mentions are upgraded, and unknown mentions are left untouched.
+    Only literal registered names are changed: this helper never guesses aliases
+    or rewrites visual semantics.
+
+    The returned count is the number of inserted or upgraded wrappers.
+    """
+
+    source = _normalize_source(text)
+    canonical_names = {
+        key: key for raw_name in names if isinstance(raw_name, str) and (key := asset_name_comparison_key(raw_name))
+    }
+    if not canonical_names:
+        return source, 0
+
+    ordered = sorted(canonical_names, key=lambda item: (-len(item), item))
+    pattern = re.compile("|".join(re.escape(name) for name in ordered))
+
+    def _wrap_plain(segment: str) -> tuple[str, int]:
+        pieces: list[str] = []
+        cursor = 0
+        count = 0
+        for match in pattern.finditer(segment):
+            start, end = match.span()
+            name = match.group(0)
+            if (start > 0 and _is_ascii_word_char(name[0]) and _is_ascii_word_char(segment[start - 1])) or (
+                end < len(segment) and _is_ascii_word_char(name[-1]) and _is_ascii_word_char(segment[end])
+            ):
+                continue
+            pieces.extend((segment[cursor:start], f"@[{canonical_names[name]}]"))
+            cursor = end
+            count += 1
+        pieces.append(segment[cursor:])
+        return "".join(pieces), count
+
+    result: list[str] = []
+    cursor = 0
+    replacements = 0
+    for start, end, raw_name in _iter_mentions(source):
+        plain, count = _wrap_plain(source[cursor:start])
+        result.append(plain)
+        replacements += count
+        canonical = asset_name_comparison_key(raw_name)
+        raw_mention = source[start:end]
+        if canonical in canonical_names and not raw_mention.startswith("@["):
+            result.append(f"@[{canonical_names[canonical]}]")
+            replacements += 1
+        else:
+            result.append(raw_mention)
+        cursor = end
+    plain, count = _wrap_plain(source[cursor:])
+    result.append(plain)
+    replacements += count
+    return "".join(result), replacements
 
 
 def rewrite_mentions(text: str, old_name: str, new_name: str) -> tuple[str, int]:

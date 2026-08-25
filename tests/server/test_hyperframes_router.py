@@ -89,3 +89,30 @@ def test_episode_path_rejects_non_positive_values(monkeypatch: pytest.MonkeyPatc
     response = _client(monkeypatch, _Service(None)).get("/api/v1/projects/demo/hyperframes/episodes/0")
 
     assert response.status_code == 422
+
+
+def test_background_music_endpoint_enqueues_shared_async_task(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    monkeypatch.setenv("AUTH_ENABLED", "false")
+    calls = []
+
+    async def _enqueue(pm, project_name, episode, *, direction, seed, source, user_id):
+        calls.append((pm, project_name, episode, direction, seed, source, user_id))
+        return {
+            "task_id": "bgm-task-1",
+            "status": "queued",
+            "resource_id": "episode_01",
+            "deduped": False,
+        }
+
+    monkeypatch.setattr(hyperframes, "enqueue_hyperframes_bgm_task", _enqueue)
+    response = _client(monkeypatch, _Service(_workspace(tmp_path))).post(
+        "/api/v1/projects/demo/hyperframes/episodes/1/background-music",
+        json={"direction": "warm instrumental", "seed": 7},
+    )
+
+    assert response.status_code == 200
+    assert response.json()["task_id"] == "bgm-task-1"
+    assert calls[0][1:6] == ("demo", 1, "warm instrumental", 7, "webui")

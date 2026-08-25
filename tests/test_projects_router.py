@@ -250,6 +250,12 @@ class _FakePM:
                 episodes.append(entry)
             entry["title"] = script.get("title", "")
             entry["script_file"] = f"scripts/{norm}"
+            for field in ("hook", "outline"):
+                if field in script:
+                    if script[field] is None:
+                        entry.pop(field, None)
+                    else:
+                        entry[field] = deepcopy(script[field])
             self.save_project(name, project)
         if on_commit is not None:
             on_commit(self.base / name / "scripts" / norm)
@@ -1868,6 +1874,30 @@ class TestProjectsRouter:
             assert wrong_media.status_code == 400
 
     @pytest.mark.unit
+    def test_patch_image_production_stage_models(self, tmp_path, monkeypatch):
+        fake_pm = _FakePM(tmp_path)
+        client = _client(monkeypatch, fake_pm)
+        with client:
+            updated = client.patch(
+                "/api/v1/projects/ready",
+                json={
+                    "image_provider_asset": "gemini-aistudio/gemini-3.1-flash-image-preview",
+                    "image_provider_storyboard": "runware/google:nano-banana@2-lite",
+                    "image_provider_keyframe": "gemini-aistudio/gemini-3.1-flash-image-preview",
+                },
+            )
+            assert updated.status_code == 200
+            project = fake_pm.project_data["ready"]
+            assert project["image_provider_storyboard"] == "runware/google:nano-banana@2-lite"
+
+            cleared = client.patch(
+                "/api/v1/projects/ready",
+                json={"image_provider_storyboard": ""},
+            )
+            assert cleared.status_code == 200
+            assert "image_provider_storyboard" not in fake_pm.project_data["ready"]
+
+    @pytest.mark.unit
     def test_patch_text_tier_fields_set_and_clear(self, tmp_path, monkeypatch):
         """项目级档位 / 默认模型三字段可设置；空值 = 清除、继承全局。"""
         fake_pm = _FakePM(tmp_path)
@@ -2626,6 +2656,98 @@ class TestProjectsRouter:
             for blank in ("", "   "):
                 resp = client.patch("/api/v1/projects/ready/episodes/1", json={"title": blank})
                 assert resp.status_code == 422
+
+    @pytest.mark.unit
+    def test_update_episode_metadata_batch_mirrors_hook_and_outline(self, tmp_path, monkeypatch):
+        """Web API 与 Agent 共用的批量操作同步正式文稿及项目导览镜像。"""
+        fake_pm = _FakePM(tmp_path)
+        fake_pm.scripts[("ready", "episode_1.json")]["episode"] = 1
+
+        client = _client(monkeypatch, fake_pm)
+        with client:
+            resp = client.patch(
+                "/api/v1/projects/ready/episodes/1",
+                json={
+                    "title": " 景泰蓝 ",
+                    "hook": " 花朵插入瓶中 ",
+                    "outline": {"story_beats": [" 掐丝 ", "点蓝"], "next_episode_teaser": ""},
+                },
+            )
+            assert resp.status_code == 200
+            script = fake_pm.scripts[("ready", "episode_1.json")]
+            assert script["title"] == "景泰蓝"
+            assert script["hook"] == "花朵插入瓶中"
+            assert script["outline"]["story_beats"] == ["掐丝", "点蓝"]
+            episode = fake_pm.project_data["ready"]["episodes"][0]
+            assert episode["title"] == "景泰蓝"
+            assert episode["hook"] == "花朵插入瓶中"
+            assert episode["outline"] == script["outline"]
+
+    @pytest.mark.unit
+    def test_normalize_keyframe_asset_mentions_batch(self, tmp_path, monkeypatch):
+        fake_pm = _FakePM(tmp_path)
+        fake_pm.project_data["ready"]["generation_mode"] = "reference_video"
+        fake_pm.project_data["ready"]["characters"] = {"角色A": {"description": ""}}
+        fake_pm.project_data["ready"]["props"] = {"铜胎": {"description": ""}}
+        script = fake_pm.scripts[("ready", "episode_1.json")]
+        script["generation_mode"] = "reference_video"
+        script["video_units"] = [
+            {
+                "unit_id": "E1U01",
+                "text": "正文",
+                "duration_seconds": 5,
+                "keyframes": [{"keyframe_id": "E1U01K01", "description": "角色A 拿起铜胎"}],
+            }
+        ]
+
+        client = _client(monkeypatch, fake_pm)
+        with client:
+            resp = client.post("/api/v1/projects/ready/episodes/1/keyframes/normalize-asset-mentions")
+            assert resp.status_code == 200
+            assert resp.json()["keyframes_changed"] == 1
+            saved = fake_pm.scripts[("ready", "episode_1.json")]
+            assert saved["video_units"][0]["keyframes"][0]["description"] == "@[角色A] 拿起@[铜胎]"
+
+    @pytest.mark.unit
+    def test_reference_exact_replacements_web_boundary(self, tmp_path, monkeypatch):
+        from lib.script_batch_edit import ScriptBatchEditResult
+        from server.routers import projects as projects_router
+
+        fake_pm = _FakePM(tmp_path)
+        seen = {}
+
+        def _replace(manager, project_name, episode, expected_revision, replacements):
+            seen.update(
+                manager=manager,
+                project_name=project_name,
+                episode=episode,
+                expected_revision=expected_revision,
+                replacements=replacements,
+            )
+            return ScriptBatchEditResult(
+                success=True,
+                script="episode_1.json",
+                episode=episode,
+                before_revision=expected_revision,
+                revision=expected_revision,
+                affected_ids=("E1U01",),
+            )
+
+        monkeypatch.setattr(projects_router, "replace_reference_script_text", _replace)
+        client = _client(monkeypatch, fake_pm)
+        revision = f"sha256-v1:{'0' * 64}"
+        with client:
+            resp = client.post(
+                "/api/v1/projects/ready/episodes/1/reference-script/exact-replacements",
+                json={
+                    "expected_revision": revision,
+                    "replacements": [{"unit_id": "E1U01", "field": "text", "old": "旧", "new": "新"}],
+                },
+            )
+        assert resp.status_code == 200
+        assert resp.json()["affected_ids"] == ["E1U01"]
+        assert seen["project_name"] == "ready"
+        assert seen["replacements"][0]["old"] == "旧"
 
     @pytest.mark.unit
     def test_update_episode_missing_episode_404(self, tmp_path, monkeypatch):

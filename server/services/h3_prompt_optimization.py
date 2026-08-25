@@ -50,6 +50,7 @@ from server.services.video_style import VideoStyleService
 logger = logging.getLogger(__name__)
 
 _H3_OPTIMIZATION_MAX_ATTEMPTS = 3
+_H3_OPTIMIZATION_MAX_CONCURRENCY = 3
 
 
 class H3PromptOptimizationError(ValueError):
@@ -401,14 +402,14 @@ class H3PromptOptimizationService:
     ) -> H3PromptContext:
         from server.services.reference_storyboard_sheet_tasks import (
             StoryboardSheetGateError,
-            require_confirmed_storyboard_sheet,
+            require_formal_keyframes,
             require_generated_keyframes,
-            require_keyframe_plan,
+            require_storyboard_sheet,
         )
 
         try:
-            require_keyframe_plan(unit)
-            require_confirmed_storyboard_sheet(unit)
+            require_formal_keyframes(unit)
+            require_storyboard_sheet(unit)
             require_generated_keyframes(unit)
         except StoryboardSheetGateError as exc:
             raise H3PromptOptimizationError(exc.code) from exc
@@ -595,6 +596,13 @@ class H3PromptOptimizationService:
                     raise H3PromptOptimizationError("h3_prompt_stale", unit_id)
                 updated = artifact.model_copy(
                     update={
+                        # A human/Agent edit creates a new reviewable prompt
+                        # version even when the provider request basis itself
+                        # is unchanged.  Keeping the old confirmation here lets
+                        # both the Web UI and Agent submit edited text without
+                        # the user ever approving those edits.
+                        "status": "pending_review",
+                        "confirmed_at": None,
                         "sections": sections,
                         "rendered_prompt": sections.render(),
                     }
@@ -616,14 +624,19 @@ class H3PromptOptimizationService:
             return []
         generator = await self._generator_factory(project_name)
         system_prompt = load_h3_system_prompt()
-        artifacts: list[H3PromptArtifact] = []
-        for context in contexts:
-            result, sections = await _generate_valid_h3_prompt(
-                generator,
-                context=context,
-                system_prompt=system_prompt,
-                project_name=project_name,
-            )
+        semaphore = asyncio.Semaphore(_H3_OPTIMIZATION_MAX_CONCURRENCY)
+
+        async def _optimize_one(context: H3PromptContext) -> H3PromptArtifact:
+            # A stage-level batch should not turn into one provider round trip
+            # per unit in strict serial order.  Bound concurrency so Web UI and
+            # Agent batches finish promptly without flooding the text backend.
+            async with semaphore:
+                result, sections = await _generate_valid_h3_prompt(
+                    generator,
+                    context=context,
+                    system_prompt=system_prompt,
+                    project_name=project_name,
+                )
             duration = context.projection.request_duration
             candidate = context.projection.provider_candidate
             assert duration is not None and candidate is not None
@@ -646,8 +659,11 @@ class H3PromptOptimizationService:
                 optimized_at=datetime.now(UTC).isoformat(),
             )
             await asyncio.to_thread(save_h3_prompt_artifact, project_path, artifact)
-            artifacts.append(artifact)
-        return artifacts
+            return artifact
+
+        # asyncio.gather preserves the caller's unit order even though provider
+        # calls and artifact writes complete out of order.
+        return list(await asyncio.gather(*(_optimize_one(context) for context in contexts)))
 
     async def optimized_prompt_for_context(
         self,

@@ -183,6 +183,10 @@ async def test_reference_visual_gate_routes_distinct_tools_from_current_files(
     missing_sheet = await planner.get_plan("demo", WorkflowPlanRequest())
     assert missing_sheet.next_action.type == "generate_reference_storyboard_sheets"
     assert missing_sheet.next_action.requested_ids == ["E1U01"]
+    missing_steps = {step.id: step for step in missing_sheet.steps}
+    assert missing_steps["video_unit_storyboard_sheet"].state == "ready"
+    assert missing_steps["reference_keyframes"].state == "ready"
+    assert missing_steps["reference_keyframes"].action.type == "generate_reference_keyframes"
 
     (project_path / "storyboard_sheets").mkdir(exist_ok=True)
     (project_path / "storyboard_sheets/E1U01.png").write_bytes(b"sheet")
@@ -192,14 +196,10 @@ async def test_reference_visual_gate_routes_distinct_tools_from_current_files(
         "confirmed_at": None,
     }
     pending_sheet = await planner.get_plan("demo", WorkflowPlanRequest())
-    assert pending_sheet.next_action.type == "confirm_reference_storyboard_sheet"
-    assert pending_sheet.next_action.requires_confirmation is True
-
-    script["video_units"][0]["storyboard_sheet"]["status"] = "confirmed"
-    script["video_units"][0]["storyboard_sheet"]["confirmed_at"] = "2026-08-24T00:00:00+00:00"
-    missing_keyframe = await planner.get_plan("demo", WorkflowPlanRequest())
-    assert missing_keyframe.next_action.type == "generate_reference_keyframes"
-    assert missing_keyframe.next_action.requested_ids == ["E1U01K01"]
+    assert pending_sheet.next_action.type == "generate_reference_keyframes"
+    pending_steps = {step.id: step for step in pending_sheet.steps}
+    assert pending_steps["video_unit_storyboard_sheet"].state == "completed"
+    assert pending_steps["video_unit_storyboard_sheet"].action is None
 
     (project_path / "keyframes").mkdir(exist_ok=True)
     (project_path / "keyframes/E1U01K01.png").write_bytes(b"keyframe")

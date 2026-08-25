@@ -19,7 +19,7 @@ from lib.artifact_activation import (
     resolve_artifact_episode,
 )
 from lib.artifact_manifest import ArtifactManifestError
-from lib.config.resolver import ConfigResolver
+from lib.config.resolver import ConfigResolver, image_stage_for_task
 from lib.db import async_session_factory
 from lib.generation_queue_client import TaskSpec, batch_enqueue_and_wait
 from lib.generation_result import (
@@ -58,13 +58,22 @@ _LABEL_ZH: dict[str, str] = {
 }
 
 
-async def _i2i_provider_available(project: dict[str, Any], payload: dict[str, str] | None = None) -> bool:
+async def _i2i_provider_available(
+    project: dict[str, Any],
+    resource_type: str,
+    payload: dict[str, str] | None = None,
+) -> bool:
     """项目 i2i 槽解析不出可用供应商时返回 False——与 HTTP 端点入队前 fail-fast 同一判断点
     （见 ``server/routers/generate.py::_require_i2i_image_provider_configured``），批量编辑
     只需要一次「是否可用」的项目级判断，不像端点那样需要拿到 provider_id 传给入队。
     """
     try:
-        await ConfigResolver(async_session_factory).resolve_image_backend(project, payload or {}, capability="i2i")
+        await ConfigResolver(async_session_factory).resolve_image_backend(
+            project,
+            payload or {},
+            capability="i2i",
+            stage=image_stage_for_task("image_edit", {"resource_type": resource_type}),
+        )
     except ValueError:
         return False
     return True
@@ -288,9 +297,9 @@ def edit_images_tool(ctx: ToolContext):
 
             image_override = image_override_from_args(args)
             provider_available = (
-                await _i2i_provider_available(project, image_override)
+                await _i2i_provider_available(project, resource_type, image_override)
                 if image_override
-                else await _i2i_provider_available(project)
+                else await _i2i_provider_available(project, resource_type)
             )
             if not provider_available:
                 # 拦截在入队前：不是某个 ID 的产物问题，是整批共享的前置条件不满足，

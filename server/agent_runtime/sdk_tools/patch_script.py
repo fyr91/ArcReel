@@ -76,7 +76,7 @@ def _result_payload(result: ScriptBatchEditResult) -> dict[str, Any]:
     return result.model_dump(mode="json")
 
 
-def _tool_edit_result(name: str, result: ScriptBatchEditResult) -> dict[str, Any]:
+def tool_edit_result(name: str, result: ScriptBatchEditResult) -> dict[str, Any]:
     payload = _result_payload(result)
     if result.success:
         ids = ", ".join(result.affected_ids) or "无"
@@ -211,7 +211,7 @@ def patch_episode_script_tool(ctx: ToolContext):
                 }
             command = ScriptBatchEditCommand.model_validate(command_args)
             result = ScriptBatchEditor(ctx.pm).execute(ctx.project_name, command)
-            output = _tool_edit_result("patch_episode_script", result)
+            output = tool_edit_result("patch_episode_script", result)
             if result.success:
                 regen_ids = [
                     operation.id
@@ -267,7 +267,7 @@ def insert_segment_tool(ctx: ToolContext):
                 [{"op": "insert_after", "after_id": after_id, "item": inserted}],
                 expected_revision=expected_revision,
             )
-            output = _tool_edit_result("insert_segment", result)
+            output = tool_edit_result("insert_segment", result)
             if result.success:
                 new_ids = _item_ids(ctx.pm.load_script(ctx.project_name, script_filename))
                 output["content"][0]["text"] += f"\n当前分镜顺序: {new_ids}"
@@ -297,7 +297,7 @@ def remove_segment_tool(ctx: ToolContext):
             script_filename = validate_script_filename(args["script"])
             item_id = str(args["id"])
             result = _execute_current(ctx, script_filename, [{"op": "remove", "id": item_id}])
-            output = _tool_edit_result("remove_segment", result)
+            output = tool_edit_result("remove_segment", result)
             if result.success:
                 new_ids = _item_ids(ctx.pm.load_script(ctx.project_name, script_filename))
                 output["content"][0]["text"] += f"\n当前分镜顺序: {new_ids}"
@@ -362,7 +362,7 @@ def split_segment_tool(ctx: ToolContext):
                 operations,
                 expected_revision=expected_revision,
             )
-            output = _tool_edit_result("split_segment", result)
+            output = tool_edit_result("split_segment", result)
             if result.success:
                 new_ids = _item_ids(ctx.pm.load_script(ctx.project_name, script_filename))
                 output["content"][0]["text"] += f"\n当前分镜顺序: {new_ids}"
@@ -379,4 +379,5 @@ __all__ = [
     "insert_segment_tool",
     "remove_segment_tool",
     "split_segment_tool",
+    "tool_edit_result",
 ]

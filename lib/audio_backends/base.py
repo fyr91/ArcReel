@@ -41,6 +41,11 @@ class AudioSynthesisRequest:
     tiled_decode: bool | None = None
     output_format: str | None = None
     client_job_id: str | None = None
+    # ArcReel queue identity for durable provider-job/progress persistence.
+    # Synchronous TTS backends ignore both fields; Croco Music uses them to
+    # survive Agent disconnects and worker restarts without resubmitting.
+    task_id: str | None = None
+    provider_job_id: str | None = None
 
 
 @dataclass

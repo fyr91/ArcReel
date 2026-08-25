@@ -105,9 +105,7 @@ def test_image_model_selection_requires_provider_and_model_as_a_pair() -> None:
         ImageModelSelection(image_provider="openai")
 
 
-def test_keyframe_specs_require_a_confirmed_storyboard_sheet() -> None:
-    from server.services.reference_storyboard_sheet_tasks import StoryboardSheetGateError
-
+def test_keyframe_specs_do_not_wait_for_storyboard_sheet_confirmation() -> None:
     script = {
         "video_units": [
             {
@@ -128,10 +126,9 @@ def test_keyframe_specs_require_a_confirmed_storyboard_sheet() -> None:
         ]
     }
 
-    with pytest.raises(StoryboardSheetGateError) as exc_info:
-        reference_keyframe_task_specs(script, "episode_1.json")
+    specs = reference_keyframe_task_specs(script, "episode_1.json")
 
-    assert exc_info.value.code == "reference_storyboard_sheet_confirmation_required"
+    assert [spec.resource_id for spec in specs] == ["E1U01K01"]
 
 
 def test_keyframe_prompt_requires_action_beat_entry_state() -> None:
@@ -139,10 +136,13 @@ def test_keyframe_prompt_requires_action_beat_entry_state() -> None:
 
     prompt = build_keyframe_prompt(
         {"style": "田园动画", "style_description": "暖色自然光"},
+        "妹妹追弟弟，弟弟在奔跑中绊倒。",
         "鳄鱼妹妹追鳄鱼弟弟，弟弟摔进桂花堆",
-        "- Picture 1 = E1U01 整体 Storyboard Sheet",
+        "- Picture 1 = @[鳄鱼妹妹]",
     )
 
     assert "动作刚开始" in prompt
     assert "不得选择同一 beat 的完成结果" in prompt
-    assert "Picture 1 = E1U01 整体 Storyboard Sheet" in prompt
+    assert "正式 Video Unit 文稿" in prompt
+    assert "Picture 1 = @[鳄鱼妹妹]" in prompt
+    assert "Storyboard Sheet" not in prompt

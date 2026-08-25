@@ -64,12 +64,16 @@ export interface ReferenceKeyframe {
   keyframe_id: string;
   description: string;
   image_path: string | null;
+  /** Advisory only: the formal manuscript changed after this image was generated. */
+  generation_input_changed?: boolean;
 }
 
 export interface ReferenceStoryboardSheet {
   image_path: string;
   status: "pending_review" | "confirmed";
   confirmed_at: string | null;
+  /** Advisory only; does not revoke confirmation or block downstream generation. */
+  generation_input_changed?: boolean;
 }
 
 export interface ReferenceVideoUnit {
@@ -84,7 +88,9 @@ export interface ReferenceVideoUnit {
   generated_assets: UnitGeneratedAssets;
   /** Core-scene first frames, in manuscript order. Maximum five per unit. */
   keyframes?: ReferenceKeyframe[];
-  /** Mandatory full-unit storyboard review gate before keyframe generation. */
+  /** Storyboard image description; defaults to the formal manuscript and shares its @[asset] syntax. */
+  storyboard_description?: string | null;
+  /** Full-unit storyboard derived independently from the same formal manuscript as Keyframes. */
   storyboard_sheet?: ReferenceStoryboardSheet | null;
   /** Problem shell or mixed-speech marker; generation is blocked until repaired. */
   needs_replan?: boolean;

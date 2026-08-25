@@ -9,6 +9,7 @@ import pytest
 
 from lib.project_manager import ProjectManager
 from server.services.hyperframes_music import (
+    BACKGROUND_MUSIC_FADE_SECONDS,
     BACKGROUND_MUSIC_VOLUME,
     HyperframesMusicService,
     HyperframesMusicUnavailable,
@@ -32,7 +33,11 @@ def _workspace(tmp_path: Path) -> tuple[ProjectManager, Path]:
     workspace = project / "hyperframes" / "episode_01"
     (workspace / "media").mkdir(parents=True)
     (project / "project.json").write_text("{}", encoding="utf-8")
-    (workspace / "index.html").write_text("<html></html>", encoding="utf-8")
+    (workspace / "index.html").write_text(
+        '<html><body><div data-composition-id="episode_01"><div class="overlay"></div></div>'
+        '<script>const template = "</div>";</script></body></html>',
+        encoding="utf-8",
+    )
     (workspace / "manifest.json").write_text(
         json.dumps(
             {
@@ -65,13 +70,15 @@ async def test_music_generation_is_instrumental_continuous_and_project_local(tmp
         "demo",
         1,
         direction="Warm cinematic folk, 88 BPM, bamboo flute and soft strings",
+        task_id="task-music",
+        provider_job_id="job-music",
     )
 
     assert music.path.is_relative_to(workspace)
     assert music.path.read_bytes() == b"generated music"
     assert music.duration_seconds == 10.0
     assert music.volume == BACKGROUND_MUSIC_VOLUME == 0.15
-    assert 'data-volume="0.150"' in music.html_snippet
+    assert "data-automation=" in music.html_snippet
     assert 'data-duration="10.000000"' in music.html_snippet
     assert 'data-audio-group="music"' in music.html_snippet
     request = backend.requests[0]
@@ -79,11 +86,19 @@ async def test_music_generation_is_instrumental_continuous_and_project_local(tmp
     assert request.lyrics == ""
     assert request.output_format == "mp3"
     assert request.client_job_id.startswith("arcreel:hyperframes:bgm:")
+    assert request.task_id == "task-music"
+    assert request.provider_job_id == "job-music"
     assert "Strictly instrumental" in request.text
     assert "No vocals" in request.text
     metadata = json.loads((workspace / music.metadata_path).read_text(encoding="utf-8"))
     assert metadata["instrumental"] is True
     assert metadata["volume"] == 0.15
+    assert metadata["fade_in_seconds"] == BACKGROUND_MUSIC_FADE_SECONDS
+    assert metadata["fade_out_seconds"] == BACKGROUND_MUSIC_FADE_SECONDS
+    composition = (workspace / "index.html").read_text(encoding="utf-8")
+    assert "arcreel-background-music:start" in composition
+    assert music.html_snippet in composition
+    assert composition.index(music.html_snippet) < composition.index('<script>const template = "</div>";</script>')
 
     same = await HyperframesMusicService(
         pm,
@@ -96,6 +111,8 @@ async def test_music_generation_is_instrumental_continuous_and_project_local(tmp
     )
     assert same.path == music.path
     assert len(backend.requests) == 1
+    composition = (workspace / "index.html").read_text(encoding="utf-8")
+    assert composition.count("arcreel-background-music:start") == 1
 
 
 async def test_music_generation_rejects_a_track_shorter_than_the_episode(tmp_path: Path) -> None:

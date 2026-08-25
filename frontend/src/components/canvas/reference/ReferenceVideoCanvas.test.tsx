@@ -158,7 +158,7 @@ describe("ReferenceVideoCanvas", () => {
     }));
   });
 
-  it("shows the distinct Video Unit Storyboard Sheet gate before keyframes", async () => {
+  it("shows Storyboard and Keyframes as independent sibling panels", async () => {
     vi.spyOn(API, "listReferenceVideoUnits").mockResolvedValue({ units: [mkUnit("E1U1")] });
     render(<ReferenceVideoCanvas projectName="proj" episode={1} />);
 
@@ -166,10 +166,12 @@ describe("ReferenceVideoCanvas", () => {
     const keyframeTab = screen.getByRole("tab", { name: /Keyframes|关键分镜/ });
     expect(sheetTab.compareDocumentPosition(keyframeTab) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
 
+    fireEvent.click(keyframeTab);
+    expect(await screen.findByText(/尚未定义关键分镜|has no keyframes/)).toBeInTheDocument();
+
     fireEvent.click(sheetTab);
-    expect(
-      await screen.findByText(/Video Unit Storyboard Sheet (has not been generated|尚未生成)/),
-    ).toBeInTheDocument();
+    expect(await screen.findByText(/Storyboard has not been generated|分镜版尚未生成/)).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /确认.*Storyboard|Confirm.*Storyboard/ })).not.toBeInTheDocument();
   });
   afterEach(() => vi.restoreAllMocks());
 

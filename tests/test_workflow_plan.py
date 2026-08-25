@@ -164,8 +164,8 @@ def test_reference_route_retains_its_delivery_choice() -> None:
                 pending_sheet_unit_ids=["E1U01"],
                 missing_keyframe_ids=["E1U01K01"],
             ),
-            "confirm_reference_storyboard_sheet",
-            ["E1U01"],
+            "generate_reference_keyframes",
+            ["E1U01K01"],
         ),
         (
             ReferenceVisualGateObservation(
@@ -190,8 +190,6 @@ def test_reference_visual_gate_uses_distinct_sheet_and_keyframe_actions(
     assert plan.next_action.type == expected_action
     assert plan.next_action.requested_ids == expected_ids
     assert _step(plan, "video").state is WorkflowStepState.PENDING
-    if expected_action == "confirm_reference_storyboard_sheet":
-        assert plan.next_action.requires_confirmation is True
 
 
 def test_completed_reference_visual_gate_continues_to_delivery_choice() -> None:

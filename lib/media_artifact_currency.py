@@ -9,7 +9,7 @@ never consults whichever provider configuration happens to be active later.
 from __future__ import annotations
 
 from collections.abc import Callable, Mapping
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from typing import Any
 
 from lib.artifact_manifest import (
@@ -20,8 +20,15 @@ from lib.artifact_manifest import (
     compose_video_artifact_basis,
 )
 from lib.artifact_version_provenance import parse_typed_audio_settings, parse_typed_media_version_target
-from lib.asset_types import asset_name_comparison_key
+from lib.asset_types import (
+    GLOBAL_ASSET_ID_FIELD,
+    GLOBAL_ASSET_VOICE_SOURCE_FIELD,
+    asset_name_comparison_key,
+    normalize_asset_bucket,
+)
+from lib.content_digest import sha256_file_with_size
 from lib.narration_delivery import TtsSynthesisSettings, build_narration_audio_basis
+from lib.path_safety import safe_join
 from lib.project_manager import ProjectManager, resolve_episode_script_binding
 from lib.reference_video.duration_slots import resolve_duration_slot
 from lib.reference_video.prompt_render import resolve_reference_audio_paths
@@ -122,7 +129,7 @@ def build_current_video_artifact_basis(
     audio_speakers = _execution_reference_audio_speakers(version_metadata.get("execution_provider_media"))
     if audio_speakers is None:
         return None
-    available_audio = resolve_reference_audio_paths(project, project_path)
+    available_audio = _current_reference_audio_paths(project, project_path, version_metadata)
     selected_audio = {speaker: available_audio[speaker] for speaker in audio_speakers if speaker in available_audio}
     speech = build_video_speech_basis(
         admission.preparation,
@@ -286,6 +293,66 @@ def _execution_reference_audio_speakers(value: object) -> tuple[str, ...] | None
         if canonical not in speakers:
             speakers.append(canonical)
     return tuple(speakers)
+
+
+def _current_reference_audio_paths(
+    project: dict[str, Any],
+    project_path: Path,
+    version_metadata: Mapping[str, Any],
+) -> dict[str, Path]:
+    """Resolve current local and execution-proven linked-global voice inputs.
+
+    Linked global reference audio lives beside project directories, so the local
+    resolver intentionally cannot see it.  At currency projection time, accept
+    only the exact global catalog asset selected by the current character link
+    and frozen in the provider-media checkpoint, and verify its bytes against
+    that checkpoint.  This preserves stale detection when either the link or the
+    catalog file changes.
+    """
+
+    resolved = resolve_reference_audio_paths(project, project_path)
+    media = version_metadata.get("execution_provider_media")
+    if not isinstance(media, list):
+        return resolved
+    characters = normalize_asset_bucket(project.get("characters"))
+    projects_root = project_path.resolve().parent
+    for raw in media:
+        if not isinstance(raw, Mapping) or raw.get("role") != "reference_audio":
+            continue
+        raw_name = raw.get("logical_name")
+        locator = raw.get("source_locator")
+        digest = raw.get("sha256")
+        size_bytes = raw.get("size_bytes")
+        if (
+            not isinstance(raw_name, str)
+            or not raw_name
+            or not isinstance(locator, str)
+            or not isinstance(digest, str)
+            or type(size_bytes) is not int
+        ):
+            continue
+        name = asset_name_comparison_key(raw_name)
+        if name in resolved:
+            continue
+        character = characters.get(name)
+        if not isinstance(character, Mapping) or character.get(GLOBAL_ASSET_VOICE_SOURCE_FIELD) != "reference_audio":
+            continue
+        asset_id = character.get(GLOBAL_ASSET_ID_FIELD)
+        path = PurePosixPath(locator)
+        if (
+            not isinstance(asset_id, str)
+            or not asset_id
+            or path.parts[:4] != ("_global_assets", "character", "catalog", asset_id)
+        ):
+            continue
+        try:
+            candidate = safe_join(projects_root, locator, require_file=True)
+            current_digest, current_size = sha256_file_with_size(candidate)
+        except (OSError, TypeError, ValueError):
+            continue
+        if current_digest == digest and current_size == size_bytes:
+            resolved[name] = candidate
+    return resolved
 
 
 __all__ = [

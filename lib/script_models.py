@@ -9,7 +9,7 @@ script_models.py - 剧本数据模型
 import logging
 from typing import Annotated, Any, ClassVar, Literal, get_args
 
-from pydantic import BaseModel, BeforeValidator, ConfigDict, Field, StringConstraints, create_model, model_validator
+from pydantic import BaseModel, BeforeValidator, ConfigDict, Field, create_model, model_validator
 from pydantic.json_schema import SkipJsonSchema
 
 from lib.script_skeleton import resolve_declared_kind
@@ -23,8 +23,6 @@ from lib.script_skeleton import resolve_declared_kind
 # ScriptGenerator 路径(LLM 输出走 model_validate + model_dump)也会被这层保护:LLM 在
 # Structured Outputs 下不太会产出额外字段,产出即 hallucination,拒比静默丢更安全。
 _STRICT_CONFIG = ConfigDict(extra="forbid")
-
-ReferenceKeyframePlanItem = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1)]
 
 # ============ 枚举类型定义 ============
 
@@ -817,6 +815,10 @@ class ReferenceKeyframe(BaseModel):
     keyframe_id: str = Field(min_length=1, description="稳定 ID，格式 E{集}U{序号}K{序号}")
     description: str = Field(min_length=1, description="该核心场景首帧的静态画面描述，可包含已登记资产引用")
     image_path: SkipJsonSchema[str | None] = Field(default=None, description="当前首帧图片的项目内相对路径")
+    generation_input_changed: SkipJsonSchema[bool] = Field(
+        default=False,
+        description="图片生成后正式文稿或图片描述是否变化；仅提示，不影响生成准入",
+    )
 
 
 class ReferenceStoryboardSheet(BaseModel):
@@ -829,13 +831,17 @@ class ReferenceStoryboardSheet(BaseModel):
         default="pending_review", description="当前版本是否已经用户确认"
     )
     confirmed_at: SkipJsonSchema[str | None] = Field(default=None, description="用户确认时间（ISO8601 UTC）")
+    generation_input_changed: SkipJsonSchema[bool] = Field(
+        default=False,
+        description="图片生成后正式文稿或图片描述是否变化；仅提示，不影响生成准入",
+    )
 
 
 class ReferenceVideoUnit(BaseModel):
     """参考视频单元——一个视频文件的最小生成粒度。
 
-    ``text`` 是这个单元普通资产引用与发声归属的唯一持久化内容真相；已确认的
-    ``storyboard_sheet`` 是关键帧与 H3 的强制整体视觉参考，不属于正文里的普通资产引用。
+    ``text`` 是这个单元普通资产引用与发声归属的唯一持久化内容真相；Storyboard Sheet 与
+    Keyframes 都从正式文稿派生、彼此独立生成，并共同作为后续视频参考图。
     unit 是一次生成调用的单元，一个 unit 一个编排时长：``duration_seconds`` 是剧本时长的唯一
     真相，执行前预检再把它投影到供应商申请档位。
     """
@@ -857,9 +863,13 @@ class ReferenceVideoUnit(BaseModel):
         max_length=5,
         description="该 unit 的关键分镜首帧；正文中的 @[关键分镜 ID] 是其位置引用",
     )
+    storyboard_description: SkipJsonSchema[str | None] = Field(
+        default=None,
+        description="分镜版图片描述；默认从正式文稿机械派生，支持与文稿相同的 @[资产] 语法",
+    )
     storyboard_sheet: SkipJsonSchema[ReferenceStoryboardSheet | None] = Field(
         default=None,
-        description="关键分镜生成前必须生成并确认的整段 Storyboard Sheet",
+        description="与 Keyframes 同级、从正式文稿独立派生的整段 Storyboard Sheet",
     )
     generated_assets: SkipJsonSchema[GeneratedAssets] = Field(
         default_factory=GeneratedAssets, description="生成资源状态"
@@ -927,6 +937,21 @@ class ReferenceStep1Unit(BaseModel):
 
     model_config = _STRICT_CONFIG
 
+    @model_validator(mode="before")
+    @classmethod
+    def _drop_legacy_keyframe_plan(cls, data: object) -> object:
+        """Accept fork drafts that planned keyframes too early in preprocessing.
+
+        Keyframes are derived by step2 from the confirmed body.  Keeping the old
+        field would turn an invisible, stale derivative into a second content
+        source, so it is intentionally discarded when legacy drafts are read.
+        """
+
+        if isinstance(data, dict) and "keyframe_plan" in data:
+            data = dict(data)
+            data.pop("keyframe_plan", None)
+        return data
+
     unit_id: str = Field(min_length=1, description="格式 E{集}U{序号}")
     text: str = Field(min_length=1, description="单元正文，用 @[名称] 引用已注册资产")
     duration_seconds: int = Field(
@@ -937,14 +962,6 @@ class ReferenceStep1Unit(BaseModel):
     # 辅助源文映射：供 gate 对照与失真定位，不作为逐字机械校验依据。
     # 默认空串：不带该字段的存量草稿照常通过校验。
     source_text: SkipJsonSchema[str] = Field(default="", description="该 unit 所依据的源文内容（辅助追溯）")
-    keyframe_plan: list[ReferenceKeyframePlanItem] = Field(
-        min_length=1,
-        max_length=5,
-        description=(
-            "按场景顺序排列的视频 00:00.000 核心场景首帧规划；只写动作尚未推进的切入状态，"
-            "不得写连续动作、动作结果或后续反应；每个 unit 至少 1 个，step2 据此生成正式关键分镜"
-        ),
-    )
 
 
 class ReferenceStep1Draft(BaseModel):
@@ -974,6 +991,14 @@ class ReferenceStep1FlatUnit(BaseModel):
 
     model_config = _STRICT_CONFIG
 
+    @model_validator(mode="before")
+    @classmethod
+    def _drop_legacy_keyframe_plan(cls, data: object) -> object:
+        if isinstance(data, dict) and "keyframe_plan" in data:
+            data = dict(data)
+            data.pop("keyframe_plan", None)
+        return data
+
     duration_seconds: int = Field(
         ge=REFERENCE_UNIT_DURATION_RANGE[0],
         le=REFERENCE_UNIT_DURATION_RANGE[1],
@@ -981,11 +1006,6 @@ class ReferenceStep1FlatUnit(BaseModel):
     )
     source_text: str = Field(min_length=1, description="该单元所依据的源文内容（辅助审阅与追溯，不做逐字校验）")
     text: str = Field(min_length=1, description="该单元的书写层正文：画面描述 + 行内的台词 / 画外音记号")
-    keyframe_plan: list[ReferenceKeyframePlanItem] = Field(
-        min_length=1,
-        max_length=5,
-        description="该 unit 内按出现顺序排列的 1–5 个核心场景首帧规划；超过 5 个必须拆成多个 unit",
-    )
 
 
 class ReferenceStep2Keyframe(BaseModel):
@@ -997,7 +1017,8 @@ class ReferenceStep2Keyframe(BaseModel):
         min_length=1,
         description=(
             "只描述该核心场景视频 00:00.000 时动作尚未推进的静态切入画面：构图、主体、环境、光线与起始姿态；"
-            "不得概括整段动作、提前呈现动作结果或后续反应"
+            "不得概括整段动作、提前呈现动作结果或后续反应；首帧实际可见的人物、场景、道具与产品必须使用"
+            "与正式文稿相同的 @[登记名称] 语法，只能引用候选表登记名"
         ),
     )
 

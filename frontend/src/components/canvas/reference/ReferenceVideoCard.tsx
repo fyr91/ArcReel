@@ -98,6 +98,12 @@ export interface ReferenceVideoCardProps {
   value: string;
   /** Fires on every edit; parent decides whether to debounce, persist, or queue. */
   onChange: (next: string) => void;
+  /** Image descriptions share the same asset picker but do not reference sibling Keyframes. */
+  includeKeyframes?: boolean;
+  showMeta?: boolean;
+  placeholder?: string;
+  ariaLabel?: string;
+  disabled?: boolean;
 }
 
 export function ReferenceVideoCard({
@@ -106,6 +112,11 @@ export function ReferenceVideoCard({
   episode: _episode,
   value,
   onChange,
+  includeKeyframes = true,
+  showMeta = true,
+  placeholder,
+  ariaLabel,
+  disabled = false,
 }: ReferenceVideoCardProps) {
   const { t } = useTranslation("dashboard");
   const taRef = useRef<HTMLTextAreaElement>(null);
@@ -124,11 +135,13 @@ export function ReferenceVideoCard({
 
   const lookup = useMemo(() => {
     const next = buildMentionLookup(project);
-    for (const keyframe of unit.keyframes ?? []) {
-      next[normalizeAssetName(`关键分镜 ${keyframe.keyframe_id}`)] = "keyframe";
+    if (includeKeyframes) {
+      for (const keyframe of unit.keyframes ?? []) {
+        next[normalizeAssetName(`关键分镜 ${keyframe.keyframe_id}`)] = "keyframe";
+      }
     }
     return next;
-  }, [project, unit.keyframes]);
+  }, [includeKeyframes, project, unit.keyframes]);
 
   const tokens = useUnitPromptHighlight(currentText, lookup);
 
@@ -176,12 +189,14 @@ export function ReferenceVideoCard({
         imagePath: (data as Partial<Record<(typeof SHEET_FIELD)[AssetKind], string>>)[SHEET_FIELD[kind]] ?? null,
       }));
     }
-    out.keyframe = (unit.keyframes ?? []).map((keyframe) => ({
-      name: `关键分镜 ${keyframe.keyframe_id}`,
-      imagePath: keyframe.image_path,
-    }));
+    out.keyframe = includeKeyframes
+      ? (unit.keyframes ?? []).map((keyframe) => ({
+          name: `关键分镜 ${keyframe.keyframe_id}`,
+          imagePath: keyframe.image_path,
+        }))
+      : [];
     return out;
-  }, [project?.products, project?.characters, project?.scenes, project?.props, unit.keyframes]);
+  }, [includeKeyframes, project?.products, project?.characters, project?.scenes, project?.props, unit.keyframes]);
 
   const updatePickerFromCursor = useCallback((nextValue: string, cursor: number) => {
     // 向左扫描寻找 @ 触发符。旧格式只允许 `\w` + CJK 作为正在输入的 query；
@@ -293,17 +308,19 @@ export function ReferenceVideoCard({
   };
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col">
-      <div className="mb-1 flex items-center justify-between text-[11px] text-gray-500">
-        <span className="font-mono text-gray-400" translate="no">
-          {unit.unit_id}
-        </span>
-        <span className="tabular-nums text-gray-500">
-          {t("reference_editor_unit_meta", { duration: unit.duration_seconds })}
-        </span>
-      </div>
+    <div className="flex h-full min-h-0 flex-1 flex-col">
+      {showMeta && (
+        <div className="mb-1 flex items-center justify-between text-[11px] text-gray-500">
+          <span className="font-mono text-gray-400" translate="no">
+            {unit.unit_id}
+          </span>
+          <span className="tabular-nums text-gray-500">
+            {t("reference_editor_unit_meta", { duration: unit.duration_seconds })}
+          </span>
+        </div>
+      )}
 
-      <div className="relative min-h-0 flex-1 rounded-md border border-gray-800 bg-gray-950/60">
+      <div className="relative min-h-0 flex-1 overflow-hidden rounded-md border border-gray-800 bg-gray-950/60">
         <pre
           ref={preRef}
           aria-hidden
@@ -330,10 +347,11 @@ export function ReferenceVideoCard({
           aria-autocomplete="list"
           aria-activedescendant={pickerOpen && activeOptionId ? activeOptionId : undefined}
           aria-describedby={unknownMentions.length > 0 ? "reference-editor-unknown-desc" : undefined}
-          placeholder={t("reference_editor_placeholder")}
-          aria-label={t("reference_editor_aria_name")}
+          placeholder={placeholder ?? t("reference_editor_placeholder")}
+          aria-label={ariaLabel ?? t("reference_editor_aria_name")}
           spellCheck={false}
-          className="absolute inset-0 h-full w-full resize-none bg-transparent p-3 font-mono text-sm leading-6 text-transparent caret-gray-200 placeholder:text-gray-600 focus:outline-none"
+          disabled={disabled}
+          className="absolute inset-0 h-full w-full resize-none overflow-y-auto bg-transparent p-3 font-mono text-sm leading-6 text-transparent caret-gray-200 placeholder:text-gray-600 focus:outline-none"
         />
 
         {pickerOpen && anchorEl && (

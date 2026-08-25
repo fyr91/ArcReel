@@ -39,6 +39,10 @@ export interface H3ExecutionProgress {
   queue_ahead: number | null;
 }
 
+export interface MusicExecutionProgress extends Omit<H3ExecutionProgress, "kind"> {
+  kind: "minimax_music";
+}
+
 export interface TaskItem {
   task_id: string;
   project_name: string;
@@ -63,8 +67,8 @@ export interface TaskItem {
   cancelled_by: "user" | "cascade" | null;
   provider_id: string | null;
   provider_job_id: string | null;
-  /** Present only for backends that expose durable staged progress (currently MiniMax H3). */
-  execution_progress?: H3ExecutionProgress | null;
+  /** Present only for backends that expose durable staged progress. */
+  execution_progress?: H3ExecutionProgress | MusicExecutionProgress | null;
   source: "webui" | "agent";
   queued_at: string;
   started_at: string | null;

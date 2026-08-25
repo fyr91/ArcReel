@@ -37,6 +37,11 @@ export interface ModelConfigValue {
   imageBackendDefault: string;
   imageBackendT2I: string;
   imageBackendI2I: string;
+  /** 项目设置按制作阶段覆盖；创建向导省略并沿用默认图片模型。 */
+  imageBackendAsset?: string;
+  imageBackendReference?: string;
+  imageBackendStoryboard?: string;
+  imageBackendKeyframe?: string;
   textBackendDefault: string;
   textBackendSimple: string;
   textBackendComplex: string;
@@ -231,22 +236,42 @@ export function ModelConfigSection({
   const imageSubFields: LayeredSubField[] | undefined = showSubFields
     ? degradeSubFieldsToSaved([
         {
-          key: "t2i",
-          ...bucketLabels.t2i,
-          value: value.imageBackendT2I,
-          options: mediaCandidates?.image.buckets.t2i ?? [],
+          key: "asset",
+          label: t("image_stage_asset_label"),
+          caption: t("image_stage_asset_caption"),
+          value: value.imageBackendAsset ?? "",
+          options: options.imageBackends,
           effective: effectiveModel(value.imageBackendDefault, globalDefaults.imageT2I, globalDefaults.image),
-          onChange: (next: string) => applyImageLayer({ imageBackendT2I: next }),
+          onChange: (next: string) => applyImageLayer({ imageBackendAsset: next }),
         },
         {
-          key: "i2i",
-          ...bucketLabels.i2i,
-          value: value.imageBackendI2I,
-          options: mediaCandidates?.image.buckets.i2i ?? [],
+          key: "reference",
+          label: t("image_stage_reference_label"),
+          caption: t("image_stage_reference_caption"),
+          value: value.imageBackendReference ?? "",
+          options: options.imageBackends,
           effective: effectiveModel(value.imageBackendDefault, globalDefaults.imageI2I, globalDefaults.image),
-          onChange: (next: string) => applyImageLayer({ imageBackendI2I: next }),
+          onChange: (next: string) => applyImageLayer({ imageBackendReference: next }),
         },
-      ], !!mediaCandidates)
+        {
+          key: "storyboard",
+          label: t("image_stage_storyboard_label"),
+          caption: t("image_stage_storyboard_caption"),
+          value: value.imageBackendStoryboard ?? "",
+          options: options.imageBackends,
+          effective: effectiveModel(value.imageBackendDefault, globalDefaults.imageT2I, globalDefaults.image),
+          onChange: (next: string) => applyImageLayer({ imageBackendStoryboard: next }),
+        },
+        {
+          key: "keyframe",
+          label: t("image_stage_keyframe_label"),
+          caption: t("image_stage_keyframe_caption"),
+          value: value.imageBackendKeyframe ?? "",
+          options: options.imageBackends,
+          effective: effectiveModel(value.imageBackendDefault, globalDefaults.imageI2I, globalDefaults.image),
+          onChange: (next: string) => applyImageLayer({ imageBackendKeyframe: next }),
+        },
+      ], options.imageBackends.length > 0)
     : undefined;
 
   // 能力统一经 useModelCapabilities 取得（见该模块的真相源规则），本组件不自行查表。

@@ -137,6 +137,12 @@ async def test_prepare_writes_complete_studio_project_only_inside_arcreel_projec
     composition = (workspace.path / "index.html").read_text(encoding="utf-8")
     assert 'data-width="1080" data-height="1920"' in composition
     assert "data-no-timeline" in composition
+    # Studio owns timed clip visibility. Its player also writes inline
+    # ``display: none`` while seeking, so the composition must keep every
+    # video in layout and let the authoritative visibility state select the
+    # active clip. Otherwise later clips are loaded and seeked but remain blank.
+    assert "display: block !important" in composition
+    assert "position: absolute" in composition
     assert "muted playsinline" in composition
     assert 'data-track-index="2"' in composition
     assert 'data-audio-group="voiceover"' in composition
@@ -147,6 +153,7 @@ async def test_prepare_writes_complete_studio_project_only_inside_arcreel_projec
     assert manifest["script_file"] == "scripts/episode_1.json"
     assert manifest["editing_plan_file"] == "EDITING_PLAN.md"
     assert manifest["total_duration_microseconds"] == 2_000_000
+    assert manifest["hyperframes_version"] == "0.8.14"
 
 
 async def test_prepare_preserves_an_existing_editable_workspace(tmp_path: Path) -> None:
@@ -158,7 +165,10 @@ async def test_prepare_preserves_an_existing_editable_workspace(tmp_path: Path) 
 
     second = await service.prepare("demo", 1, variant=USE_TTS)
 
-    assert second == first
+    assert second.path == first.path
+    assert second.relative_path == first.relative_path
+    assert second.editing_analysis is not None
+    assert second.editing_analysis.state == "unknown"
     assert (second.path / "index.html").read_text(encoding="utf-8") == "user edit"
 
 
@@ -200,3 +210,22 @@ def test_studio_public_url_requires_explicit_https_proxy(monkeypatch: pytest.Mon
         "https://hf-{port}.arcreel.example/",
     )
     assert HyperframesStudioManager.public_url(43123, "https://arcreel.example/") == "https://hf-43123.arcreel.example"
+
+
+def test_studio_command_uses_the_pinned_arcreel_package(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    executable = tmp_path / "frontend" / "node_modules" / ".bin" / "hyperframes"
+    executable.parent.mkdir(parents=True)
+    executable.write_text("#!/bin/sh\n", encoding="utf-8")
+    monkeypatch.delenv("ARCREEL_HYPERFRAMES_COMMAND", raising=False)
+    monkeypatch.setattr("server.services.hyperframes_workspace.PROJECT_ROOT", tmp_path)
+
+    assert HyperframesStudioManager._command() == [str(executable)]
+
+
+def test_studio_command_preserves_explicit_operator_override(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("ARCREEL_HYPERFRAMES_COMMAND", "custom-hyperframes --flag")
+
+    assert HyperframesStudioManager._command() == ["custom-hyperframes", "--flag"]

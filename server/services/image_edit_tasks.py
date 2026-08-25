@@ -339,7 +339,7 @@ async def _execute_reference_keyframe_edit(
             payload,
             project=project,
             user_id=user_id,
-            image=ImageLaneRequest(capability="i2i"),
+            image=ImageLaneRequest(capability="i2i", stage="keyframe"),
         )
         await asyncio.to_thread(
             ctx.generator.versions.ensure_current_tracked,
@@ -439,7 +439,7 @@ async def _execute_reference_storyboard_sheet_edit(
             payload,
             project=project,
             user_id=user_id,
-            image=ImageLaneRequest(capability="i2i"),
+            image=ImageLaneRequest(capability="i2i", stage="storyboard"),
         )
         await asyncio.to_thread(
             ctx.generator.versions.ensure_current_tracked,
@@ -629,7 +629,10 @@ async def execute_image_edit_task(
             payload,
             project=project,
             user_id=user_id,
-            image=ImageLaneRequest(capability="i2i"),
+            image=ImageLaneRequest(
+                capability="i2i",
+                stage="storyboard" if resource_type == "storyboard" else "asset",
+            ),
         )
         generator = ctx.generator
 

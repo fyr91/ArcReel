@@ -10,9 +10,10 @@ from lib.project_manager import ProjectManager
 from server.agent_runtime.sdk_tools._context import ToolContext
 from server.agent_runtime.sdk_tools.hyperframes import (
     generate_hyperframes_bgm_tool,
+    inspect_hyperframes_episode_tool,
     prepare_hyperframes_episode_tool,
 )
-from server.services.hyperframes_music import HyperframesBackgroundMusic
+from server.services.hyperframes_editing import HyperframesEditingAnalysis
 from server.services.hyperframes_workspace import HyperframesWorkspace
 
 pytestmark = pytest.mark.unit
@@ -55,7 +56,47 @@ async def test_tool_returns_one_explicit_project_local_write_boundary(
     assert result.get("is_error") is not True
     assert result["workspace"]["write_boundary"] == str(workspace_path)
     assert result["workspace"]["entry_file"] == str(workspace_path / "index.html")
+    assert result["workspace"]["assembly_contract"]["baseline_only"] is True
     assert service.calls == [("demo", 1, "post_production")]
+
+
+async def test_inspection_tool_reports_structural_edit_evidence(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    workspace_path = tmp_path / "demo" / "hyperframes" / "episode_01"
+    analysis = HyperframesEditingAnalysis(
+        state="edited",
+        picture_edit_count=3,
+        source_unit_count=2,
+        video_clip_count=2,
+        timing_changes=2,
+        split_ranges=0,
+        reordered_units=0,
+        overlapping_handoffs=1,
+        retimed_clips=0,
+        visual_treatments=0,
+        audio_automations=2,
+    )
+    workspace = HyperframesWorkspace(
+        project_name="demo",
+        episode=1,
+        path=workspace_path,
+        relative_path="hyperframes/episode_01",
+        composition_path="hyperframes/episode_01/index.html",
+        manifest_path="hyperframes/episode_01/manifest.json",
+        editing_analysis=analysis,
+    )
+    monkeypatch.setattr(
+        "server.agent_runtime.sdk_tools.hyperframes.HyperframesWorkspaceService",
+        lambda _pm: type("Service", (), {"status": lambda self, _project, _episode: workspace})(),
+    )
+    ctx = ToolContext("demo", tmp_path, pm=ProjectManager(tmp_path))
+
+    result = await inspect_hyperframes_episode_tool(ctx).handler({"episode": 1})
+
+    assert result["inspection"]["editing_state"] == "edited"
+    assert result["inspection"]["editing_analysis"]["picture_edit_count"] == 3
 
 
 async def test_tool_rejects_invalid_episode_before_touching_workspace(tmp_path: Path) -> None:
@@ -67,35 +108,24 @@ async def test_tool_rejects_invalid_episode_before_touching_workspace(tmp_path: 
     assert "正整数" in result["content"][0]["text"]
 
 
-async def test_music_tool_returns_the_fixed_volume_project_local_snippet(
+async def test_music_tool_enqueues_and_returns_without_waiting(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
 ) -> None:
-    music_path = tmp_path / "demo" / "hyperframes" / "episode_01" / "media" / "bgm.mp3"
-    music = HyperframesBackgroundMusic(
-        episode=1,
-        path=music_path,
-        relative_path="media/bgm.mp3",
-        metadata_path="background-music.json",
-        duration_seconds=12.0,
-        actual_duration_seconds=12.0,
-        volume=0.15,
-        seed=7,
-        html_snippet='<audio data-volume="0.150" src="media/bgm.mp3"></audio>',
-    )
     calls = []
 
-    class _MusicService:
-        def __init__(self, _pm) -> None:
-            pass
-
-        async def generate(self, project_name, episode, *, direction, seed=None):
-            calls.append((project_name, episode, direction, seed))
-            return music
+    async def _enqueue(pm, project_name, episode, *, direction, seed, source):
+        calls.append((pm, project_name, episode, direction, seed, source))
+        return {
+            "task_id": "task-bgm",
+            "status": "queued",
+            "resource_id": "episode_01",
+            "deduped": False,
+        }
 
     monkeypatch.setattr(
-        "server.agent_runtime.sdk_tools.hyperframes.HyperframesMusicService",
-        _MusicService,
+        "server.agent_runtime.sdk_tools.hyperframes.enqueue_hyperframes_bgm_task",
+        _enqueue,
     )
     ctx = ToolContext("demo", tmp_path, pm=ProjectManager(tmp_path))
 
@@ -104,6 +134,7 @@ async def test_music_tool_returns_the_fixed_volume_project_local_snippet(
     )
 
     assert result.get("is_error") is not True
-    assert result["music"]["volume"] == 0.15
-    assert 'data-volume="0.150"' in result["music"]["html_snippet"]
-    assert calls == [("demo", 1, "calm instrumental", 7)]
+    assert result["task"]["task_id"] == "task-bgm"
+    assert result["task"]["status"] == "queued"
+    assert "无需等待" in result["task"]["message"]
+    assert calls == [(ctx.pm, "demo", 1, "calm instrumental", 7, "agent")]

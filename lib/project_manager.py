@@ -1145,7 +1145,7 @@ class ProjectManager:
         )
 
     def _apply_episode_sync(self, project: dict, script: dict, script_filename: str) -> None:
-        """把剧本的集号/标题/script_file 同步进 `project`（就地修改，不取锁、不写盘）。
+        """把剧本的集号/导览元数据/script_file 同步进 `project`（就地修改，不取锁、不写盘）。
 
         供 `sync_episode_from_script`（在 `update_project` 锁内）与 `locked_episode_script`
         （在已持 `_project_lock` 的临界区内）共用，避免重复实现集元数据同步逻辑。
@@ -1172,6 +1172,13 @@ class ProjectManager:
         # 同步核心元数据（不包含统计字段，统计字段由项目摘要读时计算）
         episode_entry["title"] = episode_title
         episode_entry["script_file"] = script_file
+        for field in ("hook", "outline"):
+            if field in script:
+                value = script[field]
+                if value is None:
+                    episode_entry.pop(field, None)
+                else:
+                    episode_entry[field] = copy.deepcopy(value)
         episodes.sort(key=lambda x: x["episode"])
 
         logger.info("已同步剧集信息: Episode %d - %s", episode_num, episode_title)

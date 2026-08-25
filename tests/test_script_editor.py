@@ -152,6 +152,54 @@ class TestPatchField:
         assert script["video_units"][1]["transition_to_next"] == "fade"
 
     @pytest.mark.unit
+    def test_manuscript_change_only_marks_sibling_visuals_for_optional_review(self):
+        unit = _unit("E1U1") | {
+            "text": "@[关键分镜 E1U1K01] 器物放在石台上冷却。",
+            "storyboard_sheet": {
+                "image_path": "storyboard_sheets/E1U1.png",
+                "status": "confirmed",
+                "confirmed_at": "2026-08-24T00:00:00Z",
+            },
+            "keyframes": [
+                {
+                    "keyframe_id": "E1U1K01",
+                    "description": "器物位于石台上的入口帧",
+                    "image_path": "keyframes/E1U1K01.png",
+                }
+            ],
+        }
+
+        script = patch_field(_reference([unit]), "E1U1", "text", "器物放在石台上冷却，光泽逐渐显现。")
+        changed = script["video_units"][0]
+
+        assert changed["storyboard_sheet"]["status"] == "confirmed"
+        assert changed["storyboard_sheet"]["confirmed_at"] == "2026-08-24T00:00:00Z"
+        assert changed["storyboard_sheet"]["generation_input_changed"] is True
+        assert changed["keyframes"][0]["image_path"] == "keyframes/E1U1K01.png"
+        assert changed["keyframes"][0]["generation_input_changed"] is True
+
+    @pytest.mark.unit
+    def test_moving_only_keyframe_marker_does_not_warn_sibling_storyboard(self):
+        unit = _unit("E1U1") | {
+            "text": "@[关键分镜 E1U1K01] 器物放在石台上冷却。",
+            "storyboard_sheet": {
+                "image_path": "storyboard_sheets/E1U1.png",
+                "status": "confirmed",
+                "confirmed_at": "2026-08-24T00:00:00Z",
+            },
+            "keyframes": [],
+        }
+
+        script = patch_field(
+            _reference([unit]),
+            "E1U1",
+            "text",
+            "器物放在石台上冷却。 @[关键分镜 E1U1K01]",
+        )
+
+        assert script["video_units"][0]["storyboard_sheet"].get("generation_input_changed") is None
+
+    @pytest.mark.unit
     def test_patch_unknown_leaf_field_succeeds_at_set_nested_layer(self):
         # _set_nested 单元层面允许叶子写入——dict 操作不查 schema。
         # 但这里写的是 video_prompt.note(VideoPrompt 实际无 note 字段),
