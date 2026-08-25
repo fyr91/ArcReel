@@ -18,6 +18,7 @@ from lib.text_backends.instructor_support import (
     generate_structured_via_instructor_async,
     instructor_fallback_async,
     instructor_fallback_sync,
+    instructor_structured_sync,
 )
 from tests.fakes import instructor_api_call_exhausted
 
@@ -135,6 +136,38 @@ class TestGenerateStructuredViaInstructor:
         assert json_text == sample.model_dump_json()
         assert input_tokens == 50
         assert output_tokens == 20
+
+    def test_json_mode_sends_json_object_and_injects_full_schema(self):
+        """导线级守护：JSON 模式同时带 response_format 和完整 schema prompt。"""
+        from openai import OpenAI
+
+        sample = SampleModel(name="Alice", age=30)
+        completion = MagicMock()
+        completion.choices = [MagicMock()]
+        completion.choices[0].message.content = sample.model_dump_json()
+        completion.choices[0].message.tool_calls = None
+        completion.choices[0].finish_reason = "stop"
+        completion.usage = None
+
+        client = OpenAI(api_key="sk-test", base_url="https://proxy.invalid/v1")
+        client.chat.completions.create = MagicMock(return_value=completion)  # type: ignore[method-assign]
+
+        result = instructor_structured_sync(
+            client=client,
+            model="minimax-m3",
+            messages=[{"role": "user", "content": "return a person"}],
+            response_schema=SampleModel,
+            provider="ark",
+            mode_chain=(Mode.JSON,),
+        )
+
+        wire = client.chat.completions.create.call_args.kwargs
+        assert wire["response_format"] == {"type": "json_object"}
+        system_prompt = wire["messages"][0]["content"]
+        assert '"name"' in system_prompt
+        assert '"age"' in system_prompt
+        assert "json_schema" in system_prompt
+        assert result.text == sample.model_dump_json()
 
     def test_passes_mode_and_retries(self):
         """正确传递 mode 和 max_retries 参数。"""
@@ -356,6 +389,7 @@ class TestInstructorFallbackSync:
         assert result.output_tokens == 15
         call_kwargs = mock_client.chat.completions.create.call_args[1]
         assert call_kwargs["response_format"] == {"type": "json_object"}
+        assert '"type": "object"' in call_kwargs["messages"][0]["content"]
 
     def test_pydantic_branch_forwards_token_param(self):
         """Pydantic 分支把 token_param 转发给 generate_structured_via_instructor。"""
@@ -537,6 +571,46 @@ class TestInstructorExceptionShape:
             )
 
         assert exc_info.value.failed_attempts != []
+
+    def test_missing_tool_call_reask_crash_still_downgrades_to_md_json(self):
+        """Instructor 1.15.x 在 TOOLS 响应缺 tool_calls 时会在 reask_tools 内部崩溃。
+
+        真实中转模型可能把合规 JSON 放进 message.content，却忽略 tools/tool_choice。
+        Instructor 记录完 ResponseParsingError 后会直接遍历 ``tool_calls=None``，把本应触发
+        TOOLS → MD_JSON 的 wire 兼容性失败覆盖成 TypeError。ArcReel 必须识别这一真实异常
+        形态并继续降档，不能把第三方依赖的 reask bug 作为 500 透传。
+        """
+        from openai import OpenAI
+        from openai.types.chat import ChatCompletionMessage
+
+        sample = SampleModel(name="Carol", age=28)
+
+        def content_completion():
+            return SimpleNamespace(
+                choices=[
+                    SimpleNamespace(
+                        message=ChatCompletionMessage(role="assistant", content=sample.model_dump_json()),
+                        finish_reason="stop",
+                    )
+                ],
+                usage=None,
+            )
+
+        client = OpenAI(api_key="sk-test", base_url="https://proxy.invalid/v1")
+        client.chat.completions.create = MagicMock(  # type: ignore[method-assign]
+            side_effect=[content_completion(), content_completion()]
+        )
+
+        result = instructor_fallback_sync(
+            client=client,
+            model="test-model",
+            messages=[{"role": "user", "content": "test"}],
+            response_schema=SampleModel,
+            provider="test-provider",
+        )
+
+        assert result.text == sample.model_dump_json()
+        assert client.chat.completions.create.call_count == 2
 
 
 class TestStructuredModeChainSync:

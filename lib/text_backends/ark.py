@@ -34,9 +34,11 @@ class ArkTextBackend:
         base_url: str | None = None,
     ):
         # Instructor 要求 openai.OpenAI 实例；Ark SDK client 类型不兼容，
-        # 但 Ark API 是 OpenAI 兼容的，因此额外创建原生 OpenAI 客户端供降级使用。
+        # 但 Ark API 是 OpenAI 兼容的，因此额外创建 OpenAI 客户端，
+        # 供 MiniMax JSON 主调用模式及其他模型的 Instructor 兼容路径使用。
         resolved_key = resolve_ark_api_key(api_key)
         effective_base_url = ark_base_url(base_url)
+        self._base_url = effective_base_url
         self._client = create_ark_client(api_key=resolved_key, base_url=effective_base_url)
         self._openai_client = OpenAI(base_url=effective_base_url, api_key=resolved_key)
         self._model = model or DEFAULT_MODEL
@@ -75,8 +77,8 @@ class ArkTextBackend:
     async def generate(self, request: TextGenerationRequest) -> TextGenerationResult:
         """生成文本回复。
 
-        本方法不带重试装饰器：瞬态错误重试在单次调用层（:meth:`_call_chat_completions`
-        与 :meth:`_structured_fallback`）完成。若把复验/降级也包进重试范围，降级尝试的
+        本方法不带重试装饰器：瞬态错误重试在各单次调用层完成。
+        若把复验/降级也包进重试范围，降级尝试的
         失败会连带重放已成功的原生调用（重试叠乘）。
         """
         if request.response_schema:
@@ -102,6 +104,9 @@ class ArkTextBackend:
 
     async def _generate_structured(self, request: TextGenerationRequest) -> TextGenerationResult:
         messages = self._build_messages(request)
+
+        if self._uses_agent_plan_minimax_json_mode():
+            return await self._generate_agent_plan_minimax_json(request, messages)
 
         if TextCapability.STRUCTURED_OUTPUT in self._capabilities:
             from lib.text_backends.base import resolve_schema, structured_fallback_reason
@@ -151,6 +156,34 @@ class ArkTextBackend:
             return native
 
         return await self._structured_fallback(request, messages)
+
+    def _uses_agent_plan_minimax_json_mode(self) -> bool:
+        """MiniMax M3 在 Agent Plan 上的主结构化调用模式。
+
+        实测该端点会静默忽略 ``json_schema``，也不保证产生 tool call；
+        ``json_object`` + prompt 内完整 schema 则能稳定产出并通过校验。
+        """
+        return self._model == "minimax-m3" and self._base_url.endswith("/api/plan/v3")
+
+    @with_retry_async()
+    async def _generate_agent_plan_minimax_json(
+        self, request: TextGenerationRequest, messages: list[dict]
+    ) -> TextGenerationResult:
+        """直接用 JSON Object + schema prompt 生成，不经 Tool Calling 或 native json_schema。"""
+        from instructor import Mode
+
+        from lib.text_backends.instructor_support import instructor_structured_sync
+
+        return await asyncio.to_thread(
+            instructor_structured_sync,
+            client=self._openai_client,
+            model=self._model,
+            messages=messages,
+            response_schema=request.response_schema,
+            provider=PROVIDER_ARK,
+            max_tokens=request.max_output_tokens,
+            mode_chain=(Mode.JSON,),
+        )
 
     @with_retry_async()
     async def _structured_fallback(self, request: TextGenerationRequest, messages: list[dict]) -> TextGenerationResult:

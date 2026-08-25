@@ -190,6 +190,37 @@ class TestCapabilityAwareStructured:
         }
         mock_fallback.assert_not_called()
 
+    async def test_agent_plan_minimax_uses_json_object_as_primary_mode(self, mock_ark, sync_to_thread):
+        """MiniMax M3 首次调用直接走 JSON Object + schema prompt，不走 tools/native。"""
+        from instructor import Mode
+        from pydantic import BaseModel
+
+        class TestModel(BaseModel):
+            key: str
+
+        backend = ArkTextBackend(
+            api_key="k",
+            model="minimax-m3",
+            base_url="https://ark.cn-beijing.volces.com/api/plan/v3",
+        )
+        expected = TextGenerationResult(
+            text='{"key":"value"}',
+            provider="ark",
+            model="minimax-m3",
+            input_tokens=30,
+            output_tokens=10,
+        )
+
+        with patch(
+            "lib.text_backends.instructor_support.instructor_structured_sync",
+            return_value=expected,
+        ) as mock_structured:
+            result = await backend.generate(TextGenerationRequest(prompt="gen", response_schema=TestModel))
+
+        assert result == expected
+        assert mock_structured.call_args.kwargs["mode_chain"] == (Mode.JSON,)
+        mock_ark[1].chat.completions.create.assert_not_called()
+
     async def test_unknown_model_falls_back_to_instructor(self, mock_ark):
         """未注册模型保守降级为 Instructor。"""
         b = ArkTextBackend(api_key="k", model="unknown-model-xyz")

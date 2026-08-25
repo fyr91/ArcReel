@@ -1,15 +1,15 @@
-"""Instructor 降级支持 — 原生 json_schema 通道不可用时的结构化输出降级链。
+"""Instructor 结构化输出支持。
 
-链路为 TOOLS → MD_JSON：前者用 function calling 在 wire 层传 schema，后者把 schema 注入
-prompt。只有 wire 层失败才继续降档，校验类失败即判终局（见 :func:`_classify_mode_failure`）。
-OpenAI 兼容与 Ark 两个 backend 共用本模块，故降级链的调整在此一处生效。
+默认兼容链路为 TOOLS → MD_JSON；已验证支持 ``json_object`` 的模型也可把
+``Mode.JSON`` 作为主调用模式：Instructor 同时发送 ``response_format=json_object``
+并在 prompt 中注入完整 JSON Schema，不依赖 function calling。
 """
 
 from __future__ import annotations
 
 import logging
 from enum import Enum
-from json import JSONDecodeError
+from json import JSONDecodeError, dumps
 
 import instructor
 from instructor import Mode
@@ -60,11 +60,11 @@ _PARSE_FAILURE_TYPES: tuple[type[BaseException], ...] = (
 )
 
 
-def _mode_chain_steps() -> list[tuple[Mode, Mode | None]]:
+def _mode_chain_steps(mode_chain: tuple[Mode, ...] = _STRUCTURED_MODE_CHAIN) -> list[tuple[Mode, Mode | None]]:
     """降级链的 (当前档, 下一档) 序列；下一档为 None 表示已是末档、无处可退。"""
     return [
-        (mode, _STRUCTURED_MODE_CHAIN[index + 1] if index + 1 < len(_STRUCTURED_MODE_CHAIN) else None)
-        for index, mode in enumerate(_STRUCTURED_MODE_CHAIN)
+        (mode, mode_chain[index + 1] if index + 1 < len(mode_chain) else None)
+        for index, mode in enumerate(mode_chain)
     ]
 
 
@@ -138,6 +138,35 @@ def _tool_call_absent(exc: BaseException | None) -> bool:
     return getattr(message, "function_call", None) is None
 
 
+def _instructor_reask_crashed_after_missing_tool_call(exc: BaseException) -> bool:
+    """识别 Instructor 1.15.x 把「无 tool call」覆盖成 TypeError 的异常形态。
+
+    TOOLS 响应把 JSON 放在 ``message.content``、却令 ``tool_calls=None`` 时，Instructor
+    会先记录正确的 :class:`ResponseParsingError`，随后在 ``reask_tools`` 中直接遍历
+    ``None`` 并崩溃。最终 ``InstructorRetryException.__cause__`` 因此变成 TypeError，若只
+    看终止原因就会把本应降到 MD_JSON 的 wire 不兼容误当成普通程序错误并返回 500。
+
+    判据同时核对 traceback 的函数/模块和最后一次已记录的解析失败，避免把模型 SDK 自身抛出的
+    普通 TypeError（即便之前碰巧有过一次无 tool call）误吞成降档。
+    """
+    if not isinstance(exc, InstructorRetryException) or not isinstance(exc.__cause__, TypeError):
+        return False
+
+    traceback = exc.__cause__.__traceback__
+    crashed_in_reask_tools = False
+    while traceback is not None:
+        frame = traceback.tb_frame
+        if frame.f_code.co_name == "reask_tools" and frame.f_globals.get("__name__", "").startswith("instructor."):
+            crashed_in_reask_tools = True
+            break
+        traceback = traceback.tb_next
+    if not crashed_in_reask_tools:
+        return False
+
+    attempts = exc.failed_attempts or []
+    return bool(attempts and _tool_call_absent(attempts[-1].exception))
+
+
 def _failure_reason(exc: BaseException) -> str:
     """把某一档的失败压成一句可读原因，供 StructuredOutputExhaustedError 携带。"""
     if not isinstance(exc, InstructorRetryException):
@@ -204,6 +233,8 @@ def _classify_mode_failure(exc: BaseException) -> _ModeFailure:
     """
     if not isinstance(exc, InstructorRetryException):
         return _ModeFailure.PROPAGATE
+    if _instructor_reask_crashed_after_missing_tool_call(exc):
+        return _ModeFailure.DOWNGRADE
     api_failure = _api_call_failure(exc)
     if api_failure is None:
         if _tool_call_absent(exc.__cause__):
@@ -310,21 +341,30 @@ async def generate_structured_via_instructor_async(
     return json_text, input_tokens, output_tokens
 
 
-def inject_json_instruction(messages: list[dict]) -> list[dict]:
+def inject_json_instruction(messages: list[dict], response_schema: dict | None = None) -> list[dict]:
     """向 messages 注入 JSON 格式指令，确保 json_object 模式可用。
 
     OpenAI API 要求 prompt 中包含 "JSON" 关键字才能启用 json_object 模式。
-    若 messages 中已包含 "JSON"，则原样返回副本。
+    dict schema 无法交给 Instructor 生成 Pydantic 提示词，因此在这里显式注入
+    完整 schema，而不只是泛化的「返回 JSON」指令。
     """
     fb_messages = list(messages)
-    if any("JSON" in (m.get("content") or "") for m in fb_messages):
+    if response_schema is None and any("JSON" in str(m.get("content") or "") for m in fb_messages):
         return fb_messages
+    instruction = "Respond in JSON format."
+    if response_schema is not None:
+        schema_text = dumps(response_schema, ensure_ascii=False, indent=2)
+        instruction = (
+            "Return exactly one JSON object matching the following JSON Schema. "
+            "Return the instance, not the schema itself.\n"
+            f"{schema_text}"
+        )
     sys_idx = next((i for i, m in enumerate(fb_messages) if m.get("role") == "system"), None)
     if sys_idx is not None:
         orig = fb_messages[sys_idx]
-        fb_messages[sys_idx] = {**orig, "content": (orig.get("content") or "") + "\nRespond in JSON format."}
+        fb_messages[sys_idx] = {**orig, "content": f"{orig.get('content') or ''}\n{instruction}"}
     else:
-        fb_messages.insert(0, {"role": "system", "content": "Respond in JSON format."})
+        fb_messages.insert(0, {"role": "system", "content": instruction})
     return fb_messages
 
 
@@ -363,7 +403,7 @@ def _handle_mode_failure(
     raise StructuredOutputExhaustedError(provider=provider, model=model, reason=_failure_reason(exc)) from exc
 
 
-def instructor_fallback_sync(
+def instructor_structured_sync(
     client,
     model: str,
     messages: list[dict],
@@ -371,22 +411,27 @@ def instructor_fallback_sync(
     provider: str,
     max_tokens: int | None = None,
     token_param: TokenParam = "max_tokens",
-):
-    """同步 Instructor 降级路径。
+    mode_chain: tuple[Mode, ...] = _STRUCTURED_MODE_CHAIN,
+) -> TextGenerationResult:
+    """同步 Instructor 结构化输出路径。
 
-    - response_schema 为 Pydantic 类 → TOOLS → MD_JSON 降级链
+    - response_schema 为 Pydantic 类 → 按 mode_chain 调用 Instructor
     - response_schema 为 dict → inject JSON instruction + json_object 模式
 
+    ``Mode.JSON`` 会把完整 JSON Schema 注入 prompt，并显式发送
+    ``response_format={"type": "json_object"}``，可作为经过实测模型的主调用模式。
     供 Ark 等同步 SDK 后端使用（调用方用 asyncio.to_thread 包装）。
     不做瞬态重试，瞬态错误由调用方的重试循环统一处理；档内的结构化校验重试由 Instructor 自带。
     """
+    if not mode_chain:
+        raise ValueError("mode_chain 不能为空")
     if isinstance(response_schema, type):
         json_text: str | None = None
         input_tokens: int | None = None
         output_tokens: int | None = None
         billed_input: int | None = None
         billed_output: int | None = None
-        for mode, next_mode in _mode_chain_steps():
+        for mode, next_mode in _mode_chain_steps(mode_chain):
             try:
                 json_text, input_tokens, output_tokens = generate_structured_via_instructor(
                     client=client,
@@ -414,8 +459,8 @@ def instructor_fallback_sync(
             output_tokens=merge_billed_tokens(output_tokens, billed_output),
         )
 
-    logger.info("response_schema 为 dict，无法使用 Instructor，回退到 json_object 模式")
-    fb_messages = inject_json_instruction(messages)
+    logger.info("response_schema 为 dict，直接使用 json_object + schema prompt 模式")
+    fb_messages = inject_json_instruction(messages, response_schema if isinstance(response_schema, dict) else None)
     create_kwargs: dict = {
         "model": model,
         "messages": fb_messages,
@@ -443,6 +488,27 @@ def instructor_fallback_sync(
         model=model,
         input_tokens=getattr(usage, "prompt_tokens", None) if usage else None,
         output_tokens=output_tokens,
+    )
+
+
+def instructor_fallback_sync(
+    client,
+    model: str,
+    messages: list[dict],
+    response_schema: dict | type[BaseModel] | None,
+    provider: str,
+    max_tokens: int | None = None,
+    token_param: TokenParam = "max_tokens",
+) -> TextGenerationResult:
+    """同步兼容降级入口：Pydantic schema 默认按 TOOLS → MD_JSON 尝试。"""
+    return instructor_structured_sync(
+        client=client,
+        model=model,
+        messages=messages,
+        response_schema=response_schema,
+        provider=provider,
+        max_tokens=max_tokens,
+        token_param=token_param,
     )
 
 
@@ -498,7 +564,7 @@ async def instructor_fallback_async(
         )
 
     logger.info("response_schema 为 dict，无法使用 Instructor，回退到 json_object 模式")
-    fb_messages = inject_json_instruction(messages)
+    fb_messages = inject_json_instruction(messages, response_schema if isinstance(response_schema, dict) else None)
     create_kwargs: dict = {
         "model": model,
         "messages": fb_messages,
