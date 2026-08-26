@@ -398,7 +398,7 @@ describe("useAssistantSession", () => {
     });
 
     expect(accepted).toBe(true);
-    // 无本地合成消息：时间线唯一来源是响应携带的权威条目
+    // 临时气泡不写入 timeline；受理完成后唯一保留的是响应携带的权威条目。
     expect(useAssistantStore.getState().entries.map((e) => e.seq)).toEqual([0]);
     expect(useAssistantStore.getState().turns).toEqual([
       { type: "user", content: [{ type: "text", text: "hello" }], uuid: "u-0", timestamp: undefined },
@@ -411,6 +411,55 @@ describe("useAssistantSession", () => {
     expect(MockEventSource.instances[0].url).toContain("after=0");
     // client_key 随请求发送
     expect(sendSpy.mock.calls[0][4]).toEqual(expect.any(String));
+  });
+
+  it("shows the user message immediately, reconciles it without duplication, and waits for Agent activity", async () => {
+    mockIdleSession();
+    const deferred = createDeferred<{ session_id: string; status: string; entry: TimelineEntry | null }>();
+    vi.spyOn(API, "sendAssistantMessage").mockReturnValue(deferred.promise);
+
+    const { result } = renderHook(() => useAssistantSession("demo"));
+    await waitFor(() => {
+      expect(useAssistantStore.getState().currentSessionId).toBe("session-1");
+    });
+
+    let sendPromise!: Promise<boolean>;
+    act(() => {
+      sendPromise = result.current.sendMessage("hello");
+    });
+
+    // 不等待 POST：调用 sendMessage 的同一轮就有用户气泡和发送状态。
+    let state = useAssistantStore.getState();
+    expect(state.pendingUserTurn).toMatchObject({
+      type: "user",
+      content: [{ type: "text", text: "hello" }],
+    });
+    expect(state.sending).toBe(true);
+    expect(state.awaitingAgentResponse).toBe(true);
+    expect(state.turns).toEqual([]);
+
+    await act(async () => {
+      deferred.resolve({ session_id: "session-1", status: "accepted", entry: userEntry(0, "hello") });
+      expect(await sendPromise).toBe(true);
+    });
+
+    state = useAssistantStore.getState();
+    expect(state.pendingUserTurn).toBeNull();
+    expect(state.sending).toBe(false);
+    expect(state.awaitingAgentResponse).toBe(true);
+    expect(state.turns).toEqual([
+      { type: "user", content: [{ type: "text", text: "hello" }], uuid: "u-0", timestamp: undefined },
+    ]);
+
+    act(() => {
+      MockEventSource.instances[0].emit("draft", {
+        session_id: "session-1",
+        draft: { message_id: "msg-1", content: [{ type: "thinking", thinking: "分析中" }] },
+        rev: 1,
+      });
+    });
+
+    expect(useAssistantStore.getState().awaitingAgentResponse).toBe(false);
   });
 
   it("keeps timeline unchanged on send failure and reuses the idempotency key on retry", async () => {
@@ -432,9 +481,11 @@ describe("useAssistantSession", () => {
       accepted = await result.current.sendMessage("hello");
     });
 
-    // 失败：无合成消息可回滚，时间线不变、状态不变、输入由调用方保留
+    // 失败：临时气泡撤下，权威时间线不变、状态不变、输入由调用方保留。
     expect(accepted).toBe(false);
     expect(useAssistantStore.getState().sending).toBe(false);
+    expect(useAssistantStore.getState().pendingUserTurn).toBeNull();
+    expect(useAssistantStore.getState().awaitingAgentResponse).toBe(false);
     expect(useAssistantStore.getState().sessionStatus).toBe("idle");
     expect(useAssistantStore.getState().turns).toEqual([]);
     expect(useAssistantStore.getState().handoffGuide).toEqual({

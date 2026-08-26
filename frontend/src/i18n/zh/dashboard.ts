@@ -543,6 +543,8 @@ export default {
   'image_too_large_hint': '图片 "{{name}}" 超过 5MB，已跳过',
   'collapse_panel': '收起 Agent 面板',
   'thinking': '运行中',
+  'agent_sending_message': '正在发送给 Agent',
+  'agent_received_processing': 'Agent 已接收，正在处理',
   'start_chat_hint': '在下方输入消息开始对话',
   'quick_skill_hint': '输入 / 可快速调用技能',
   'enlarge_image': '点击放大图片',

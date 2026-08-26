@@ -537,6 +537,8 @@ export default {
   'image_too_large_hint': 'Ảnh "{{name}}" vượt 5MB và đã bị bỏ qua',
   'collapse_panel': 'Thu gọn bảng Agent',
   'thinking': 'Đang suy nghĩ',
+  'agent_sending_message': 'Đang gửi đến Agent',
+  'agent_received_processing': 'Agent đã nhận và đang xử lý',
   'start_chat_hint': 'Nhập tin nhắn bên dưới để bắt đầu trò chuyện',
   'quick_skill_hint': 'Gõ / để gọi nhanh các skill',
   'enlarge_image': 'Nhấn để phóng to ảnh',

@@ -13,6 +13,7 @@ import type {
   SessionMeta,
   SubagentSnapshotPayload,
   TimelineEntry,
+  Turn,
 } from "@/types";
 
 // ---------------------------------------------------------------------------
@@ -42,6 +43,25 @@ function entryStartsSubagent(entry: TimelineEntry): boolean {
   return entry.content.some((block) =>
     block.type === "tool_use" && ["agent", "task"].includes(String(block.name ?? "").toLowerCase()),
   );
+}
+
+function buildPendingUserTurn(content: string, images: ImagePayload[] | undefined, clientKey: string): Turn {
+  const blocks: Turn["content"] = (images ?? []).map((image) => ({
+    type: "image",
+    source: {
+      type: "base64",
+      media_type: image.media_type,
+      data: image.data,
+    },
+  }));
+  const text = content.trim();
+  if (text) blocks.push({ type: "text", text });
+  return {
+    type: "user",
+    content: blocks,
+    uuid: `pending-user:${clientKey}`,
+    timestamp: new Date().toISOString(),
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -106,7 +126,7 @@ export function useAssistantSession(projectName: string | null) {
 
   const invalidatePendingSend = useCallback(() => {
     pendingSendVersionRef.current += 1;
-    store.getState().setSending(false);
+    store.getState().clearUserSendFeedback();
   }, [store]);
 
   // 会话加载链取消域：init 的会话自动选择与 loadSession（冷读/建流）共用一个
@@ -307,7 +327,7 @@ export function useAssistantSession(projectName: string | null) {
         store.getState().setSessionStatus(status as "idle");
 
         if (TERMINAL.has(status)) {
-          store.getState().setSending(false);
+          store.getState().clearUserSendFeedback();
           store.getState().setInterrupting(false);
           clearPendingQuestion();
           // 中断时保留 draft：被中断的流式内容不入日志，刷新后自然消失
@@ -489,7 +509,6 @@ export function useAssistantSession(projectName: string | null) {
       const sendVersion = pendingSendVersionRef.current + 1;
       pendingSendVersionRef.current = sendVersion;
       let sessionId = store.getState().currentSessionId;
-      store.getState().setSending(true);
       store.getState().setError(null);
       store.getState().setStartupFailure(null);
 
@@ -508,6 +527,7 @@ export function useAssistantSession(projectName: string | null) {
         failedSendRef.current?.signature === signature
           ? failedSendRef.current.clientKey
           : uid();
+      store.getState().beginUserSendFeedback(buildPendingUserTurn(content, imagePayload, clientKey));
 
       try {
         const result = await API.sendAssistantMessage(
@@ -545,7 +565,10 @@ export function useAssistantSession(projectName: string | null) {
           sessionId = returnedSessionId;
         }
 
-        if (store.getState().currentSessionId !== sessionId) return false;
+        if (store.getState().currentSessionId !== sessionId) {
+          store.getState().clearUserSendFeedback();
+          return false;
+        }
 
         // 响应携带的权威条目（服务端已写日志分配身份），seq 门槛去重
         if (result.entry) {
@@ -555,7 +578,10 @@ export function useAssistantSession(projectName: string | null) {
             // 否则订阅游标越过缺口后中间条目永远不会被拉取
             try {
               const gap = await API.listAssistantEntries(projectName!, sessionId, lastSeq);
-              if (store.getState().currentSessionId !== sessionId) return false;
+              if (store.getState().currentSessionId !== sessionId) {
+                store.getState().clearUserSendFeedback();
+                return false;
+              }
               store.getState().setEntries(gap.entries ?? []);
             } catch {
               // 静默失败：缺口留待刷新兜底
@@ -568,20 +594,20 @@ export function useAssistantSession(projectName: string | null) {
         store.getState().dismissHandoffGuide(projectName!);
         statusRef.current = "running";
         store.getState().setSessionStatus("running");
-        store.getState().setSending(false);
+        store.getState().acceptUserSendFeedback(Boolean(result.entry));
         connectStream(sessionId);
         return true;
       } catch (err) {
         if (pendingSendVersionRef.current !== sendVersion) return false;
-        // 失败：无本地合成消息可回滚，仅记录幂等键供重试复用；
-        // 在途加载链未被作废，挂起的冷读继续正常落地
+        // 失败：撤下仅用于即时反馈的临时用户消息；输入仍由调用方保留，
+        // 并记录幂等键供重试复用。在途加载链未被作废，挂起的冷读继续正常落地。
         failedSendRef.current = { clientKey, signature };
         if (err instanceof AgentFailureError) {
           store.getState().setStartupFailure(err.failure);
         } else {
           store.getState().setError(errMsg(err, "发送失败"));
         }
-        store.getState().setSending(false);
+        store.getState().clearUserSendFeedback();
         return false;
       }
     },
