@@ -162,7 +162,7 @@ describe("ReferenceVideoCanvas", () => {
     vi.spyOn(API, "listReferenceVideoUnits").mockResolvedValue({ units: [mkUnit("E1U1")] });
     render(<ReferenceVideoCanvas projectName="proj" episode={1} />);
 
-    const sheetTab = await screen.findByRole("tab", { name: "Video Unit Storyboard Sheet" });
+    const sheetTab = await screen.findByRole("tab", { name: "故事板" });
     const keyframeTab = screen.getByRole("tab", { name: /Keyframes|关键分镜/ });
     expect(sheetTab.compareDocumentPosition(keyframeTab) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
 
@@ -170,8 +170,8 @@ describe("ReferenceVideoCanvas", () => {
     expect(await screen.findByText(/尚未定义关键分镜|has no keyframes/)).toBeInTheDocument();
 
     fireEvent.click(sheetTab);
-    expect(await screen.findByText(/Storyboard has not been generated|分镜版尚未生成/)).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: /确认.*Storyboard|Confirm.*Storyboard/ })).not.toBeInTheDocument();
+    expect(await screen.findByText(/Storyboard has not been generated|故事板尚未生成/)).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /确认.*故事板|Confirm.*Storyboard/ })).not.toBeInTheDocument();
   });
   afterEach(() => vi.restoreAllMocks());
 
@@ -282,7 +282,7 @@ describe("ReferenceVideoCanvas", () => {
     const unit = await screen.findByTestId("unit-row-E1U1");
     unit.focus();
     fireEvent.keyDown(unit, { key: "ArrowRight" });
-    expect(screen.getByRole("tab", { name: /Storyboard Sheet|分镜表/ })).toHaveAttribute(
+    expect(screen.getByRole("tab", { name: /Storyboard|故事板/ })).toHaveAttribute(
       "aria-selected",
       "true",
     );

@@ -222,3 +222,20 @@ def test_frontend_event_label_keys_match_backend():
     )
     frontend_keys = set(re.findall(r"""["']label\.([a-z0-9_]+)["']""", source))
     assert frontend_keys == _event_label_keys(en_events.MESSAGES)
+
+
+@pytest.mark.parametrize(
+    ("errors", "events", "localized_term"),
+    [
+        (zh_errors.MESSAGES, zh_events.MESSAGES, "故事板"),
+        (vi_errors.MESSAGES, vi_events.MESSAGES, "Bảng phân cảnh"),
+    ],
+)
+def test_reference_storyboard_sheet_messages_are_fully_localized(errors, events, localized_term):
+    """The localized storyboard flow must not fall back to its English product name."""
+    messages = [value for key, value in errors.items() if key.startswith("reference_storyboard_sheet_")]
+    messages.append(events["event_label_reference_storyboard_sheet"])
+
+    assert messages
+    assert all(localized_term.casefold() in message.casefold() for message in messages)
+    assert all("video unit storyboard sheet" not in message.casefold() for message in messages)

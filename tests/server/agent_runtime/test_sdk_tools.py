@@ -1765,6 +1765,14 @@ def test_edit_images_registered() -> None:
 
 
 @pytest.mark.unit
+def test_edit_images_reference_storyboard_sheet_label_is_localized() -> None:
+    """Agent 编辑结果不得把故事板资源名回退成英文产品术语。"""
+    from server.agent_runtime.sdk_tools.enqueue_image_edits import _LABEL_ZH
+
+    assert _LABEL_ZH["reference_storyboard_sheet"] == "故事板"
+
+
+@pytest.mark.unit
 async def test_edit_images_happy(fake_ctx: ToolContext, monkeypatch) -> None:
     from server.agent_runtime.sdk_tools import enqueue_image_edits as mod
 
