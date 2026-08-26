@@ -208,7 +208,7 @@ export default {
   'subagent_status_stalled': 'Stalled',
   'subagent_background_active': 'Running independently in the background',
   'subagent_tokens': '{{count}} tokens',
-  'subagent_stalled_detail': 'No token growth for {{minutes}} minutes; stopped automatically',
+  'subagent_stalled_detail': 'No output or tool activity for {{minutes}} minutes; stopped automatically',
   'task_progress_cancelled': '{{description}} (cancelled)',
   'task_progress_started': 'Subtask started: {{description}}',
   'task_progress_completed': 'Subtask completed',

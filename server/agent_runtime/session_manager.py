@@ -190,12 +190,13 @@ class _ActorExitNotice:
 
 @dataclass
 class _SubagentActivity:
-    """Runtime-only token heartbeat used by the stalled-task watchdog."""
+    """Runtime-only progress and tool activity used by the stalled-task watchdog."""
 
     task_id: str
-    last_token_change: float
+    last_progress_at: float
     message_tokens: dict[str, int] = field(default_factory=dict)
     reported_total_tokens: int = 0
+    active_tool_use_ids: set[str] = field(default_factory=set)
     stalled: bool = False
     stop_requested: bool = False
 
@@ -500,6 +501,7 @@ class SessionManager:
             project_name,
             resume_id=resume_id,
             can_use_tool=can_use_tool,
+            subagent_tool_activity=self._record_subagent_tool_activity_from_hook,
             locale=locale,
             stderr=stderr,
             session_id=session_id,
@@ -1186,6 +1188,78 @@ class SessionManager:
         return None
 
     @staticmethod
+    def _record_subagent_tool_activity(
+        managed: ManagedSession,
+        *,
+        task_id: str,
+        tool_use_id: str,
+        active: bool,
+    ) -> None:
+        key = SessionManager._subagent_key_for_task(managed, None, task_id)
+        if key is None:
+            return
+        activity = managed.subagent_activity.get(key)
+        if activity is None or activity.task_id != task_id:
+            return
+        if active:
+            activity.active_tool_use_ids.add(tool_use_id)
+        else:
+            activity.active_tool_use_ids.discard(tool_use_id)
+        activity.last_progress_at = time.monotonic()
+
+    def _record_subagent_tool_activity_from_hook(
+        self,
+        sdk_session_id: str,
+        task_id: str,
+        tool_use_id: str,
+        active: bool,
+    ) -> None:
+        managed = self.sessions.get(sdk_session_id)
+        if managed is None:
+            managed = next(
+                (candidate for candidate in self.sessions.values() if candidate.resolved_sdk_id == sdk_session_id),
+                None,
+            )
+        if managed is None:
+            return
+        self._record_subagent_tool_activity(
+            managed,
+            task_id=task_id,
+            tool_use_id=tool_use_id,
+            active=active,
+        )
+
+    @staticmethod
+    def _record_subagent_tool_message(managed: ManagedSession, msg_dict: dict[str, Any]) -> None:
+        """Use child timeline blocks as a fallback for hook delivery gaps."""
+        parent = msg_dict.get("parent_tool_use_id")
+        if not isinstance(parent, str) or parent not in managed.active_subagents:
+            return
+        activity = managed.subagent_activity.get(parent)
+        if activity is None:
+            return
+        content = msg_dict.get("content")
+        if not isinstance(content, list):
+            return
+        changed = False
+        for block in content:
+            if not isinstance(block, dict):
+                continue
+            block_type = block.get("type")
+            if block_type == "tool_use":
+                tool_use_id = block.get("id")
+                if isinstance(tool_use_id, str) and tool_use_id:
+                    activity.active_tool_use_ids.add(tool_use_id)
+                    changed = True
+            elif block_type == "tool_result":
+                tool_use_id = block.get("tool_use_id")
+                if isinstance(tool_use_id, str) and tool_use_id:
+                    activity.active_tool_use_ids.discard(tool_use_id)
+                    changed = True
+        if changed:
+            activity.last_progress_at = time.monotonic()
+
+    @staticmethod
     def _record_subagent_tokens(managed: ManagedSession, msg_dict: dict[str, Any]) -> None:
         if msg_dict.get("type") != "assistant":
             return
@@ -1203,7 +1277,7 @@ class SessionManager:
         message_id = str(raw_message_id) if raw_message_id else f"message-{len(activity.message_tokens)}"
         activity.message_tokens[message_id] = max(activity.message_tokens.get(message_id, 0), total_tokens)
         if activity.total_tokens > before:
-            activity.last_token_change = time.monotonic()
+            activity.last_progress_at = time.monotonic()
             managed.subagent_projection_revision += 1
 
     @staticmethod
@@ -1228,7 +1302,7 @@ class SessionManager:
         before = activity.total_tokens
         activity.reported_total_tokens = max(activity.reported_total_tokens, total_tokens)
         if activity.total_tokens > before:
-            activity.last_token_change = time.monotonic()
+            activity.last_progress_at = time.monotonic()
             managed.subagent_projection_revision += 1
 
     def _sync_subagent_lifecycle(self, managed: ManagedSession, msg_dict: dict[str, Any]) -> None:
@@ -1251,7 +1325,7 @@ class SessionManager:
                 managed.active_subagents[key] = task_id
                 existing = managed.subagent_activity.get(key)
                 if existing is None or existing.task_id != task_id:
-                    managed.subagent_activity[key] = _SubagentActivity(task_id=task_id, last_token_change=now)
+                    managed.subagent_activity[key] = _SubagentActivity(task_id=task_id, last_progress_at=now)
                     managed.subagent_projection_revision += 1
             elif key and status in _TERMINAL_SUBAGENT_STATUSES:
                 managed.active_subagents.pop(key, None)
@@ -1290,9 +1364,10 @@ class SessionManager:
                 managed.active_subagents[key] = task_id
                 existing = managed.subagent_activity.get(key)
                 if existing is None or existing.task_id != task_id:
-                    managed.subagent_activity[key] = _SubagentActivity(task_id=task_id, last_token_change=now)
+                    managed.subagent_activity[key] = _SubagentActivity(task_id=task_id, last_progress_at=now)
                     managed.subagent_projection_revision += 1
 
+        self._record_subagent_tool_message(managed, msg_dict)
         self._record_subagent_tokens(managed, msg_dict)
 
         is_active = bool(managed.active_subagents)
@@ -1628,7 +1703,7 @@ class SessionManager:
                 logger.warning("巡检循环异常", exc_info=True)
 
     async def _subagent_watchdog_once(self, *, now: float | None = None) -> None:
-        """Stop only child tasks whose cumulative token count has not grown."""
+        """Stop only child tasks with neither model progress nor an executing tool."""
         observed_at = time.monotonic() if now is None else now
         timeout = self.subagent_stall_timeout_seconds
         for session_id, managed in list(self.sessions.items()):
@@ -1637,13 +1712,15 @@ class SessionManager:
             for key, task_id in list(managed.active_subagents.items()):
                 activity = managed.subagent_activity.get(key)
                 if activity is None:
-                    activity = _SubagentActivity(task_id=task_id, last_token_change=observed_at)
+                    activity = _SubagentActivity(task_id=task_id, last_progress_at=observed_at)
                     managed.subagent_activity[key] = activity
                     managed.subagent_projection_revision += 1
                     continue
                 if activity.task_id != task_id or activity.stalled or activity.stop_requested:
                     continue
-                if observed_at - activity.last_token_change < timeout:
+                if activity.active_tool_use_ids:
+                    continue
+                if observed_at - activity.last_progress_at < timeout:
                     continue
                 activity.stop_requested = True
                 try:
@@ -1661,7 +1738,7 @@ class SessionManager:
                 self._stalled_subagent_history.setdefault(session_id, set()).add(task_id)
                 managed.subagent_projection_revision += 1
                 logger.warning(
-                    "subagent token 长时间无增长，已自动停止 session_id=%s task_id=%s timeout=%ss tokens=%s",
+                    "subagent 长时间无输出或工具活动，已自动停止 session_id=%s task_id=%s timeout=%ss tokens=%s",
                     session_id,
                     task_id,
                     timeout,

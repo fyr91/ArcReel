@@ -209,7 +209,7 @@ export default {
   'subagent_status_stalled': 'Bị đình trệ',
   'subagent_background_active': 'Đang chạy độc lập trong nền',
   'subagent_tokens': '{{count}} tokens',
-  'subagent_stalled_detail': 'Không tăng token trong {{minutes}} phút; đã tự động dừng',
+  'subagent_stalled_detail': 'Không có đầu ra hoặc hoạt động công cụ trong {{minutes}} phút; đã tự động dừng',
   'task_progress_cancelled': '{{description}} (đã hủy)',
   'task_progress_started': 'Bắt đầu tác vụ con: {{description}}',
   'task_progress_completed': 'Tác vụ con hoàn thành',

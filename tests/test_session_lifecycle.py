@@ -473,8 +473,8 @@ class TestSubagentStallWatchdog:
         mgr.sessions["s1"] = managed
         self._launch(managed, "tu-stale", "agent-stale")
         self._launch(managed, "tu-live", "agent-live")
-        managed.subagent_activity["tu-stale"].last_token_change = 100.0
-        managed.subagent_activity["tu-live"].last_token_change = 350.0
+        managed.subagent_activity["tu-stale"].last_progress_at = 100.0
+        managed.subagent_activity["tu-live"].last_progress_at = 350.0
         managed.send_stop_task = AsyncMock()
 
         try:
@@ -507,7 +507,7 @@ class TestSubagentStallWatchdog:
         await _start(managed)
         mgr.sessions["s1"] = managed
         self._launch(managed, "tu-1", "agent-1")
-        managed.subagent_activity["tu-1"].last_token_change = 100.0
+        managed.subagent_activity["tu-1"].last_progress_at = 100.0
         managed.send_stop_task = AsyncMock()
 
         try:
@@ -526,6 +526,97 @@ class TestSubagentStallWatchdog:
 
             managed.send_stop_task.assert_not_awaited()
             assert managed.subagent_activity["tu-1"].total_tokens == 120
-            assert managed.subagent_activity["tu-1"].last_token_change == 350.0
+            assert managed.subagent_activity["tu-1"].last_progress_at == 350.0
+        finally:
+            await mgr.close_session("s1")
+
+    async def test_running_tool_suspends_watchdog_and_completion_restarts_deadline(self, tmp_path):
+        mgr = _make_manager(tmp_path)
+        mgr.subagent_stall_timeout_seconds = 300
+        managed, _ = _make_managed("s1", status="completed")
+        await _start(managed)
+        mgr.sessions["s1"] = managed
+        self._launch(managed, "tu-1", "agent-1")
+        managed.subagent_activity["tu-1"].last_progress_at = 100.0
+        managed.send_stop_task = AsyncMock()
+
+        try:
+            with patch("server.agent_runtime.session_manager.time.monotonic", return_value=200.0):
+                mgr._record_subagent_tool_activity_from_hook("s1", "agent-1", "tool-long-program", True)
+
+            await mgr._subagent_watchdog_once(now=1_000.0)
+            managed.send_stop_task.assert_not_awaited()
+            assert managed.subagent_activity["tu-1"].active_tool_use_ids == {"tool-long-program"}
+
+            with patch("server.agent_runtime.session_manager.time.monotonic", return_value=1_000.0):
+                mgr._record_subagent_tool_activity_from_hook("s1", "agent-1", "tool-long-program", False)
+
+            await mgr._subagent_watchdog_once(now=1_299.0)
+            managed.send_stop_task.assert_not_awaited()
+            await mgr._subagent_watchdog_once(now=1_301.0)
+            managed.send_stop_task.assert_awaited_once_with("agent-1")
+        finally:
+            await mgr.close_session("s1")
+
+    async def test_running_tool_only_protects_its_own_subagent(self, tmp_path):
+        mgr = _make_manager(tmp_path)
+        mgr.subagent_stall_timeout_seconds = 300
+        managed, _ = _make_managed("s1", status="completed")
+        await _start(managed)
+        mgr.sessions["s1"] = managed
+        self._launch(managed, "tu-busy", "agent-busy")
+        self._launch(managed, "tu-stale", "agent-stale")
+        managed.subagent_activity["tu-busy"].last_progress_at = 100.0
+        managed.subagent_activity["tu-stale"].last_progress_at = 100.0
+        managed.send_stop_task = AsyncMock()
+
+        try:
+            with patch("server.agent_runtime.session_manager.time.monotonic", return_value=200.0):
+                mgr._record_subagent_tool_activity_from_hook("s1", "agent-busy", "tool-1", True)
+
+            await mgr._subagent_watchdog_once(now=500.0)
+
+            managed.send_stop_task.assert_awaited_once_with("agent-stale")
+            assert managed.subagent_activity["tu-busy"].stalled is False
+            assert managed.subagent_activity["tu-stale"].stalled is True
+        finally:
+            await mgr.close_session("s1")
+
+    async def test_child_tool_messages_are_activity_fallback(self, tmp_path):
+        mgr = _make_manager(tmp_path)
+        mgr.subagent_stall_timeout_seconds = 300
+        managed, _ = _make_managed("s1", status="completed")
+        await _start(managed)
+        mgr.sessions["s1"] = managed
+        self._launch(managed, "tu-1", "agent-1")
+        managed.subagent_activity["tu-1"].last_progress_at = 100.0
+        managed.send_stop_task = AsyncMock()
+
+        try:
+            with patch("server.agent_runtime.session_manager.time.monotonic", return_value=200.0):
+                mgr._sync_subagent_lifecycle(
+                    managed,
+                    {
+                        "type": "assistant",
+                        "parent_tool_use_id": "tu-1",
+                        "content": [{"type": "tool_use", "id": "tool-1", "name": "Bash", "input": {}}],
+                    },
+                )
+
+            await mgr._subagent_watchdog_once(now=1_000.0)
+            managed.send_stop_task.assert_not_awaited()
+
+            with patch("server.agent_runtime.session_manager.time.monotonic", return_value=1_000.0):
+                mgr._sync_subagent_lifecycle(
+                    managed,
+                    {
+                        "type": "user",
+                        "parent_tool_use_id": "tu-1",
+                        "content": [{"type": "tool_result", "tool_use_id": "tool-1", "content": "done"}],
+                    },
+                )
+
+            assert managed.subagent_activity["tu-1"].active_tool_use_ids == set()
+            assert managed.subagent_activity["tu-1"].last_progress_at == 1_000.0
         finally:
             await mgr.close_session("s1")

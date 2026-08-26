@@ -209,7 +209,7 @@ export default {
   'subagent_status_stalled': '执行停滞',
   'subagent_background_active': '正在后台独立运行',
   'subagent_tokens': '{{count}} tokens',
-  'subagent_stalled_detail': '连续 {{minutes}} 分钟无 token 增长，已自动终止',
+  'subagent_stalled_detail': '连续 {{minutes}} 分钟无输出或工具活动，已自动终止',
   'task_progress_cancelled': '{{description}}（已取消）',
   'task_progress_started': '子任务开始: {{description}}',
   'task_progress_completed': '子任务完成',
