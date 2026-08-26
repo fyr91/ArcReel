@@ -26,7 +26,7 @@ H3_PROMPT_SECTIONS = (
     "non_diegetic_music",
 )
 H3_SYSTEM_PROMPT_PATH = Path(__file__).parent / "prompts" / "minimax_h3" / "ref-en.txt"
-H3_SYSTEM_PROMPT_SHA256 = "1e574f356716ad55612247ffb7bbccbcdb484ad96599d63c7dca1af186b1fab7"
+H3_SYSTEM_PROMPT_SHA256 = "59f74395a94d1c3e375c885f79a55135b481a16fa365abe54e3e47617916acc8"
 
 _HEADER = re.compile(
     r"(?m)^(subject_definitions|summary|retention_analysis|detailed_description|overall_soundscape|non_diegetic_music)\s*:\s*"
@@ -100,7 +100,7 @@ class H3PromptArtifact(BaseModel):
     sections: H3PromptSections
     rendered_prompt: str
     basis_digest: str
-    system_prompt_sha256: Literal["1e574f356716ad55612247ffb7bbccbcdb484ad96599d63c7dca1af186b1fab7"] = (
+    system_prompt_sha256: Literal["59f74395a94d1c3e375c885f79a55135b481a16fa365abe54e3e47617916acc8"] = (
         H3_SYSTEM_PROMPT_SHA256
     )
     model_id: str

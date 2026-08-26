@@ -73,6 +73,12 @@ When an image acts as a storyboard or shot-planning reference, state which shots
 <Picture 3> is a storyboard reference for [Shot 1] and [Shot 2], defining their viewpoint, subject placement, and shot order.
 ```
 
+For every storyboard reference, include the following instruction verbatim in `subject_definitions`, replacing `N` only with that storyboard's actual picture number:
+
+```text
+Use Picture N as sequential shot guidance, not as a static image. Do not treat the storyboard as one image. Follow each panel as a separate consecutive beat. Read the panels in the specified order and map each panel to its corresponding time range. Repeated characters across panels represent the same subjects at later moments, never duplicates. Transfer only the panel order, poses, screen direction, framing progression, camera movement, and action order. Output one continuous full-color shot, never a storyboard, collage, split screen, or multi-panel image.
+```
+
 ### 2.3 `<Video N>`
 
 `<Video N>` is reserved for whole-video relationships, such as:

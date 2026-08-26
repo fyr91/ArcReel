@@ -51,6 +51,15 @@ logger = logging.getLogger(__name__)
 
 _H3_OPTIMIZATION_MAX_ATTEMPTS = 3
 _H3_OPTIMIZATION_MAX_CONCURRENCY = 3
+_STORYBOARD_SEQUENCE_CONSTRAINT = (
+    "Use Picture {picture_number} as sequential shot guidance, not as a static image. "
+    "Do not treat the storyboard as one image. Follow each panel as a separate consecutive beat. "
+    "Read the panels in the specified order and map each panel to its corresponding time range. "
+    "Repeated characters across panels represent the same subjects at later moments, never duplicates. "
+    "Transfer only the panel order, poses, screen direction, framing progression, camera movement, and "
+    "action order. Output one continuous full-color shot, never a storyboard, collage, split screen, or "
+    "multi-panel image."
+)
 
 
 class H3PromptOptimizationError(ValueError):
@@ -188,6 +197,16 @@ def _basis_payload(
 def _optimizer_user_prompt(payload: dict[str, Any]) -> str:
     """Runtime facts are isolated in the user turn; the pinned system prompt stays byte-identical."""
 
+    storyboard_constraints = " ".join(
+        _storyboard_sequence_constraint(index)
+        for index, reference in enumerate(payload.get("reference_images") or [], start=1)
+        if isinstance(reference, dict) and reference.get("kind") == "storyboard_sheet"
+    )
+    storyboard_instruction = (
+        f" Include the following storyboard instruction verbatim in subject_definitions: {storyboard_constraints}"
+        if storyboard_constraints
+        else ""
+    )
     return (
         "Rewrite the following ArcReel video unit for the configured MiniMax H3 request. "
         "The attached images appear in the same order as reference_images and map to <Picture N>. "
@@ -197,9 +216,35 @@ def _optimizer_user_prompt(payload: dict[str, Any]) -> str:
         "constraint: for example, when it forbids background music, write non_diegetic_music as N/A; when it "
         "requests ASMR, foreground the specified close physical sounds in overall_soundscape. "
         "Keep every timestamp within request.duration_seconds. Return only the six required sections. "
+        f"{storyboard_instruction} "
         f"The complete response, including all section headers, must not exceed {H3_MAX_PROMPT_CHARS} "
         "characters.\n\n" + json.dumps(payload, ensure_ascii=False, indent=2)
     )
+
+
+def _storyboard_sequence_constraint(picture_number: int | str) -> str:
+    return _STORYBOARD_SEQUENCE_CONSTRAINT.format(picture_number=picture_number)
+
+
+def _ensure_storyboard_sequence_constraints(
+    sections: H3PromptSections,
+    image_references: Sequence[H3PromptReference],
+) -> H3PromptSections:
+    rendered = sections.render()
+    missing = [
+        constraint
+        for index, reference in enumerate(image_references, start=1)
+        if reference.kind == "storyboard_sheet"
+        and (constraint := _storyboard_sequence_constraint(index)) not in rendered
+    ]
+    if not missing:
+        return sections
+    subject_definitions = "\n".join((sections.subject_definitions, *missing))
+    updated = sections.model_copy(update={"subject_definitions": subject_definitions})
+    actual_chars = len(updated.render())
+    if actual_chars > H3_MAX_PROMPT_CHARS:
+        raise H3PromptTooLongError(actual_chars)
+    return updated
 
 
 def _optimizer_retry_prompt(user_prompt: str, error: H3PromptTooLongError) -> str:
@@ -241,6 +286,7 @@ async def _generate_valid_h3_prompt(
                 picture_count=len(context.image_paths),
                 audio_count=len(context.audio_paths),
             )
+            sections = _ensure_storyboard_sequence_constraints(sections, context.image_references)
         except H3PromptTooLongError as exc:
             if attempt >= _H3_OPTIMIZATION_MAX_ATTEMPTS:
                 raise

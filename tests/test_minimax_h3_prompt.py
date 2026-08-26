@@ -32,6 +32,7 @@ from server.services.h3_prompt_optimization import (
     H3PromptOptimizationError,
     H3PromptOptimizationService,
     _optimizer_user_prompt,
+    _storyboard_sequence_constraint,
 )
 
 pytestmark = pytest.mark.unit
@@ -109,8 +110,10 @@ def _artifact() -> H3PromptArtifact:
 
 
 def test_pinned_ref_en_is_loaded_byte_exactly() -> None:
-    raw = load_h3_system_prompt().encode()
+    prompt = load_h3_system_prompt()
+    raw = prompt.encode()
     assert hashlib.sha256(raw).hexdigest() == H3_SYSTEM_PROMPT_SHA256
+    assert _storyboard_sequence_constraint("N") in prompt
 
 
 def test_optimizer_user_prompt_includes_the_complete_provider_character_limit() -> None:
@@ -125,6 +128,21 @@ def test_optimizer_user_prompt_includes_unified_video_style_rules() -> None:
 
     assert "project.video_style.prompt" in prompt
     assert "non_diegetic_music as N/A" in prompt
+
+
+def test_optimizer_user_prompt_resolves_the_storyboard_picture_number() -> None:
+    prompt = _optimizer_user_prompt(
+        {
+            "reference_images": [
+                {"kind": "character", "name": "Alice"},
+                {"kind": "storyboard_sheet", "name": "E1U01"},
+                {"kind": "keyframe", "name": "E1U01-K1"},
+            ]
+        }
+    )
+
+    assert _storyboard_sequence_constraint(2) in prompt
+    assert _storyboard_sequence_constraint("N") not in prompt
 
 
 def test_optimizer_user_prompt_preserves_drama_dialogue_and_voiceover_without_extra_markers() -> None:
@@ -373,6 +391,35 @@ async def test_video_style_prompt_does_not_mechanically_rewrite_optimizer_sectio
     )
 
     assert artifacts[0].sections.non_diegetic_music == "A warm orchestral score."
+
+
+async def test_optimizer_output_contains_the_resolved_storyboard_sequence_constraint(tmp_path: Path) -> None:
+    class _Generator:
+        async def generate(self, request: Any, *, project_name: str) -> TextGenerationResult:
+            return TextGenerationResult(text=_prompt(), provider="test", model="optimizer")
+
+    async def _factory(_project_name: str) -> Any:
+        return _Generator()
+
+    context = replace(
+        _context(tmp_path),
+        image_references=(
+            H3PromptReference(label="Picture 1", kind="character", name="Alice"),
+            H3PromptReference(label="Picture 2", kind="storyboard_sheet", name="E1U01"),
+            H3PromptReference(label="Picture 3", kind="keyframe", name="E1U01-K1"),
+        ),
+        image_paths=(tmp_path / "alice.png", tmp_path / "storyboard.png", tmp_path / "keyframe.png"),
+    )
+
+    artifacts = await H3PromptOptimizationService(generator_factory=_factory)._optimize_contexts(
+        "demo",
+        tmp_path,
+        [context],
+    )
+
+    constraint = _storyboard_sequence_constraint(2)
+    assert constraint in artifacts[0].sections.subject_definitions
+    assert artifacts[0].rendered_prompt.count(constraint) == 1
 
 
 async def test_optimizer_keeps_pinned_system_prompt_separate_and_saves_pending_review(
