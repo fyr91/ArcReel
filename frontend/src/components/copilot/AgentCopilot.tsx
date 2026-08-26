@@ -1,13 +1,17 @@
 import { useState, useRef, useCallback, useEffect, useId } from "react";
 import { voidCall, voidPromise } from "@/utils/async";
-import { Bot, Send, Square, Plus, ChevronDown, Trash2, MessageSquare, PanelRightClose, Paperclip, X } from "lucide-react";
+import { ArrowRight, Bot, Send, Square, Plus, ChevronDown, Trash2, MessageSquare, PanelRightClose, Paperclip, X } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import type { TFunction } from "i18next";
 import { ImageLightbox } from "@/components/ui/ImageLightbox";
 import { useAssistantStore } from "@/stores/assistant-store";
 import { useProjectsStore } from "@/stores/projects-store";
 import { useAppStore } from "@/stores/app-store";
+import { isOccupyingStatus, useTasksStore } from "@/stores/tasks-store";
+import { useWorkflowStore } from "@/stores/workflow-store";
 import { useAssistantSession } from "@/hooks/useAssistantSession";
+import { useCurrentEpisode } from "@/hooks/useCurrentEpisode";
+import { useWorkflowPlanSync } from "@/hooks/useWorkflowPlanSync";
 import type { ImagePayload, Turn } from "@/types";
 import { MAX_ATTACHED_IMAGES, useImageAttachments } from "@/hooks/useImageAttachments";
 import { GlassPopover } from "@/components/ui/GlassPopover";
@@ -19,6 +23,7 @@ import { TodoListPanel } from "./TodoListPanel";
 import { MessageRow } from "./chat/MessageRow";
 import { AgentFailureCard } from "./chat/AgentFailureCard";
 import { canEditUserTurn, composeAllTurns } from "./chat/utils";
+import { nextStepForAction } from "@/components/workflow/problem-views";
 import { formatShortDateTime } from "@/utils/date-format";
 
 // ---------------------------------------------------------------------------
@@ -168,20 +173,47 @@ function formatTime(isoStr: string | undefined, t: TFunction): string {
 
 export function AgentCopilot() {
   const { t } = useTranslation(["dashboard", "common"]);
+  const { t: workflowT } = useTranslation("workflow");
   const {
     turns, draftTurn, messagesLoading, editingTurnUuid, setEditingTurnUuid,
     sending, sessionStatus, pendingQuestion, answeringQuestion, error, startupFailure, startupFailureOrigin,
-    handoffGuide,
+    handoffGuide, currentSessionId, subagents,
   } = useAssistantStore();
 
   const { currentProjectName } = useProjectsStore();
+  const currentEpisode = useCurrentEpisode();
   const toggleAssistantPanel = useAppStore((s) => s.toggleAssistantPanel);
   const hyperframesAutoEditRequest = useAppStore((s) => s.hyperframesAutoEditRequest);
+  const workflowPlan = useWorkflowStore((s) => s.plan);
+  const workflowPlanKey = useWorkflowStore((s) => s.planKey);
+  const workflowPlanLoading = useWorkflowStore((s) => s.loading);
+  const workflowPlanError = useWorkflowStore((s) => s.error);
+  const hasActiveProjectTasks = useTasksStore((s) =>
+    currentProjectName
+      ? s.tasks.some(
+          (task) => task.project_name === currentProjectName && isOccupyingStatus(task.status),
+        )
+      : false,
+  );
   const { sendMessage, rewriteMessage, answerQuestion, interrupt, createNewSession, switchSession, deleteSession } =
     useAssistantSession(currentProjectName);
 
+  const agentCompletionRevision = `${sessionStatus ?? ""}|${Object.values(subagents)
+    .map((task) => `${task.tool_use_id}:${task.status}`)
+    .sort()
+    .join("|")}`;
+  // 集级页面由 WorkflowPanel 持有同步；项目级页面没有该面板，由常驻 Agent 面板接管。
+  // 两处最终都写入同一个 WorkflowPlan store，CTA 不按 content mode 自行推断动作。
+  useWorkflowPlanSync(
+    currentProjectName,
+    null,
+    currentEpisode === undefined,
+    agentCompletionRevision,
+  );
+
   const scrollRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const nextStepCaptionId = useId();
   const isComposingRef = useRef(false);
   const autoEditDispatchRef = useRef<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -215,6 +247,35 @@ export function AgentCopilot() {
     : isRunning
       ? t("generating_stop_hint")
       : t("input_placeholder");
+  const currentWorkflowPlanKey = currentProjectName
+    ? `${currentProjectName}::${currentEpisode ?? ""}`
+    : null;
+  const shownWorkflowPlan =
+    currentWorkflowPlanKey && workflowPlanKey === currentWorkflowPlanKey ? workflowPlan : null;
+  const nextWorkflowAction = shownWorkflowPlan?.next_action ?? null;
+  const hasActiveSubagents = Object.values(subagents).some((task) => task.status === "running");
+  const isInitialHandoff = handoffTurn !== null;
+  const hasCompletedAgentRound = Boolean(currentSessionId) && sessionStatus === "completed";
+  const canOfferNextStep = Boolean(
+    (isInitialHandoff || hasCompletedAgentRound)
+      && nextWorkflowAction
+      && nextWorkflowAction.type !== "none"
+      && nextWorkflowAction.type !== "wait_for_task"
+      && !workflowPlanLoading
+      && !workflowPlanError
+      && !hasActiveSubagents
+      && !hasActiveProjectTasks
+      && !messagesLoading
+      && !startupFailure
+      && !error
+      && !inputDisabled,
+  );
+  const nextWorkflowActionLabel = nextWorkflowAction
+    ? workflowT(`action_${nextWorkflowAction.type}`, { defaultValue: workflowT("action_unknown") })
+    : "";
+  const nextStepCaption = nextWorkflowAction
+    ? nextStepForAction(workflowT, nextWorkflowAction.type)
+    : "";
 
   useEffect(() => {
     const request = hyperframesAutoEditRequest;
@@ -304,6 +365,22 @@ export function AgentCopilot() {
     sendMessage,
     invalidatePendingReaders,
     resetImages,
+  ]);
+
+  const handleWorkflowNextStep = useCallback(() => {
+    if (!canOfferNextStep || !nextWorkflowAction) return;
+    const prompt = t(
+      isInitialHandoff ? "workflow_start_production_prompt" : "workflow_continue_prompt",
+      { step: nextWorkflowActionLabel },
+    );
+    voidCall(sendMessage(prompt));
+  }, [
+    canOfferNextStep,
+    isInitialHandoff,
+    nextWorkflowAction,
+    nextWorkflowActionLabel,
+    sendMessage,
+    t,
   ]);
 
   // 改写成功后由会话切换重建时间线（编辑态随 resetTimeline 清空）；失败保留编辑态，
@@ -749,6 +826,38 @@ export function AgentCopilot() {
             </button>
           )}
         </div>
+
+        {canOfferNextStep && (
+          <div className="mt-2" aria-live="polite">
+            <button
+              type="button"
+              onClick={handleWorkflowNextStep}
+              aria-describedby={nextStepCaptionId}
+              className="focus-ring flex w-full items-center justify-center gap-1.5 rounded-lg px-3 py-2 text-[12.5px] font-semibold transition-colors"
+              style={{
+                border: "1px solid var(--color-accent-soft)",
+                background: "var(--color-accent-dim)",
+                color: "var(--color-accent-2)",
+              }}
+              onMouseEnter={(event) => {
+                event.currentTarget.style.background = "oklch(0.58 0.15 168 / 0.2)";
+              }}
+              onMouseLeave={(event) => {
+                event.currentTarget.style.background = "var(--color-accent-dim)";
+              }}
+            >
+              {t(isInitialHandoff ? "workflow_start_production" : "workflow_next_step")}
+              <ArrowRight aria-hidden className="h-3.5 w-3.5" />
+            </button>
+            <p
+              id={nextStepCaptionId}
+              className="mt-1 text-center text-[10.5px] leading-4"
+              style={{ color: "var(--color-text-4)" }}
+            >
+              {nextStepCaption}
+            </p>
+          </div>
+        )}
 
         {/* Hidden file input */}
         <input
