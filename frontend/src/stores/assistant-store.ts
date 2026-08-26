@@ -49,6 +49,10 @@ interface AssistantState {
   // Input
   input: string;
   sending: boolean;
+  /** POST 受理前立即展示的用户消息；不进入权威时间线或 Agent 上下文。 */
+  pendingUserTurn: Turn | null;
+  /** 用户消息已发起、但 Agent 尚未产生第一条可见活动。 */
+  awaitingAgentResponse: boolean;
   interrupting: boolean;
   error: string | null;
   /** 当前面板生命周期内最近一次 Agent 启动失败观测；不做跨刷新持久化。 */
@@ -108,6 +112,9 @@ interface AssistantState {
   setMessagesLoading: (loading: boolean) => void;
   setInput: (input: string) => void;
   setSending: (sending: boolean) => void;
+  beginUserSendFeedback: (turn: Turn) => void;
+  acceptUserSendFeedback: (hasAuthoritativeEntry: boolean) => void;
+  clearUserSendFeedback: () => void;
   setInterrupting: (interrupting: boolean) => void;
   setError: (error: string | null) => void;
   setStartupFailure: (failure: FailureObservation | null, origin?: StartupFailureOrigin) => void;
@@ -178,6 +185,8 @@ export const useAssistantStore = create<AssistantState>((set, get) => {
     messagesLoading: false,
     input: "",
     sending: false,
+    pendingUserTurn: null,
+    awaitingAgentResponse: false,
     interrupting: false,
     error: null,
     startupFailure: null,
@@ -231,6 +240,9 @@ export const useAssistantStore = create<AssistantState>((set, get) => {
         draft: nextDraft,
         turns: projectEntries(entries, next),
         draftTurn: buildDraftTurn(nextDraft, isDraftReplaced(nextDraft, ids)),
+        pendingUserTurn: entry.type === "user" ? null : get().pendingUserTurn,
+        awaitingAgentResponse:
+          entry.type === "assistant" ? false : get().awaitingAgentResponse,
       });
     },
     setDraftSnapshot: (draft, rev) => {
@@ -243,6 +255,7 @@ export const useAssistantStore = create<AssistantState>((set, get) => {
         draft: mirror,
         draftRev: rev,
         draftTurn: buildDraftTurn(mirror, isDraftReplaced(mirror, committedFor(get().entries))),
+        awaitingAgentResponse: mirror ? false : get().awaitingAgentResponse,
       });
     },
     applyDelta: (payload) => {
@@ -253,6 +266,7 @@ export const useAssistantStore = create<AssistantState>((set, get) => {
         draft: next,
         draftRev: payload.rev,
         draftTurn: buildDraftTurn(next, isDraftReplaced(next, committedFor(get().entries))),
+        awaitingAgentResponse: false,
       });
     },
     clearDraft: () => set({ draft: null, draftTurn: null }),
@@ -270,6 +284,8 @@ export const useAssistantStore = create<AssistantState>((set, get) => {
         turns: [],
         draftTurn: null,
         subagents: {},
+        pendingUserTurn: null,
+        awaitingAgentResponse: false,
         startupFailure: null,
         startupFailureOrigin: null,
         handoffGuide: null,
@@ -281,6 +297,23 @@ export const useAssistantStore = create<AssistantState>((set, get) => {
     setMessagesLoading: (loading) => set({ messagesLoading: loading }),
     setInput: (input) => set({ input }),
     setSending: (sending) => set({ sending }),
+    beginUserSendFeedback: (turn) =>
+      set({
+        sending: true,
+        pendingUserTurn: turn,
+        awaitingAgentResponse: true,
+      }),
+    acceptUserSendFeedback: (hasAuthoritativeEntry) =>
+      set((state) => ({
+        sending: false,
+        pendingUserTurn: hasAuthoritativeEntry ? null : state.pendingUserTurn,
+      })),
+    clearUserSendFeedback: () =>
+      set({
+        sending: false,
+        pendingUserTurn: null,
+        awaitingAgentResponse: false,
+      }),
     setInterrupting: (interrupting) => set({ interrupting }),
     setError: (error) => set({ error }),
     // origin 与 failure 同一次写入，两者不会各自漂移
@@ -298,7 +331,11 @@ export const useAssistantStore = create<AssistantState>((set, get) => {
     },
     setSessionStatus: (status) => set({ sessionStatus: status }),
     setSessionStatusDetail: (detail) => set({ sessionStatusDetail: detail }),
-    setPendingQuestion: (question) => set({ pendingQuestion: question }),
+    setPendingQuestion: (question) =>
+      set((state) => ({
+        pendingQuestion: question,
+        awaitingAgentResponse: question ? false : state.awaitingAgentResponse,
+      })),
     setAnsweringQuestion: (answering) => set({ answeringQuestion: answering }),
     setSkills: (skills) => set({ skills }),
     setSkillsLoading: (loading) => set({ skillsLoading: loading }),

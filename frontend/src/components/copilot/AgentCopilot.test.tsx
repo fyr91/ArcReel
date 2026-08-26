@@ -89,6 +89,47 @@ describe("AgentCopilot", () => {
     });
   });
 
+  it("shows an immediate user bubble and transitions the animated send text until Agent activity", () => {
+    useAssistantStore.setState({
+      sending: true,
+      awaitingAgentResponse: true,
+      pendingUserTurn: {
+        type: "user",
+        content: [{ type: "text", text: "继续下一步" }],
+        uuid: "pending-user:client-1",
+      },
+    });
+
+    render(<AgentCopilot />);
+
+    expect(screen.getByText("user:继续下一步")).toBeInTheDocument();
+    expect(screen.getByRole("status")).toHaveTextContent("正在发送给 Agent");
+
+    act(() => {
+      useAssistantStore.setState({
+        sending: false,
+        pendingUserTurn: null,
+        turns: [{
+          type: "user",
+          content: [{ type: "text", text: "继续下一步" }],
+          uuid: "user-1",
+        }],
+      });
+    });
+
+    expect(screen.getAllByText("user:继续下一步")).toHaveLength(1);
+    expect(screen.getByRole("status")).toHaveTextContent("Agent 已接收，正在处理");
+
+    act(() => {
+      useAssistantStore.getState().setDraftSnapshot({
+        message_id: "assistant-1",
+        content: [{ type: "thinking", thinking: "开始处理" }],
+      }, 1);
+    });
+
+    expect(screen.queryByRole("status")).not.toBeInTheDocument();
+  });
+
   it("renders the pending-question wizard and disables normal sending", () => {
     useAssistantStore.setState({
       pendingQuestion: makePendingQuestion(),
