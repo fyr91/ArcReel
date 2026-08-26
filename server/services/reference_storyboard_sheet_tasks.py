@@ -4,12 +4,9 @@ from __future__ import annotations
 
 import asyncio
 import math
-import os
-import tempfile
 from copy import deepcopy
 from datetime import UTC, datetime
 from math import gcd
-from pathlib import Path
 from typing import Any
 
 from lib.db.base import DEFAULT_USER_ID
@@ -152,27 +149,10 @@ def _sheet_aspect_ratio(panel_ratio: str, panel_count: int) -> str:
     return f"{width // divisor}:{height // divisor}"
 
 
-def normalize_storyboard_sheet_monochrome(image_path: Path) -> None:
-    """Atomically turn the generated working sheet into a true grayscale PNG.
-
-    Image models repeatedly leak subject colors from visual references even when
-    the prompt forbids them.  Storyboard Sheets are production documents, so a
-    deterministic post-process is the final invariant shared by Web UI and Agent
-    calls.  Technical annotations may remain grayscale; color is optional there.
-    """
-
-    from PIL import Image, ImageOps
-
-    fd, staged_name = tempfile.mkstemp(prefix=f".{image_path.stem}.gray.", suffix=".png", dir=image_path.parent)
-    os.close(fd)
-    staged_path = Path(staged_name)
-    try:
-        with Image.open(image_path) as source:
-            grayscale = ImageOps.grayscale(source).convert("RGB")
-            grayscale.save(staged_path, format="PNG", optimize=True)
-        staged_path.replace(image_path)
-    finally:
-        staged_path.unlink(missing_ok=True)
+def _storyboard_end_timestamp(unit: dict[str, Any]) -> str:
+    duration = max(1, int(unit.get("duration_seconds") or 8))
+    minutes, seconds = divmod(duration, 60)
+    return f"{minutes:02d}:{seconds:02d}.000"
 
 
 def build_storyboard_sheet_prompt(
@@ -187,6 +167,7 @@ def build_storyboard_sheet_prompt(
     columns, rows = _sheet_grid(panel_count)
     sheet_ratio = _sheet_aspect_ratio(panel_ratio, panel_count)
     normalized_instructions = str(instructions or "").strip()
+    end_timestamp = _storyboard_end_timestamp(unit)
     review_block = (
         f"""
 
@@ -230,6 +211,22 @@ Video Unit：{unit.get("unit_id")}
 - 每个动作 beat 的入口 panel 描绘动作刚开始的稳定可见状态，不把同一 beat 的完成结果当作入口帧。
 - 例如“妹妹追弟弟，弟弟绊倒摔进桂花堆”：入口 panel 是妹妹开始追、弟弟开始逃；摔入花堆只能作为后续发展或结果 panel。
 - 使用清楚、简洁、可执行的分镜语言；技术标注必须短且不遮挡主体。不要生成大段正文、品牌、水印、页眉装饰或无关元素。
+
+时序规划与标注：
+- 完整播放范围固定为 00:00.000 至 {end_timestamp}。先根据动作 beat、镜头变化、对白/旁白节奏、信息密度和戏剧重点，为全部 {panel_count} 格分配各自持续时间；不得按总时长机械等分。
+- 关键动作、重要反应、信息揭示和稳定结果可以占用较长时间，快速过渡和短促动作可以占用较短时间，但分配必须符合真实可执行的表演与镜头节奏。
+- 每格代表一个独立且连续发生的动作 beat。所有时间范围必须精确、有序、互不重叠且首尾相接：第 1 格从 00:00.000 开始，后一格从前一格结束时刻开始，最后一格在 {end_timestamp} 结束，完整覆盖 Video Unit，不得留下空档。
+- 在每格内容框左上角的同一固定位置写出该格精确时间范围，统一使用 `MM:SS.mmm–MM:SS.mmm`；不得在其他位置重复或改写时间。
+- 最后一格必须保留稳定的视觉尾巴，展示动作与情绪已经完成、可直接交给后续镜头的状态；不得在最后一格开启新的未完成动作。
+
+物理状态机与连续性锁：
+- 构图前先从正式文稿、分镜版图片描述和真实参考图中建立逐格物理状态，不把状态表本身作为大段文字画进 Sheet。
+- 对每个角色持续跟踪画面位置、前后景深、身体朝向、视线、姿态和运动路径；后一格必须继承前一格的结束状态，只允许发生当前动作 beat 明确要求的变化。
+- 对每件道具持续跟踪数量、外观、方向、归属、持有者和支撑方式。道具必须始终由手、人物、表面或机械结构真实支撑，不得悬空、复制、易主或无因翻转。
+- 接触状态必须按动作事实从“未接触”推进到“接触”，再按需要推进到“保持”或“释放”；指定接触发生前，手与物体之间必须保留清楚可见的空气间隙，不得提前接触或出现互相穿透。
+- 固定环境地标、家具和关键道具相对画面的位置，保持已建立的空间轴线、左右关系、运动方向和光向；不得跨轴或镜像翻转场景关系。
+- 同一角色跨 panel 重复出现表示同一主体在后续时刻的状态，不是同一时刻的复制体；每格内禁止重复或镜像主体、额外肢体、额外手指和额外道具。
+- 禁止角色、手、身体部位、持物和环境物件在 panel 之间瞬移。每格必须清楚表现相对上一格发生的物理变化，并建立下一格可以连续承接的结束状态。
 {review_block}
 """
 
@@ -356,8 +353,6 @@ async def execute_reference_storyboard_sheet_task(
             script_file=script_file,
             panel_aspect_ratio=panel_ratio,
             panel_count=count,
-            postprocess_output=normalize_storyboard_sheet_monochrome,
-            monochrome_postprocessed=True,
         )
     finally:
         await asyncio.to_thread(frozen.cleanup)
@@ -407,9 +402,7 @@ def require_generated_keyframes(unit: dict[str, Any]) -> list[dict[str, Any]]:
 
     keyframes = require_formal_keyframes(unit)
     missing_ids = [
-        str(item.get("keyframe_id") or "")
-        for item in keyframes
-        if not str(item.get("image_path") or "").strip()
+        str(item.get("keyframe_id") or "") for item in keyframes if not str(item.get("image_path") or "").strip()
     ]
     if missing_ids:
         raise StoryboardSheetGateError(

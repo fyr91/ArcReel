@@ -1,14 +1,12 @@
 from __future__ import annotations
 
 import pytest
-from PIL import Image
 
 from server.services.reference_storyboard_sheet_tasks import (
     StoryboardSheetGateError,
     _panel_count,
     _sheet_aspect_ratio,
     build_storyboard_sheet_prompt,
-    normalize_storyboard_sheet_monochrome,
     reference_storyboard_sheet_task_specs,
     require_formal_keyframes,
 )
@@ -33,18 +31,6 @@ def test_panel_count_accounts_for_action_density_not_only_duration() -> None:
         )
         == 6
     )
-
-
-def test_storyboard_postprocess_writes_a_true_grayscale_png(tmp_path) -> None:
-    output = tmp_path / "sheet.png"
-    Image.new("RGB", (2, 1), color=(210, 40, 90)).save(output, format="JPEG")
-
-    normalize_storyboard_sheet_monochrome(output)
-
-    with Image.open(output) as image:
-        assert image.format == "PNG"
-        red, green, blue = image.convert("RGB").getpixel((0, 0))
-    assert red == green == blue
 
 
 def test_sheet_prompt_preserves_panel_ratio_and_action_progression() -> None:
@@ -109,6 +95,46 @@ def test_sheet_prompt_uses_monochrome_working_drawing_with_adaptive_layout() -> 
     assert "每个单独 panel 的内容框都必须原生采用项目目标比例 9:16" in prompt
     assert "不得照搬其他项目的固定画布尺寸" in prompt
     assert "成片风格（仅用于保持角色、时代、场景与设计身份一致" in prompt
+
+
+def test_sheet_prompt_requires_semantic_nonuniform_time_mapping() -> None:
+    prompt = build_storyboard_sheet_prompt(
+        {"style": "田园动画"},
+        {
+            "unit_id": "E1U20",
+            "text": "妹妹先观察花瓶，随后小心插花，最后退后确认构图。",
+            "duration_seconds": 8,
+        },
+        panel_ratio="16:9",
+        panel_count=4,
+        reference_roster="- Picture 1 = @[鳄鱼妹妹]",
+    )
+
+    assert "完整播放范围固定为 00:00.000 至 00:08.000" in prompt
+    assert "不得按总时长机械等分" in prompt
+    assert "所有时间范围必须精确、有序、互不重叠且首尾相接" in prompt
+    assert "统一使用 `MM:SS.mmm–MM:SS.mmm`" in prompt
+    assert "最后一格必须保留稳定的视觉尾巴" in prompt
+
+
+def test_sheet_prompt_tracks_physical_state_across_panels() -> None:
+    prompt = build_storyboard_sheet_prompt(
+        {"style": "田园动画"},
+        {
+            "unit_id": "E1U21",
+            "text": "妹妹伸手拿起花瓶，再把花瓶放回桌面。",
+            "duration_seconds": 5,
+        },
+        panel_ratio="16:9",
+        panel_count=4,
+        reference_roster="- Picture 1 = @[鳄鱼妹妹]",
+    )
+
+    assert "画面位置、前后景深、身体朝向、视线、姿态和运动路径" in prompt
+    assert "数量、外观、方向、归属、持有者和支撑方式" in prompt
+    assert "手与物体之间必须保留清楚可见的空气间隙" in prompt
+    assert "不得跨轴或镜像翻转场景关系" in prompt
+    assert "禁止角色、手、身体部位、持物和环境物件在 panel 之间瞬移" in prompt
 
 
 def test_sheet_prompt_appends_user_authorized_regeneration_instructions() -> None:
