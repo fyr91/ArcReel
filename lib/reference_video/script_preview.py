@@ -20,7 +20,13 @@ from collections.abc import Collection
 from dataclasses import dataclass, field
 from typing import Any
 
-from lib.asset_types import BUCKET_KEY, asset_name_comparison_key, normalize_asset_bucket
+from lib.asset_types import (
+    BUCKET_KEY,
+    GLOBAL_ASSET_ID_FIELD,
+    GLOBAL_ASSET_VOICE_SOURCE_FIELD,
+    asset_name_comparison_key,
+    normalize_asset_bucket,
+)
 from lib.reference_video.keyframes import KEYFRAME_MENTION_PREFIX
 from lib.reference_video.reference_declarations import unit_reference_declarations
 from lib.reference_video.text_parser import (
@@ -181,7 +187,15 @@ def derive_voice_bindings(
         # 音频编号 = dialogue speaker 首现顺序，受 max_reference_audio 上限截断。
         for speaker in registered:
             char_data = characters.get(speaker)
-            audio_field_set = bool(char_data.get("reference_audio")) if isinstance(char_data, dict) else False
+            audio_field_set = (
+                bool(char_data.get("reference_audio"))
+                or (
+                    char_data.get(GLOBAL_ASSET_VOICE_SOURCE_FIELD) == "reference_audio"
+                    and bool(char_data.get(GLOBAL_ASSET_ID_FIELD))
+                )
+                if isinstance(char_data, dict)
+                else False
+            )
             has_audio = speaker in audio_ready if audio_ready is not None else audio_field_set
             if not has_audio:
                 if audio_ready is not None and audio_field_set:
@@ -213,8 +227,9 @@ def build_script_preview(
     ``settings`` 必填无兜底（同 ``render_unit_prompt``），须与执行层拿到的同一份声音输入档同步，
     否则预览会显示音频已绑定、实际请求却不带音频段。其中 ``requires_reference_image``（目标 backend 是否
     要求音频逐段挂图）不涉及 IO，预览虽不碰文件系统也须一并同步，遗漏会让预览显示已绑定、
-    执行时才降级，用户直到生成后才发现声音没生效。``settings.audio_ready`` 在预览侧留 None：
-    预览不解析文件，按角色资产的 ``reference_audio`` 字段非空判定。
+    执行时才降级，用户直到生成后才发现声音没生效。预览入口应与执行层一样把本地与全局资产中
+    确实可用的音频角色作为 ``settings.audio_ready`` 传入；``None`` 只保留给不掌握文件状态的
+    纯函数调用方，届时按角色资产的 ``reference_audio`` 字段非空判定。
 
     ``max_reference_images`` 须同步执行层的能力上限（``VideoLaneResult.max_reference_images``）：
     执行期会把正文派生的参考图先按此上限裁剪、再渲染（保证 ``图片N`` 编号与实际发出的参考图
@@ -236,17 +251,11 @@ def build_script_preview(
         references = list(unit_reference_declarations(project, draft_unit))
         resolved_mentions = {
             asset_name_comparison_key(
-                f"{KEYFRAME_MENTION_PREFIX}{reference.name}"
-                if reference.type == "keyframe"
-                else reference.name
+                f"{KEYFRAME_MENTION_PREFIX}{reference.name}" if reference.type == "keyframe" else reference.name
             )
             for reference in references
         }
-        missing = [
-            name
-            for name in extract_mentions(text)
-            if asset_name_comparison_key(name) not in resolved_mentions
-        ]
+        missing = [name for name in extract_mentions(text) if asset_name_comparison_key(name) not in resolved_mentions]
 
     warnings = [_warning(WARN_UNREGISTERED_MENTION, name=name) for name in missing]
     utterances, syntax_warnings = derive_utterances(text)

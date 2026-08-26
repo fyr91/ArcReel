@@ -1296,6 +1296,40 @@ def test_script_preview_uses_project_voice_capabilities(client: TestClient, monk
 
 
 @pytest.mark.integration
+def test_script_preview_accepts_effective_linked_global_reference_audio(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+):
+    """角色卡与执行层采用的全局参考音频，在解析预览中也必须视为已设置且可用。"""
+    from server.routers import reference_videos as router_mod
+
+    project_manager = router_mod.get_project_manager()
+    project = project_manager.load_project("demo")
+    project["characters"]["张三"].update(
+        {
+            "global_asset_id": "asset-zhangsan",
+            "global_asset_voice_source": "reference_audio",
+        }
+    )
+    project_manager.save_project("demo", project)
+    linked_audio = project_manager.projects_root / "_global_assets" / "character" / "zhangsan.wav"
+    resolve_linked = AsyncMock(return_value={"张三": linked_audio})
+    monkeypatch.setattr(router_mod, "resolve_linked_global_reference_audio_paths", resolve_linked)
+    _patch_video_caps(
+        monkeypatch,
+        {
+            "voice_consistency": "native",
+            "max_reference_audio_count": 3,
+            "model": "doubao-seedance-2-0",
+        },
+    )
+
+    body = _preview(client, "@[张三]：{我来了}").json()
+
+    assert body["warnings"] == []
+    resolve_linked.assert_awaited_once()
+
+
+@pytest.mark.integration
 def test_script_preview_warns_when_episode_is_silent(client: TestClient, monkeypatch: pytest.MonkeyPatch):
     """本集设为无声视频时，预览面板告知声音一致性不生效（模型仍是 A 类）。"""
     _patch_video_caps(

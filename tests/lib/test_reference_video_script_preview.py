@@ -288,6 +288,35 @@ def test_warn_speaker_audio_unavailable_distinguished_from_unset():
     assert {"key": WARN_SPEAKER_AUDIO_UNAVAILABLE, "params": {"name": "李四"}} not in bindings.warnings
 
 
+def test_linked_global_reference_audio_is_configured_but_can_be_unavailable():
+    """选中的全局参考音频不是“未设置”；解析成功时绑定，解析失败时提示音频不可用。"""
+    project = {
+        "characters": {
+            "张三": {
+                "global_asset_id": "asset-zhangsan",
+                "global_asset_voice_source": "reference_audio",
+            }
+        }
+    }
+    utterances = derive_utterances("@[张三]：{我来了}")[0]
+
+    ready = derive_voice_bindings(
+        utterances,
+        project["characters"],
+        VoiceRenderSettings(voice_consistency="native", max_reference_audio=3, audio_ready={"张三"}),
+    )
+    assert ready.audio_speakers == ["张三"]
+    assert ready.warnings == []
+
+    unavailable = derive_voice_bindings(
+        utterances,
+        project["characters"],
+        VoiceRenderSettings(voice_consistency="native", max_reference_audio=3, audio_ready=set()),
+    )
+    assert unavailable.audio_speakers == []
+    assert unavailable.warnings == [{"key": WARN_SPEAKER_AUDIO_UNAVAILABLE, "params": {"name": "张三"}}]
+
+
 @pytest.mark.parametrize("registered", [_NAME_NFC, _NAME_NFD], ids=["登记NFC", "登记NFD"])
 @pytest.mark.parametrize("written", [_NAME_NFC, _NAME_NFD], ids=["出场NFC", "出场NFD"])
 def test_combining_char_speaker_binds_audio_in_every_encoding_pairing(registered: str, written: str):
