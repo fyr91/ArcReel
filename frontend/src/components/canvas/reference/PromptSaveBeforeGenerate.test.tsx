@@ -134,11 +134,11 @@ describe("reference visual prompts save before generation", () => {
         />,
       );
 
-      fireEvent.change(screen.getByRole("combobox", { name: /分镜版(?:图片)?描述|Storyboard description/ }), {
+      fireEvent.change(screen.getByRole("combobox", { name: /故事板(?:图片)?描述|Storyboard description/ }), {
         target: { value: nextDescription },
       });
       expect(screen.queryByRole("button", { name: /^(保存|Save)$/ })).not.toBeInTheDocument();
-      fireEvent.click(screen.getByRole("button", { name: /重新生成分镜版|Regenerate storyboard/ }));
+      fireEvent.click(screen.getByRole("button", { name: /重新生成故事板|Regenerate storyboard/ }));
 
       await waitFor(() => expect(generate).toHaveBeenCalledOnce());
       expect(patch).toHaveBeenCalledWith("proj", 1, "E1U01", {
@@ -185,10 +185,10 @@ describe("reference visual prompts save before generation", () => {
         onChanged={vi.fn().mockResolvedValue(undefined)}
       />,
     );
-    fireEvent.change(screen.getByRole("combobox", { name: /分镜版(?:图片)?描述|Storyboard description/ }), {
+    fireEvent.change(screen.getByRole("combobox", { name: /故事板(?:图片)?描述|Storyboard description/ }), {
       target: { value: "新的故事版提示词" },
     });
-    fireEvent.click(screen.getByRole("button", { name: /重新生成分镜版|Regenerate storyboard/ }));
+    fireEvent.click(screen.getByRole("button", { name: /重新生成故事板|Regenerate storyboard/ }));
 
     await waitFor(() => expect(useAppStore.getState().toast?.text).toContain("save failed"));
     expect(generate).not.toHaveBeenCalled();

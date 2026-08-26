@@ -11,7 +11,6 @@ interface GenerateButtonProps {
   label?: string;
   className?: string;
   disabled?: boolean;
-  layoutId?: string;
 }
 
 const ACTIVE_BG =
@@ -20,6 +19,7 @@ const LOADING_BG =
   "linear-gradient(135deg, oklch(0.66 0.08 160), oklch(0.58 0.07 160))";
 const ACTIVE_SHADOW =
   "inset 0 1px 0 oklch(1 0 0 / 0.35), 0 6px 18px -4px var(--color-accent-glow), 0 0 0 1px var(--color-accent-soft)";
+const LOADING_LABEL = "生成中...";
 
 export function GenerateButton({
   onClick,
@@ -27,18 +27,15 @@ export function GenerateButton({
   label = "生成",
   className,
   disabled = false,
-  layoutId,
 }: GenerateButtonProps) {
   const isDisabled = disabled || loading;
 
   return (
     <motion.button
       type="button"
-      layout
-      layoutId={layoutId}
       onClick={onClick}
       disabled={isDisabled}
-      className={`focus-ring inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-[12.5px] font-medium transition-transform ${
+      className={`focus-ring inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-[12.5px] font-medium ${
         isDisabled ? "cursor-not-allowed opacity-60" : ""
       } ${className ?? ""}`}
       style={{
@@ -52,11 +49,12 @@ export function GenerateButton({
           : { opacity: isDisabled ? 0.6 : 1 }
       }
       whileHover={isDisabled ? undefined : { y: -1 }}
-      transition={
-        loading
+      transition={{
+        opacity: loading
           ? { duration: 1.5, repeat: Infinity, ease: "easeInOut" }
-          : { duration: 0.3 }
-      }
+          : { duration: 0.3 },
+        y: { duration: 0.3 },
+      }}
     >
       <AnimatePresence mode="wait" initial={false}>
         {loading ? (
@@ -81,7 +79,17 @@ export function GenerateButton({
           </motion.span>
         )}
       </AnimatePresence>
-      <span>{loading ? "生成中..." : label}</span>
+      <span className="inline-grid">
+        <span
+          aria-hidden="true"
+          className="invisible col-start-1 row-start-1"
+        >
+          {loading ? label : LOADING_LABEL}
+        </span>
+        <span className="col-start-1 row-start-1">
+          {loading ? LOADING_LABEL : label}
+        </span>
+      </span>
     </motion.button>
   );
 }
