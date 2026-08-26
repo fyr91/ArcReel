@@ -25,6 +25,7 @@ from lib.artifact_manifest import ArtifactBasis
 from lib.artifact_provenance import Step1PromptVariant, build_step1_request
 from lib.asset_types import BUCKET_KEY
 from lib.config.resolver import ConfigResolver
+from lib.course_video import derive_course_dependencies, validate_course_assets, validate_opening_closing
 from lib.custom_provider.duration_presets import DEFAULT_FALLBACK
 from lib.db import async_session_factory
 from lib.db.base import DEFAULT_USER_ID
@@ -285,7 +286,7 @@ def _uses_reference_video_units(project_data: dict[str, Any]) -> bool:
 
     ad 的 unit 是广告分镜的派生索引、无 step1 拆分，即使走参考路线也不在此列。
     """
-    if project_data.get("content_mode", "narration") == "ad":
+    if project_data.get("content_mode", "drama") == "ad":
         return False
     return is_reference_video_project(project_data)
 
@@ -305,7 +306,7 @@ def _step2_blocking_quarantine_kinds(project_data: dict[str, Any]) -> tuple[str,
 
 def _resolve_step1_path(project_path: Path, episode: int, project_data: dict[str, Any]) -> tuple[Path, str] | None:
     """Return (step1_md path, hint text for missing-file error)；ad 一键生成不依赖 step1，返回 None。"""
-    content_mode = project_data.get("content_mode", "narration")
+    content_mode = project_data.get("content_mode", "drama")
     if content_mode == "ad":
         # ad 创作输入是 project.json 的 brief + 产品信息 + target_duration，
         # ScriptGenerator 的 ad 分支不读 drafts/ 中间文件。
@@ -589,7 +590,6 @@ def normalize_drama_script_tool(ctx: ToolContext):
                 default_duration=default_duration,
                 supported_durations=supported_durations,
                 episode=episode,
-                source_kind=cast(str, prompt_inputs["source_kind"]),
                 episode_outline=cast(dict[str, Any] | None, prompt_inputs["episode_outline"]),
                 next_episode_outline=cast(dict[str, Any] | None, prompt_inputs["next_episode_outline"]),
                 # 输出语言取项目 source_language（生成内容语言的唯一真相源）；缺省回退默认中文，
@@ -864,7 +864,22 @@ def _build_reference_units_from_flat(
             "duration_seconds": flat["duration_seconds"],
             "source_text": flat["source_text"],
         }
+        if project.get("content_mode") == "course":
+            unit.update(
+                {
+                    "unit_type": flat.get("unit_type", "story"),
+                    "scenes": list(flat.get("scenes") or []),
+                    "characters": list(flat.get("characters") or []),
+                    "props": list(flat.get("props") or []),
+                    "presenters": list(flat.get("presenters") or []),
+                }
+            )
         units.append(unit)
+    if project.get("content_mode") == "course":
+        units = derive_course_dependencies(units)
+        validate_course_assets(project)
+        validate_opening_closing(units)
+        return units
     return units
 
 
@@ -1612,6 +1627,7 @@ def split_reference_video_units_tool(ctx: ToolContext):
                 # 分集大纲约束本集内容边界，同 drama step1。
                 episode_outline=cast(dict[str, Any] | None, prompt_inputs["episode_outline"]),
                 next_episode_outline=cast(dict[str, Any] | None, prompt_inputs["next_episode_outline"]),
+                content_mode=str(project.get("content_mode") or "drama"),
             )
             prompt = append_user_instructions(prompt, instructions)
 

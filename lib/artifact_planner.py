@@ -103,6 +103,7 @@ class ArtifactTargetStatePlan:
 class _EpisodeBinding:
     episode: int
     script_file: str
+    source_file: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -273,7 +274,10 @@ class TargetStatePlanner:
                 raise ValueError("project episode bindings must be unique")
             seen_episodes.add(episode)
             seen_scripts.add(normalized)
-            self.bindings.append(_EpisodeBinding(episode=episode, script_file=normalized))
+            source_file = raw.get("source_file")
+            if source_file is not None and (not isinstance(source_file, str) or not source_file):
+                raise ValueError(f"project episode {index} has an invalid source binding")
+            self.bindings.append(_EpisodeBinding(episode=episode, script_file=normalized, source_file=source_file))
         self._bindings_loaded = True
 
     def load_episodes(self) -> None:
@@ -444,7 +448,7 @@ class TargetStatePlanner:
                 )
             self._planned.add("structured-content")
             return
-        if self.project.get("content_mode") not in {"narration", "drama"}:
+        if self.project.get("content_mode") not in {"drama", "course"}:
             self._planned.add("structured-content")
             return
         step1_by_episode = {
@@ -469,7 +473,7 @@ class TargetStatePlanner:
         self._planned.add("structured-content")
 
     def _plan_one_step1(self, binding: _EpisodeBinding) -> _FormalStep1State | None:
-        if self.project.get("content_mode") not in {"narration", "drama"}:
+        if self.project.get("content_mode") not in {"drama", "course"}:
             return None
         step1_path = script_review.step1_path(self.project_dir, self.project, binding.episode)
         if step1_path is None:
@@ -481,7 +485,7 @@ class TargetStatePlanner:
         step1_raw = self._read_dependency(step1_rel, "formal step1")
         step1_content = self._parse_json(step1_raw, f"formal step1 {step1_rel}")
         step1_key = ArtifactKey.episode_step1(binding.episode)
-        source_rel = f"source/episode_{binding.episode}.txt"
+        source_rel = binding.source_file or f"source/episode_{binding.episode}.txt"
         source_observation = self.adapter.inspect_artifact(source_rel)
         if source_observation.blocker is None and source_observation.present:
             source_raw = self._read_dependency(source_rel, "episode source")

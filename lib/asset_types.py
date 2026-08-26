@@ -71,6 +71,10 @@ ASSET_SPECS: dict[str, AssetSpec] = {
             "reference_image",
             "reference_audio",
             "voice_notice_dismissed_at",
+            # course_role 只在课程项目解释为 actor/main_lecturer/guest_lecturer；
+            # lecturer_portrait 是同一角色资产的 1:1 衍生图，不创建新的资产类型。
+            "course_role",
+            "lecturer_portrait",
         ),
         # voice_style 是 LLM 生成的角色配音风格，agent 可改；reference_image / reference_audio
         # 是用户上传的文件路径（系统级），不进 agent 白名单——更新分别走
@@ -80,7 +84,7 @@ ASSET_SPECS: dict[str, AssetSpec] = {
         # 与之比较的 voice_updated_at 不在此列——只由系统在 reference_audio 实际变更时机械戳写
         # （update_character_reference_audio 与全局资产库导入），不开放任意 PATCH 覆写
         # （否则该比较可被客户端绕过）。
-        agent_editable_extra_fields=("voice_style",),
+        agent_editable_extra_fields=("voice_style", "course_role"),
     ),
     "scene": AssetSpec(
         asset_type="scene",

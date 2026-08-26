@@ -432,9 +432,7 @@ export interface SegmentUpdatePayload {
 export interface CreateProjectPayload {
   title: string;
   name?: string;
-  content_mode?: "narration" | "drama" | "ad";
-  /** 源文件性质：novel（默认）/ screenplay。仅 drama 暴露，创建即定、不可变。 */
-  source_kind?: "novel" | "screenplay";
+  content_mode?: "drama" | "course" | "ad";
   aspect_ratio?: "9:16" | "16:9";
   /** 生成模式，创建时必填二选一、无默认值（后端缺失即 422）。 */
   generation_mode: GenerationRoute;
@@ -1652,6 +1650,32 @@ class API {
       original_filename?: string;
       used_encoding?: string | null;
       chapter_count?: number;
+    };
+  }
+
+  /** 课程项目：上传一份文档并原子绑定到一个新的（或初始空的）Episode。 */
+  static async addCourseEpisode(
+    projectName: string,
+    file: File,
+  ): Promise<{
+    success: boolean;
+    path: string;
+    filename?: string;
+    episode: { episode: number; title: string; script_file: string; source_file: string };
+  }> {
+    const formData = new FormData();
+    formData.append("file", file);
+    const url = `/projects/${encodeURIComponent(projectName)}/course/episodes`;
+    const response = await fetch(`${API_BASE}${url}`, withAuth(url, { method: "POST", body: formData }));
+    if (!response.ok) {
+      const body = await response.json().catch(() => null) as { detail?: unknown } | null;
+      throw new Error(typeof body?.detail === "string" ? body.detail : `HTTP ${response.status}`);
+    }
+    return (await response.json()) as {
+      success: boolean;
+      path: string;
+      filename?: string;
+      episode: { episode: number; title: string; script_file: string; source_file: string };
     };
   }
 
@@ -3326,6 +3350,11 @@ class API {
       duration_seconds?: number;
       transition_to_next?: TransitionType;
       note?: string | null;
+      unit_type?: ReferenceVideoUnit["unit_type"];
+      scenes?: string[];
+      characters?: string[];
+      props?: string[];
+      presenters?: string[];
     },
   ): Promise<{ unit: ReferenceVideoUnit }> {
     return this.request(
@@ -3345,10 +3374,37 @@ class API {
       duration_seconds?: number;
       transition_to_next?: TransitionType;
       note?: string | null;
+      unit_type?: ReferenceVideoUnit["unit_type"];
+      scenes?: string[];
+      characters?: string[];
+      props?: string[];
+      presenters?: string[];
     },
   ): Promise<{ unit: ReferenceVideoUnit }> {
     return this.request(
       `/projects/${encodeURIComponent(projectName)}/reference-videos/episodes/${episode}/units/${encodeURIComponent(unitId)}`,
+      { method: "PATCH", body: JSON.stringify(patch) },
+    );
+  }
+
+  static async confirmReferenceVideoUnit(
+    projectName: string,
+    episode: number,
+    unitId: string,
+  ): Promise<{ success: boolean; unit_id: string; confirmed_video_version: number }> {
+    return this.request(
+      `/projects/${encodeURIComponent(projectName)}/reference-videos/episodes/${episode}/units/${encodeURIComponent(unitId)}/confirm-video`,
+      { method: "POST" },
+    );
+  }
+
+  static async patchCourseBookends(
+    projectName: string,
+    episode: number,
+    patch: { scenes: string[]; characters: string[]; presenters: string[] },
+  ): Promise<{ units: ReferenceVideoUnit[] }> {
+    return this.request(
+      `/projects/${encodeURIComponent(projectName)}/reference-videos/episodes/${episode}/course-bookends`,
       { method: "PATCH", body: JSON.stringify(patch) },
     );
   }

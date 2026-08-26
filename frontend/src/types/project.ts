@@ -37,6 +37,10 @@ export interface Character {
   /** 已确认到的声音版本（ISO8601，取关闭时的 voice_updated_at 原值）；
    *  voice_updated_at 晚于此值即视为新版本。 */
   voice_notice_dismissed_at?: string;
+  /** 课程项目中的角色分组；讲师仍是 character 资产。 */
+  course_role?: "actor" | "main_lecturer" | "guest_lecturer";
+  /** 课程解说右下角面板使用的 1:1 方图。 */
+  lecturer_portrait?: string;
 }
 
 export interface Scene {
@@ -116,6 +120,8 @@ export interface EpisodeMeta {
   episode: number;
   title: string;
   script_file: string;
+  /** 课程项目中一份文档对应本集的规范化源文件。 */
+  source_file?: string | null;
   /** Written by episode_planner at split time: ending hook / suspense */
   hook?: string;
   /** Written by episode_planner at split time: slice boundary in the source file (char offsets) */
@@ -154,9 +160,8 @@ export interface UnifiedVideoStyle extends UnifiedVideoStyleDraft {
 
 export interface ProjectData {
   title: string;
-  content_mode: "narration" | "drama" | "ad";
-  /** 源文件性质：novel（默认，AI 改编）/ screenplay（成品剧本，逐字提取）。创建即定、不可变。 */
-  source_kind?: "novel" | "screenplay";
+  /** Creation/API runtime only accepts drama/course/ad; narration remains an internal script-shape discriminator. */
+  content_mode: "drama" | "course" | "ad" | "narration";
   style: string;
   style_template_id?: string | null;
   style_image?: string;

@@ -206,7 +206,7 @@ export function StudioCanvasRouter() {
     scriptFile?: string,
   ): Promise<boolean> => {
     if (!currentProjectName) return false;
-    const mode = currentProjectData?.content_mode ?? "narration";
+    const mode = currentProjectData?.content_mode ?? "drama";
     const patch =
       typeof fieldOrPatch === "string"
         ? { [fieldOrPatch]: value }
@@ -250,7 +250,7 @@ export function StudioCanvasRouter() {
     const resolvedFile = scriptFile ?? Object.keys(currentScripts)[0];
     if (!resolvedFile) return false;
     const script = currentScripts[resolvedFile];
-    if (!script || script.content_mode !== "ad") return false;
+    if (!script || script.content_mode !== "ad" || !("shots" in script)) return false;
     const ids = script.shots.map((s) => s.shot_id);
     const index = ids.indexOf(shotId);
     const target = direction === "earlier" ? index - 1 : index + 1;
@@ -412,6 +412,7 @@ export function StudioCanvasRouter() {
     payload: {
       description: string;
       voiceStyle: string;
+      courseRole?: "actor" | "main_lecturer" | "guest_lecturer";
       referenceFile?: File | null;
       audioFile?: File | null;
     },
@@ -424,6 +425,7 @@ export function StudioCanvasRouter() {
       await API.updateCharacter(currentProjectName, name, {
         description: payload.description,
         voice_style: payload.voiceStyle,
+        ...(payload.courseRole ? { course_role: payload.courseRole } : {}),
       });
 
       if (payload.referenceFile) {
@@ -772,13 +774,14 @@ export function StudioCanvasRouter() {
           const hasDraft =
             episode?.script_status === "segmented" || episode?.script_status === "generated";
           const isAd = currentProjectData?.content_mode === "ad";
+          const isCourse = currentProjectData?.content_mode === "course";
 
           // 已选集但剧本未生成：进入切片审阅视图（narration/drama 全部生成路径——
           // reference_video 此时 units 为空，同样没有可展示内容）；ad 恒单集无源文
           // 切片，走各自画布。
           // 演示项目没有源文可切片，缺剧本的分集直接说明「演示只做到第 1 集」
           const showSourceReview =
-            Boolean(episode) && !script && !hasDraft && !isAd && !demoMode;
+            Boolean(episode) && !script && !hasDraft && !isAd && !isCourse && !demoMode;
 
           return (
             <div className="flex h-full flex-col">

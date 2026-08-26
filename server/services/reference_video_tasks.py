@@ -370,6 +370,25 @@ async def execute_reference_video_task(
         return project, project_path, script, unit, script_input
 
     project, project_path, script, unit, script_input = await asyncio.to_thread(_load)
+    if project.get("content_mode") == "course" and unit.get("unit_type") == "explanation":
+        from server.services.course_video import prepare_explanation_keyframe
+
+        unit = await prepare_explanation_keyframe(
+            get_project_manager(),
+            project_name=project_name,
+            script_file=script_file,
+            project=project,
+            script=script,
+            unit_id=resource_id,
+        )
+        script = await asyncio.to_thread(get_project_manager().load_script, project_name, script_file)
+        script_input = await asyncio.to_thread(
+            resolve_usable_episode_script_input,
+            project_path=project_path,
+            project=project,
+            script=script,
+            script_filename=script_file,
+        )
     from server.services.reference_storyboard_sheet_tasks import (
         require_formal_keyframes,
         require_generated_keyframes,
@@ -941,6 +960,8 @@ def apply_unit_video_assets(
         else:
             ga.pop("video_thumbnail", None)
         ga["status"] = "completed"
+        u["video_review_status"] = "pending_review"
+        u["confirmed_video_version"] = None
         return None
     raise KeyError(resource_id)
 

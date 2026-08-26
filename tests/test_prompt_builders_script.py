@@ -203,19 +203,15 @@ class TestPromptBuildersScript:
         assert "不要改写或重述口播" in prompt
 
 
-class TestScreenplaySourceKind:
-    """source_kind 分支在 step1（normalize）：novel 改编 + 画外音语境放开、screenplay 提取 + 逐字保留。
-
-    step2（drama）视觉层不再分 source_kind（口播抽取已前移 step1），故 build_drama_prompt 无 source_kind 入参。
-    只断言语义关键词在场 / 缺席，不锁逐字措辞、不测 LLM 提取质量。
-    """
+class TestScreenplayNormalization:
+    """剧情演绎只接受剧本文档，step1 固定为提取与逐字保留语义。"""
 
     @staticmethod
     def _squash(text: str) -> str:
         """去除全部空白字符，用于跨缩进比较。"""
         return "".join(text.split())
 
-    def _normalize_prompt(self, source_kind: str, **overrides) -> str:
+    def _normalize_prompt(self, **overrides) -> str:
         kwargs = dict(
             novel_text="【第1集】角色甲：「你好」",
             project_overview={"synopsis": "S", "genre": "G", "theme": "T", "world_setting": "W"},
@@ -226,30 +222,12 @@ class TestScreenplaySourceKind:
             default_duration=8,
             supported_durations=[4, 6, 8],
             episode=1,
-            source_kind=source_kind,
         )
         kwargs.update(overrides)
         return build_normalize_prompt(**kwargs)
 
-    def test_normalize_novel_default_keeps_adaptation_semantics(self):
-        prompt = self._normalize_prompt("novel")
-        # 默认 novel 维持「改编」语义，口播落在有序 utterances，source_text 摘录原文锚
-        assert "改编" in prompt
-        assert "小说原文" in prompt
-        assert "characters_in_scene" in prompt
-        assert "utterances" in prompt
-        assert "source_text" in prompt
-
-    def test_normalize_novel_releases_voiceover_by_context(self):
-        # novel 源画外音克制放开——由语境判断产出，不一律禁用、不预设规则白名单、不作兜底
-        prompt = self._normalize_prompt("novel")
-        assert "画外音" in prompt
-        assert "语境" in prompt
-        # 旧的「不产出 voiceover」禁令必须移除
-        assert "不产出 voiceover" not in prompt
-
-    def test_normalize_screenplay_flips_to_extract_first(self):
-        prompt = self._normalize_prompt("screenplay")
+    def test_normalize_is_extract_first(self):
+        prompt = self._normalize_prompt()
         # 提取 / 逐字保留语义在场，剧本原文为输入，口播落 utterances、原文落 source_text，不含「改编」
         assert "提取" in prompt
         assert "逐字" in prompt
@@ -261,7 +239,7 @@ class TestScreenplaySourceKind:
 
     def test_normalize_screenplay_language_rule_exempts_verbatim_fields(self):
         # 逐字字段与资产引用须排除在目标语言要求外，否则与逐字提取冲突或与已登记资产失配。
-        screenplay = self._normalize_prompt("screenplay")
+        screenplay = self._normalize_prompt()
         # screenplay：台词 text + 说话人 speaker + 原文锚 source_text 全部逐字豁免
         assert "不翻译" in screenplay
         assert "utterances[].speaker" in screenplay
@@ -270,19 +248,9 @@ class TestScreenplaySourceKind:
         # 资产引用键（characters_in_scene / scenes / props）同为精确集合校验对象，须一并豁免
         assert "characters_in_scene[]" in screenplay
 
-    def test_normalize_novel_exempts_speaker_and_source_text_not_dialogue_text(self):
-        # speaker 是资产引用值（须等于 characters_in_scene 登记名），被翻译会破坏字幕归属 / TTS 映射，
-        # 故 novel 也豁免 speaker；但 novel 台词 text 仍按目标语言改编（非逐字提取）。
-        novel = self._normalize_prompt("novel")
-        assert "utterances[].speaker" in novel
-        assert "source_text" in novel
-        # 关键判别：novel 不逐字保留台词 text（screenplay 才豁免 utterances[].text）
-        assert "utterances[].text" not in novel
-
     def test_normalize_includes_episode_outline_when_present(self):
         # 内容抽取前移后，分集大纲（故事节点 / 钩子）驱动 step1 内容覆盖与末场落地，从 step2 移到 step1
         prompt = self._normalize_prompt(
-            "novel",
             episode_outline={
                 "title": "复仇",
                 "hook": "她推开门",
@@ -291,40 +259,21 @@ class TestScreenplaySourceKind:
             },
         )
         assert "她推开门" in prompt
-        assert "她推开门" not in self._normalize_prompt("novel")
+        assert "她推开门" not in self._normalize_prompt()
 
     def test_normalize_injects_pacing(self):
         # step1（normalize）与 step2 一样无条件注入节奏建议，二者共享同一份 DRAMA_PACING_RULES
-        assert self._squash(DRAMA_PACING_RULES) in self._squash(self._normalize_prompt("novel"))
+        assert self._squash(DRAMA_PACING_RULES) in self._squash(self._normalize_prompt())
 
 
 class TestOverviewPrompt:
-    """source_kind=screenplay 下 overview prompt 翻为「提取优先」：作者写下的创作方案前言优先照用、
-    缺失才退回从正文归纳。只断言语义关键词在场/缺席与分支路由，不锁逐字措辞、不测 LLM 提取质量。"""
+    """overview 固定按成品剧本提取。"""
 
-    def test_novel_default_keeps_source_text(self):
-        prompt = build_overview_prompt("正文内容", source_kind="novel")
-        assert "正文内容" in prompt
-
-    def test_screenplay_keeps_source_text(self):
-        prompt = build_overview_prompt("剧本正文", source_kind="screenplay")
+    def test_keeps_source_text_and_extract_first_semantics(self):
+        prompt = build_overview_prompt("剧本正文")
         assert "剧本正文" in prompt
-
-    def test_screenplay_differs_from_novel(self):
-        content = "同一段源文本"
-        assert build_overview_prompt(content, source_kind="screenplay") != build_overview_prompt(
-            content, source_kind="novel"
-        )
-
-    def test_unknown_source_kind_falls_back_to_novel(self):
-        content = "源文本"
-        assert build_overview_prompt(content, source_kind="bogus") == build_overview_prompt(
-            content, source_kind="novel"
-        )
-
-    def test_default_source_kind_is_novel(self):
-        content = "源文本"
-        assert build_overview_prompt(content) == build_overview_prompt(content, source_kind="novel")
+        assert "成品剧本" in prompt
+        assert "优先" in prompt
 
 
 class TestDramaDurationSpeechLowerBound:

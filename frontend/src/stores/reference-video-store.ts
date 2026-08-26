@@ -9,6 +9,11 @@ interface AddUnitPayload {
   duration_seconds?: number;
   transition_to_next?: TransitionType;
   note?: string | null;
+  unit_type?: ReferenceVideoUnit["unit_type"];
+  scenes?: string[];
+  characters?: string[];
+  props?: string[];
+  presenters?: string[];
 }
 
 interface PatchUnitPayload {
@@ -16,6 +21,11 @@ interface PatchUnitPayload {
   duration_seconds?: number;
   transition_to_next?: TransitionType;
   note?: string | null;
+  unit_type?: ReferenceVideoUnit["unit_type"];
+  scenes?: string[];
+  characters?: string[];
+  props?: string[];
+  presenters?: string[];
 }
 
 /** Cache key isolating units per (project, episode) — switching projects with

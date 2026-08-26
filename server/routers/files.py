@@ -432,6 +432,81 @@ async def upload_file(
         raise HTTPException(status_code=500, detail=_t("internal_server_error"))
 
 
+@router.post("/projects/{project_name}/course/episodes")
+async def add_course_episode_document(
+    project_name: str,
+    _t: Translator,
+    file: UploadFile = File(...),
+):
+    """Attach one uploaded document to exactly one course episode.
+
+    Episode 1 is pre-created empty. Later uploads allocate the next sequential
+    episode under the project lock; a document is never auto-split.
+    """
+
+    manager = get_project_manager()
+    try:
+        project = await asyncio.to_thread(manager.load_project, project_name)
+    except FileNotFoundError as exc:
+        raise NotFoundError("project_not_found", name=project_name) from exc
+    if project.get("content_mode") != "course":
+        raise HTTPException(status_code=409, detail="仅课程视频项目可以逐集添加文档")
+
+    uploaded = await _handle_source_upload(
+        project_name=project_name,
+        file=file,
+        on_conflict="rename",
+        _t=_t,
+    )
+    source_file = str(uploaded["path"])
+    normalized_path = safe_join(manager.get_project_path(project_name), source_file)
+    attached_episode: dict[str, object] | None = None
+
+    def _attach(current: dict) -> None:
+        nonlocal attached_episode
+        if current.get("content_mode") != "course":
+            raise ValueError("project content mode changed while attaching course episode")
+        episodes = current.setdefault("episodes", [])
+        empty = next(
+            (
+                entry
+                for entry in episodes
+                if isinstance(entry, dict) and entry.get("episode") == 1 and not entry.get("source_file")
+            ),
+            None,
+        )
+        if empty is not None:
+            target = empty
+            number = 1
+        else:
+            number = (
+                max(
+                    (entry.get("episode", 0) for entry in episodes if isinstance(entry, dict)),
+                    default=0,
+                )
+                + 1
+            )
+            target = {
+                "episode": number,
+                "title": "",
+                "script_file": f"scripts/episode_{number}.json",
+            }
+            episodes.append(target)
+        target["source_file"] = source_file
+        target["source_revision"] = None
+        target["title"] = Path(str(uploaded.get("filename") or file.filename or f"Episode {number}")).stem
+        episodes.sort(key=lambda entry: entry.get("episode", 0) if isinstance(entry, dict) else 0)
+        attached_episode = dict(target)
+
+    try:
+        with project_change_source("webui"):
+            await asyncio.to_thread(manager.update_project, project_name, _attach)
+    except Exception:
+        normalized_path.unlink(missing_ok=True)
+        raise
+    return {**uploaded, "episode": attached_episode}
+
+
 @router.delete("/projects/{project_name}/characters/{name}/reference-audio")
 async def delete_character_reference_audio(project_name: str, name: str, _t: Translator):
     """删除角色的参考音频样本：清空 project.json 字段并移除文件。"""

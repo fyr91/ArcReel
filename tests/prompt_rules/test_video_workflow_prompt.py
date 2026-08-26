@@ -36,8 +36,8 @@ GENERATION_RESULTS_REFERENCE = REFERENCES / "generation-results.md"
 VIDEO_SKILL = PROFILE / ".claude" / "skills" / "generate-video" / "SKILL.md"
 NARRATION_AUDIO_SKILL = PROFILE / ".claude" / "skills" / "generate-narration-audio" / "SKILL.md"
 
-WORKFLOW_VARIANTS = ("SKILL.narration.md", "SKILL.drama.md", "SKILL.ad.md")
-EPISODIC_VARIANTS = ("SKILL.narration.md", "SKILL.drama.md")
+WORKFLOW_VARIANTS = ("SKILL.course.md", "SKILL.drama.md", "SKILL.ad.md")
+EPISODIC_VARIANTS = ("SKILL.drama.md",)
 
 # ``next_action.type`` 的闭集就是 ``WorkflowActionType``：编排动作、计划注入的动作与
 # ``GenerationAction``（批量准入被拒时原样交回）都在其中。从枚举导出而不是手抄，新增成员
@@ -229,7 +229,7 @@ def test_every_content_mode_materializes_the_video_workflow_skill(mode: str) -> 
     assert not any(logical.startswith(".claude/skills/manga-workflow/") for logical in mapping)
 
 
-@pytest.mark.parametrize("mode", ("narration", "drama"))
+@pytest.mark.parametrize("mode", ("course", "drama"))
 def test_episodic_profiles_route_reference_unit_boundary_edits_through_step1(mode: str) -> None:
     content = (PROFILE / f"CLAUDE.{mode}.md").read_text(encoding="utf-8")
 

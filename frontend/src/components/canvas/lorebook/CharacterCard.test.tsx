@@ -4,6 +4,7 @@ import { CharacterCard } from "./CharacterCard";
 import { API } from "@/api";
 import { useAppStore } from "@/stores/app-store";
 import { useTasksStore } from "@/stores/tasks-store";
+import { useProjectsStore } from "@/stores/projects-store";
 import { makeTask } from "@/test/factories";
 
 vi.mock("@/components/canvas/timeline/VersionTimeMachine", () => ({
@@ -14,6 +15,7 @@ vi.mock("@/components/canvas/timeline/VersionTimeMachine", () => ({
 describe("CharacterCard", () => {
   beforeEach(() => {
     useAppStore.setState(useAppStore.getInitialState(), true);
+    useProjectsStore.setState(useProjectsStore.getInitialState(), true);
     Object.defineProperty(globalThis.URL, "createObjectURL", {
       writable: true,
       value: vi.fn(() => "blob:character-ref"),
@@ -78,6 +80,41 @@ describe("CharacterCard", () => {
 
     // 「声音」是描述 + 音频样本共用的分组标题，不能吃掉描述输入自身的字段身份
     expect(screen.getByLabelText("声音风格")).toHaveValue("warm");
+  });
+
+  it("lets a course project review and change the parsed character role", async () => {
+    useProjectsStore.setState({
+      currentProjectData: {
+        title: "Course",
+        style: "",
+        content_mode: "course",
+        aspect_ratio: "16:9",
+        characters: {},
+        scenes: {},
+        props: {},
+        episodes: [],
+      },
+    });
+    const onSave = vi.fn().mockResolvedValue(undefined);
+    render(
+      <CharacterCard
+        name="Teacher"
+        character={{ description: "teacher", course_role: "main_lecturer" }}
+        projectName="demo"
+        onSave={onSave}
+        onGenerate={vi.fn()}
+      />,
+    );
+
+    fireEvent.change(screen.getByLabelText("课程角色"), { target: { value: "guest_lecturer" } });
+    fireEvent.click(screen.getByRole("button", { name: "保存" }));
+
+    await waitFor(() => {
+      expect(onSave).toHaveBeenCalledWith(
+        "Teacher",
+        expect.objectContaining({ courseRole: "guest_lecturer" }),
+      );
+    });
   });
 
   it("renders the Voice ID carried from a library character", () => {

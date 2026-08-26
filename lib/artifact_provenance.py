@@ -17,7 +17,6 @@ from lib.text_metrics import reading_unit_noun
 
 _STRUCTURED_CONTENT_MODES = frozenset({"narration", "drama"})
 _GENERATION_MODES = frozenset({"storyboard", "reference_video"})
-_SOURCE_KINDS = frozenset({"novel", "screenplay"})
 _DEFAULT_SOURCE_LANGUAGE = "中文"
 _AD_OVERVIEW_FIELDS = ("synopsis", "genre", "theme")
 
@@ -140,13 +139,8 @@ def project_step1_prompt_inputs(
         )
 
     if variant == "drama":
-        raw_source_kind = project.get("source_kind")
-        source_kind = "novel" if raw_source_kind is None else raw_source_kind
-        if not isinstance(source_kind, str) or source_kind not in _SOURCE_KINDS:
-            raise ValueError(f"unsupported source_kind: {source_kind!r}")
         inputs.update(
             {
-                "source_kind": source_kind,
                 "style": _optional_string(project.get("style"), "style"),
             }
         )

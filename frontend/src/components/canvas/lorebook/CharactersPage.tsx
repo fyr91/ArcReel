@@ -17,7 +17,7 @@ import { ConfirmAssetSheetsButton } from "./ConfirmAssetSheetsButton";
 interface Props {
   projectName: string;
   characters: Record<string, Character>;
-  onSaveCharacter: (name: string, payload: { description: string; voiceStyle: string; referenceFile?: File | null }) => Promise<void>;
+  onSaveCharacter: (name: string, payload: { description: string; voiceStyle: string; courseRole?: "actor" | "main_lecturer" | "guest_lecturer"; referenceFile?: File | null }) => Promise<void>;
   onGenerateCharacter: (name: string, selection?: ImageModelSelection) => void;
   onAddCharacter: (name: string, description: string, voiceStyle: string, referenceFile?: File | null) => Promise<void>;
   onRestoreCharacterVersion?: () => Promise<void> | void;

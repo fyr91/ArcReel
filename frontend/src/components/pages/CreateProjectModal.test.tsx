@@ -164,7 +164,6 @@ describe("CreateProjectModal", () => {
       expect.objectContaining({
         title: "demo",
         content_mode: "drama",
-        source_kind: "screenplay",
         aspect_ratio: "16:9",
         generation_mode: "reference_video",
         grid_storyboard: false,
@@ -184,7 +183,7 @@ describe("CreateProjectModal", () => {
     expect(navigateMock).toHaveBeenCalledWith("/app/projects/demo-proj");
   });
 
-  it("shows R2V first and selected while I2V remains visible but disabled", () => {
+  it("shows R2V first and selected while I2V remains available for drama", () => {
     render(<CreateProjectModal />);
     const group = screen.getByRole("radiogroup", { name: /生成方式|Generation method/ });
     const radios = within(group).getAllByRole("radio");
@@ -194,7 +193,7 @@ describe("CreateProjectModal", () => {
     ]);
     expect(radios[0]).toBeChecked();
     expect(radios[0]).toBeEnabled();
-    expect(radios[1]).toBeDisabled();
+    expect(radios[1]).toBeEnabled();
   });
 
   it("does not render or submit a speech-rate field during creation", async () => {

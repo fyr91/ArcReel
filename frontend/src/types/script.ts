@@ -5,7 +5,7 @@
  * - lib/script_models.py (NarrationSegment, DramaScene, ImagePrompt, VideoPrompt, etc.)
  */
 
-import type { ReferenceStep1Draft, ScriptReviewQuarantine } from "./reference-video";
+import type { ReferenceStep1Draft, ReferenceVideoScript, ScriptReviewQuarantine } from "./reference-video";
 
 export const SHOT_TYPES = [
   "Extreme Close-up",
@@ -325,4 +325,4 @@ export interface AdEpisodeScript {
   shots: AdShot[];
 }
 
-export type EpisodeScript = NarrationEpisodeScript | DramaEpisodeScript | AdEpisodeScript;
+export type EpisodeScript = NarrationEpisodeScript | DramaEpisodeScript | ReferenceVideoScript | AdEpisodeScript;

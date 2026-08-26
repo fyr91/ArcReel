@@ -61,7 +61,7 @@ def _img_bytes(fmt="JPEG", color=(255, 0, 0)):
 def _client(monkeypatch, tmp_path):
     pm = project_manager_module.ProjectManager(tmp_path / "projects")
     pm.create_project("demo")
-    pm.create_project_metadata("demo", "Demo", "Anime", "narration")
+    pm.create_project_metadata("demo", "Demo", "Anime", "drama")
     pm.add_character("demo", "Alice", "desc")
     pm.add_prop("demo", "玉佩", "古玉")
     pm.add_product("demo", "保温杯", "不锈钢保温杯")
@@ -79,6 +79,47 @@ def _client(monkeypatch, tmp_path):
 
 
 class TestFilesRouter:
+    @pytest.mark.unit
+    def test_course_episode_upload_fills_episode_one_then_appends(self, tmp_path, monkeypatch):
+        client, pm = _client(monkeypatch, tmp_path)
+        pm.create_project("course-demo", content_mode="course")
+        pm.create_project_metadata(
+            "course-demo",
+            "Course",
+            "Anime",
+            "course",
+            extras={"generation_mode": "reference_video", "grid_storyboard": False},
+        )
+
+        with client:
+            first = client.post(
+                "/api/v1/projects/course-demo/course/episodes",
+                files={"file": ("lesson-one.md", "第一课", "text/markdown")},
+            )
+            second = client.post(
+                "/api/v1/projects/course-demo/course/episodes",
+                files={"file": ("lesson-two.md", "第二课", "text/markdown")},
+            )
+
+        assert first.status_code == 200, first.text
+        assert first.json()["episode"]["episode"] == 1
+        assert second.status_code == 200, second.text
+        assert second.json()["episode"]["episode"] == 2
+        project = pm.load_project("course-demo")
+        assert [entry["episode"] for entry in project["episodes"]] == [1, 2]
+        assert project["episodes"][0]["source_file"].endswith("lesson-one.txt")
+        assert project["episodes"][1]["source_file"].endswith("lesson-two.txt")
+
+    @pytest.mark.unit
+    def test_course_episode_upload_rejects_other_modes(self, tmp_path, monkeypatch):
+        client, _ = _client(monkeypatch, tmp_path)
+        with client:
+            response = client.post(
+                "/api/v1/projects/demo/course/episodes",
+                files={"file": ("lesson.md", "课程", "text/markdown")},
+            )
+        assert response.status_code == 409
+
     @pytest.mark.unit
     def test_source_and_file_endpoints(self, tmp_path, monkeypatch):
         client, _ = _client(monkeypatch, tmp_path)
@@ -207,16 +248,17 @@ class TestFilesRouter:
             assert bad_image.status_code == 400
 
             # drafts API
+            drama_draft = '{"title": "第一集", "scenes": [{"scene_id": "E1S01"}]}'
             update_draft = client.put(
                 "/api/v1/projects/demo/drafts/1/step1",
-                content="draft content",
+                content=drama_draft,
                 headers={"content-type": "text/plain"},
             )
             assert update_draft.status_code == 200
 
             get_draft = client.get("/api/v1/projects/demo/drafts/1/step1")
             assert get_draft.status_code == 200
-            assert "draft content" in get_draft.text
+            assert json.loads(get_draft.text)["scenes"][0]["scene_id"] == "E1S01"
 
             bad_step = client.get("/api/v1/projects/demo/drafts/1/step99")
             assert bad_step.status_code == 400
@@ -1137,7 +1179,7 @@ class TestFilesRouter:
 
         def _activate(project: dict) -> None:
             project["schema_version"] = CURRENT_PROJECT_SCHEMA_VERSION
-            project["content_mode"] = "narration"
+            project["content_mode"] = "drama"
             project["generation_mode"] = "storyboard"
             project["episodes"] = [
                 {
@@ -1154,15 +1196,14 @@ class TestFilesRouter:
         source.write_text("第一集原文", encoding="utf-8")
         content = json.dumps(
             {
-                "episode": 1,
-                "segments": [
+                "title": "第一集",
+                "scenes": [
                     {
-                        "segment_id": "E1S01",
-                        "novel_text": "第一集原文",
+                        "scene_id": "E1S01",
+                        "source_text": "第一集原文",
                         "duration_seconds": 6,
-                        "segment_break": False,
-                        "characters_in_segment": [],
-                        "scenes": [],
+                        "characters": [],
+                        "scene": [],
                         "props": [],
                     }
                 ],
@@ -1284,7 +1325,7 @@ class TestFilesRouter:
         client, pm = _client(monkeypatch, tmp_path)
         project_dir = pm.get_project_path("demo")
 
-        # 设置项目为 reference_video 模式（content_mode 仍是 narration 测试正交性）
+        # 设置项目为 reference_video 模式（content_mode 仍是 drama，测试两轴正交性）
         project_json = project_dir / "project.json"
         payload = json.loads(project_json.read_text(encoding="utf-8"))
         payload["generation_mode"] = "reference_video"
@@ -1335,9 +1376,9 @@ class TestFilesRouter:
 
     @pytest.mark.unit
     def test_draft_content_fallback_when_mode_mismatches_file(self, tmp_path, monkeypatch):
-        """content_mode=narration 但磁盘上只有 reference_units 文件（集级模式切换/历史项目）也能读到"""
+        """项目磁盘上只有 reference_units 文件时，reference_video 草稿仍可被读取。"""
         client, pm = _client(monkeypatch, tmp_path)
-        project_dir = pm.get_project_path("demo")  # narration by default
+        project_dir = pm.get_project_path("demo")
 
         drafts_dir = project_dir / "drafts" / "episode_3"
         drafts_dir.mkdir(parents=True, exist_ok=True)
@@ -1378,9 +1419,9 @@ class TestFilesRouter:
         content_mode, gen_mode = files._load_project_modes("no-such-project")
         assert content_mode == "drama"
         assert gen_mode is None
-        # demo 项目 content_mode=narration（fixture 默认），生成路线取项目字段
+        # demo 项目 content_mode=drama，生成路线取项目字段
         content_mode, gen_mode = files._load_project_modes("demo")
-        assert content_mode == "narration"
+        assert content_mode == "drama"
         assert gen_mode == "reference_video"
 
     @pytest.mark.unit
@@ -1389,12 +1430,14 @@ class TestFilesRouter:
         from unittest.mock import patch
 
         client, _ = _client(monkeypatch, tmp_path)
+        first_draft = '{"title": "第一集", "scenes": [{"scene_id": "E1S01"}]}'
+        second_draft = '{"title": "第一集（修订）", "scenes": [{"scene_id": "E1S01"}]}'
 
         with client, patch("server.routers.files.emit_project_change_batch") as mock_emit:
             # 首次创建 → action="created", important=True
             resp = client.put(
                 "/api/v1/projects/demo/drafts/1/step1",
-                content="new draft",
+                content=first_draft,
                 headers={"content-type": "text/plain"},
             )
             assert resp.status_code == 200
@@ -1405,14 +1448,14 @@ class TestFilesRouter:
             assert change["action"] == "created"
             assert change["episode"] == 1
             assert change["important"] is True
-            assert "片段拆分" in change["label"]
+            assert "规范化脚本" in change["label"]
 
             mock_emit.reset_mock()
 
             # 再次更新 → action="updated", important=False
             resp2 = client.put(
                 "/api/v1/projects/demo/drafts/1/step1",
-                content="updated draft",
+                content=second_draft,
                 headers={"content-type": "text/plain"},
             )
             assert resp2.status_code == 200

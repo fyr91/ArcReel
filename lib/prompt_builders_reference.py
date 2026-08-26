@@ -81,6 +81,7 @@ def build_reference_units_split_prompt(
     speech_rate_override: float | None = None,
     episode_outline: dict | None = None,
     next_episode_outline: dict | None = None,
+    content_mode: str = "drama",
 ) -> str:
     """Step-1 video_unit 拆分 prompt：源文 → 扁平 unit 表（时长 + 辅助源文映射 + 书写层正文）。
 
@@ -171,6 +172,20 @@ def build_reference_units_split_prompt(
     speech_rate = speech_rate_units_per_second(source_language, speech_rate_override)
     unit_label = reading_unit_noun(source_language)
 
+    course_rules = ""
+    if content_mode == "course":
+        course_rules = """
+# 课程视频结构
+
+- 一个上传文档就是一集，不做集数拆分。
+- `unit_type` 顺序为：唯一 opening → 一组或多组 story / explanation → 唯一 closing；至少一个 story。
+- opening 与 closing 的 `scenes` 必须是同一个单元素数组，`characters` + `presenters` 至少一人且两者完全相同。
+- story 用 `scenes` / `characters` / `props` 明确列出场景、演员和道具；`presenters` 为空。
+- explanation 用 `presenters` 明确列出主讲或特邀讲师，且必须紧跟 story 或另一个 explanation。
+- 连续 explanation 的依赖 ID 由程序按最终顺序生成，不要输出 `depends_on_unit_id`。
+- opening、story、closing 先生成；explanation 后续使用前置视频尾帧叠加讲师方图作为首帧。
+"""
+
     return f"""# 角色与任务
 
 你是一位参考生视频单元架构师，本任务是把源文拆分为适配多模态参考视频模型的 video_unit 表（step1 内容拆分）。
@@ -210,7 +225,7 @@ def build_reference_units_split_prompt(
 {novel_text}
 </novel>
 
-{_format_outline_block(episode_outline, next_episode_outline)}# 拆分规则
+{_format_outline_block(episode_outline, next_episode_outline)}{course_rules}# 拆分规则
 
 当前正在生成第 {episode} 集。请覆盖全部源文情节，按叙事顺序逐 unit 产出。
 
@@ -254,7 +269,16 @@ def render_reference_units_for_step2(units: list[dict]) -> str:
     for index, unit in enumerate(units, start=1):
         duration = int(unit.get("duration_seconds") or 0)
         body = str(unit.get("text") or "")
-        blocks.append(f"#### unit {index}（时长 {duration}s）\n{body}")
+        structure = ""
+        if unit.get("unit_type"):
+            structure = (
+                f"\n类型：{unit.get('unit_type')}"
+                f"\n场景：{', '.join(unit.get('scenes') or []) or '无'}"
+                f"\n演员：{', '.join(unit.get('characters') or []) or '无'}"
+                f"\n道具：{', '.join(unit.get('props') or []) or '无'}"
+                f"\n讲师：{', '.join(unit.get('presenters') or []) or '无'}"
+            )
+        blocks.append(f"#### unit {index}（时长 {duration}s）{structure}\n{body}")
     return "\n\n".join(blocks)
 
 

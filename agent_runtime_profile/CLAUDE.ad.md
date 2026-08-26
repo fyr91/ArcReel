@@ -59,7 +59,7 @@ agent session 的当前工作目录（cwd）已绑定到当前项目根，**所�
 - 创作输入为 `project.json` 顶层的 `brief`（创作诉求短文本）与 `target_duration`（目标总时长，秒）；不走小说源文件导入流程
 - 剧本总时长应贴近 `target_duration`，偏差过大时提醒用户而非拒绝保存
 
-> 生成模式（storyboard / reference_video）由 `project.json` 顶层 `generation_mode` 字段唯一决定，项目创建后不可更改；与创作类型独立。ad 的数据结构与阶段分支以本文为准——`.claude/references/generation-modes.md` 只覆盖 narration / drama 的预处理与 schema 路径，不适用于 ad。
+> 生成模式（storyboard / reference_video）由 `project.json` 顶层 `generation_mode` 字段唯一决定，项目创建后不可更改；与创作类型独立。ad 的数据结构与阶段分支以本文为准。
 
 ---
 
@@ -87,7 +87,7 @@ agent session 的当前工作目录（cwd）已绑定到当前项目根，**所�
 
 ## 工作流程概览
 
-`/video-workflow` 编排 skill 按服务端计划推进（每个动作完成后与用户确认再继续）；用户提到做视频、继续项目、查看进度时使用该 skill。涉及尚未落地的环节时如实告知用户，不要用 narration/drama 的小说流程替代。
+`/video-workflow` 编排 skill 按服务端计划推进（每个动作完成后与用户确认再继续）；用户提到做视频、继续项目、查看进度时使用该 skill。涉及尚未落地的环节时如实告知用户，不要用 drama/course 的流程替代。
 
 **步骤表不在这里，也不在 skill 里**：调用 `mcp__arcreel__get_workflow_plan` 取回 `steps[]` 与唯一的 `next_action`，照它路由。受控动作表、旁白交付、批量准入与状态轴读法见 `.claude/references/workflow-plan.md`。
 

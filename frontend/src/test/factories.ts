@@ -56,7 +56,7 @@ function makeStatus(overrides: Partial<WorkflowStatus> = {}): WorkflowStatus {
     schema_version: 1,
     project_revision: "sha256-v1:project",
     source_revision: "sha256-v1:source",
-    project: { content_mode: "narration", generation_mode: "storyboard", grid_storyboard: false },
+    project: { content_mode: "drama", generation_mode: "storyboard", grid_storyboard: false },
     target: { episode: 1, script: "scripts/episode_1.json", script_filename: "episode_1.json", source: "source/episode_1.txt" },
     state: "VIDEO",
     blockers: [],

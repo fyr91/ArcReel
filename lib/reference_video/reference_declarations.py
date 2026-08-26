@@ -48,4 +48,23 @@ def unit_reference_declarations(project: dict, unit: dict) -> tuple[ReferenceRes
             continue
         seen.add(identity)
         references.append(candidate)
+    # Course manuscripts expose scene/character/prop/presenter selections as editable
+    # structured fields. They are the asset-reference truth even when a user removes an
+    # inline mention while editing prose, so project them mechanically into the request.
+    if project.get("content_mode") == "course":
+        structured_names: list[str] = []
+        for field in ("scenes", "characters", "props", "presenters"):
+            values = unit.get(field)
+            if isinstance(values, list):
+                structured_names.extend(value for value in values if isinstance(value, str) and value.strip())
+        for name in structured_names:
+            resolved, _missing = resolve_references([name], project)
+            if not resolved:
+                continue
+            candidate = resolved[0]
+            identity = (candidate.type, asset_name_comparison_key(candidate.name))
+            if identity in seen:
+                continue
+            seen.add(identity)
+            references.append(candidate)
     return tuple(references)

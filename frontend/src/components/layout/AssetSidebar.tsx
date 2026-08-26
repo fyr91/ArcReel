@@ -22,6 +22,7 @@ import { useDemoWorkbench } from "@/onboarding/use-demo-workbench";
 import { isDemoProject } from "@/onboarding/demo-project";
 import { normalizeRoute } from "@/utils/generation-mode";
 import { EpisodeCard } from "./EpisodeCard";
+import { CourseEpisodeUploadDialog } from "./CourseEpisodeUploadDialog";
 
 interface AssetSidebarProps {
   className?: string;
@@ -48,6 +49,7 @@ export function AssetSidebar({ className }: AssetSidebarProps) {
   const [location, setLocation] = useLocation();
   const [collapsed, setCollapsed] = useState(false);
   const [search, setSearch] = useState("");
+  const [showCourseEpisodeUpload, setShowCourseEpisodeUpload] = useState(false);
 
   const characterCount = Object.keys(currentProjectData?.characters ?? {}).length;
   const sceneCount = Object.keys(currentProjectData?.scenes ?? {}).length;
@@ -56,6 +58,7 @@ export function AssetSidebar({ className }: AssetSidebarProps) {
   const episodes = currentProjectData?.episodes ?? [];
   // 广告/短片项目恒单集：隐藏「集」语义（标题/计数/搜索/添加），直达唯一视频
   const isAd = currentProjectData?.content_mode === "ad";
+  const isCourse = currentProjectData?.content_mode === "course";
 
   const sourceFilesVersion = useAppStore((s) => s.sourceFilesVersion);
   const [sourceCount, setSourceCount] = useState<number>(0);
@@ -252,14 +255,15 @@ export function AssetSidebar({ className }: AssetSidebarProps) {
                 <span className="flex-1" />
                 <button
                   type="button"
-                  disabled
-                  aria-disabled="true"
+                  disabled={!isCourse}
+                  aria-disabled={!isCourse}
+                  onClick={() => setShowCourseEpisodeUpload(true)}
                   className="grid h-5 w-5 place-items-center rounded focus-ring disabled:cursor-not-allowed disabled:opacity-50"
                   style={{
                     background: "oklch(0.28 0.012 250 / 0.6)",
                     color: "var(--color-text-3)",
                   }}
-                  title={t("dashboard:add_episode_unavailable")}
+                  title={isCourse ? t("dashboard:add_course_episode") : t("dashboard:add_episode_unavailable")}
                   aria-label={t("dashboard:add_episode")}
                 >
                   <Plus className="h-3 w-3" />
@@ -349,6 +353,18 @@ export function AssetSidebar({ className }: AssetSidebarProps) {
             );
           })}
         </div>
+      )}
+      {currentProjectName && (
+        <CourseEpisodeUploadDialog
+          projectName={currentProjectName}
+          open={showCourseEpisodeUpload}
+          onClose={() => setShowCourseEpisodeUpload(false)}
+          onUploaded={async (episode) => {
+            await useProjectsStore.getState().refreshProject(currentProjectName);
+            useAppStore.getState().invalidateSourceFiles();
+            setLocation(`/episodes/${episode}`);
+          }}
+        />
       )}
 
       {/* ---- Collapse footer ---- */}

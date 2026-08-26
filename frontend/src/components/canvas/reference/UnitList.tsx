@@ -15,6 +15,8 @@ export interface UnitListProps {
   /** Optional per-unit derived status for color/label. Falls back to
    *  `video_clip ? 'ready' : 'pending'` based on persisted assets. */
   statusMap?: Record<string, UnitStatus>;
+  /** Course projects expose the semantic unit type; other modes keep their existing rows unchanged. */
+  showCourseTypes?: boolean;
 }
 
 export function UnitList({
@@ -25,6 +27,7 @@ export function UnitList({
   onAdd,
   dirtyMap,
   statusMap,
+  showCourseTypes = false,
 }: UnitListProps) {
   const { t } = useTranslation("dashboard");
   const [query, setQuery] = useState("");
@@ -145,6 +148,11 @@ export function UnitList({
                     {u.unit_id}
                   </span>
                   <StatusBadge status={status} />
+                  {showCourseTypes && u.unit_type && (
+                    <span className="rounded bg-violet-500/10 px-1.5 py-0.5 text-[9px] uppercase tracking-wide text-violet-200">
+                      {t(`course_unit_${u.unit_type}`)}
+                    </span>
+                  )}
                   <span className="flex-1" />
                   {dirty && (
                     <span

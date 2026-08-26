@@ -6,7 +6,6 @@ from fastapi.testclient import TestClient
 
 from lib import PROJECT_ROOT
 from lib.profile_manifest import ContentMode
-from lib.project_manager import SourceKind
 
 # ---------------------------------------------------------------------------
 # skill.md 模板内容验证
@@ -24,15 +23,14 @@ class TestSkillMdTemplate:
     @pytest.mark.unit
     def test_content_mode_all_values_described(self):
         assert "`drama`" in self.template
-        assert "`narration`" in self.template
+        assert "`course`" in self.template
         assert "`ad`" in self.template
         assert "content_mode" in self.template
 
     @pytest.mark.unit
-    def test_source_kind_all_values_described(self):
-        assert "`novel`" in self.template
-        assert "`screenplay`" in self.template
-        assert "source_kind" in self.template
+    def test_retired_project_dimensions_not_described(self):
+        assert "`narration`（旁白" not in self.template
+        assert "source_kind" not in self.template
 
     @pytest.mark.unit
     def test_generation_mode_all_values_described(self):
@@ -59,7 +57,8 @@ class TestSkillMdTemplate:
         """ad 的脚本由 brief 驱动、不读源文件，模板须按创作类型说清 /source 的适用范围。"""
         assert "上传小说内容并生成概述（新项目必须）" not in self.template
         assert "为 `ad`：不需要调用本端点" in self.template
-        assert "为 `drama` 或 `narration`：必须先调用本端点" in self.template
+        assert "为 `drama`：必须先调用本端点" in self.template
+        assert "为 `course`：不调用本端点" in self.template
 
     @pytest.mark.unit
     def test_no_all_json_claim(self):
@@ -142,7 +141,7 @@ class TestUpdateProjectWritableFields:
 
 
 # ---------------------------------------------------------------------------
-# 枚举语义：content_mode / generation_mode / source_kind
+# 枚举语义：content_mode / generation_mode
 # ---------------------------------------------------------------------------
 
 
@@ -154,14 +153,7 @@ class TestEnumSemantics:
         from typing import get_args
 
         values = set(get_args(ContentMode))
-        assert values == {"drama", "narration", "ad"}
-
-    @pytest.mark.unit
-    def test_source_kind_values(self):
-        from typing import get_args
-
-        values = set(get_args(SourceKind))
-        assert values == {"novel", "screenplay"}
+        assert values == {"drama", "course", "ad"}
 
     @pytest.mark.unit
     def test_generation_mode_create_rejects_invalid(self):

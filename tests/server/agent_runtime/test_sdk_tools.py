@@ -5715,7 +5715,7 @@ async def test_normalize_drama_script_dry_run(fake_ctx: ToolContext, monkeypatch
 @pytest.mark.parametrize(
     ("tool_factory", "content_mode", "generation_mode"),
     [
-        (normalize_drama_script_tool, "narration", "storyboard"),
+        (normalize_drama_script_tool, "course", "reference_video"),
         (split_narration_segments_tool, "drama", "storyboard"),
         (split_reference_video_units_tool, "drama", "storyboard"),
     ],
@@ -5970,7 +5970,6 @@ async def test_normalize_drama_script_registers_the_frozen_explicit_source_basis
         "schema_version": CURRENT_PROJECT_SCHEMA_VERSION,
         "content_mode": "drama",
         "generation_mode": "storyboard",
-        "source_kind": "novel",
         "source_language": "中文",
     }
     fake_ctx.pm.project_payload = project  # type: ignore[attr-defined]
@@ -6048,7 +6047,6 @@ async def test_normalize_drama_script_preserves_legacy_request_basis_when_manife
         "title": "项目",
         "content_mode": "drama",
         "generation_mode": "storyboard",
-        "source_kind": "novel",
         "source_language": "中文",
         "overview": {},
         "episodes": [{"episode": 1, "title": "第一集", "script_file": "scripts/episode_1.json"}],
@@ -7378,9 +7376,10 @@ async def test_split_reference_video_units_rejects_over_max_refs(fake_ctx: ToolC
     _rv_source(fake_ctx)
     out = await _run_rv_split(fake_ctx, monkeypatch, [_rv_unit("@[张三] 走向 @[村口]")], max_refs=3)
     assert out.get("is_error") is True
-    assert "普通资产引用（2）加上后续必需的 Video Unit Storyboard Sheet（1）与至少一张 Keyframe" in out[
-        "content"
-    ][0]["text"]
+    assert (
+        "普通资产引用（2）加上后续必需的 Video Unit Storyboard Sheet（1）与至少一张 Keyframe"
+        in out["content"][0]["text"]
+    )
     assert not _rv_step1_path(fake_ctx).exists()
 
 
@@ -7397,7 +7396,10 @@ async def test_split_reference_video_units_reserves_sheet_and_one_future_keyfram
     )
 
     assert out.get("is_error") is True
-    assert "普通资产引用（1）加上后续必需的 Video Unit Storyboard Sheet（1）与至少一张 Keyframe" in out["content"][0]["text"]
+    assert (
+        "普通资产引用（1）加上后续必需的 Video Unit Storyboard Sheet（1）与至少一张 Keyframe"
+        in out["content"][0]["text"]
+    )
     assert [v["code"] for v in _read_rv_quarantine(fake_ctx)["violations"]] == ["reference_limit_with_keyframes"]
 
 

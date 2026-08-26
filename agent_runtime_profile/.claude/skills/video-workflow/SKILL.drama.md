@@ -1,6 +1,6 @@
 ---
 name: video-workflow
-description: 将小说转换为短视频的端到端工作流编排器。当用户提到做视频、创建项目、继续项目、查看进度时必须使用此 skill。触发场景包括但不限于："帮我把小说做成视频"、"开个新项目"、"继续"、"下一步"、"看看项目进度"、"从头开始"、"拆集"、"自动跑完流程"等。即使用户只说了简短的"继续"或"下一步"，只要当前上下文涉及视频项目，就应该触发。不要用于单个资产生成（如只重画某张分镜图或只重新生成某个角色资产图——那些有专门的 skill）。
+description: 将剧本转换为短视频的端到端工作流编排器。当用户提到做视频、创建项目、继续项目、查看进度时必须使用此 skill。
 ---
 <!-- mode: drama -->
 
@@ -24,9 +24,9 @@ description: 将小说转换为短视频的端到端工作流编排器。当用�
 
 ### 新项目
 
-1. 提示用户在 Web 端先创建项目，**创建时指定 content_mode（narration / drama）与 generation_mode（storyboard / reference_video）**；两者创建后均不可变更，agent 无对应写入权限。session 启动后 cwd 已绑定到对应项目根
+1. 提示用户在 Web 端先创建项目，**创建时指定 content_mode（drama / course / ad）与 generation_mode**；本变体固定处理 drama，且源文件恒为剧本，不再选择小说/剧本类型
 2. 使用 Read 工具读取 `project.json`，确认 `title`、`content_mode`、`generation_mode` 字段（本 session 当前 content_mode 为 `drama`，创建后不可变更）
-3. 请用户将小说文本放入 `source/`
+3. 请用户将剧本文本放入 `source/`
 4. **上传后自动生成项目概述**（synopsis、genre、theme、world_setting）
 
 > 标准项目子目录由 `create_project()` 自动建好：`source/`、`scripts/`、`drafts/`、`characters/`、`scenes/`、`props/`、`storyboards/`、`grids/`、`videos/`、`reference_videos/`、`thumbnails/`、`output/`。
@@ -95,7 +95,7 @@ expected source revision：{next_action.args.expected_source_revision}
 内部独白视频作为用户资产展示。候选成功后在审核检查点提供音频试听，用户确认后再调用
 `confirm_character_voice_reference`。
 
-资产提取子任务返回并完成动作间确认后，必须重新查询计划。对 narration / drama 项目，新增角色、
+资产提取子任务返回并完成动作间确认后，必须重新查询计划。对 drama 项目，新增角色、
 场景或道具只要仍缺资产图，下一动作就是 `generate_asset_sheets`；完成资产图生成与审核后才进入
 `plan_episodes`。不得沿用提取前的旧计划直接拆集；只有三类清单均为空或资产图已经可用时，计划才会
 直接进入分集规划。声音候选仍按上段规则与资产图并行，不额外阻塞这一顺序。
@@ -171,7 +171,7 @@ dispatch prompt 通用参数：项目名称、项目路径、集数、本集小�
 - scene 缺 scene_sheet
 - prop 缺 prop_sheet
 
-在 narration / drama 工作流中，本动作位于 `analyze_assets` 之后、`plan_episodes` 之前；ad 没有全局
+在 drama 工作流中，本动作位于 `analyze_assets` 之后、`plan_episodes` 之前；ad 没有全局
 资产提取阶段，仍由计划在正式剧本之后调度本动作。
 
 **调度规则（显式条件判断，按类型独立决定）**：

@@ -2035,7 +2035,7 @@ async def execute_tts_task(
                     )
                     if not isinstance(assets, dict):
                         assets = ProjectManager.create_generated_assets(
-                            str(current_script.get("content_mode") or "narration")
+                            str(current_script.get("content_mode") or "drama")
                         )
                         item["generated_assets"] = assets
                     assets["narration_audio"] = audio_rel
@@ -2173,7 +2173,7 @@ async def execute_tts_task(
                     assets = item.get("generated_assets")
                     if not isinstance(assets, dict):
                         assets = ProjectManager.create_generated_assets(
-                            str(current_script.get("content_mode") or "narration")
+                            str(current_script.get("content_mode") or "drama")
                         )
                         item["generated_assets"] = assets
                     if assets.get("narration_audio") != audio_rel:

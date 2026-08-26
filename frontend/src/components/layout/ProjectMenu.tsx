@@ -42,7 +42,7 @@ export function ProjectMenu() {
     typeof currentProjectData?.aspect_ratio === "string"
       ? currentProjectData.aspect_ratio
       : currentProjectData?.aspect_ratio?.storyboard;
-  const modeLabel = contentMode === "drama" ? "DRAMA" : contentMode === "ad" ? "AD" : "NARRATION";
+  const modeLabel = contentMode === "drama" ? "DRAMA" : contentMode === "course" ? "COURSE" : "AD";
   const modeTagline = aspectRatio ? `${modeLabel} · ${aspectRatio}` : modeLabel;
 
   return (

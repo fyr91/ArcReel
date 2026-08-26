@@ -224,7 +224,7 @@ export function ProjectSettingsPage() {
   const [providers, setProviders] = useState<ProviderInfo[]>([]);
   const [customProviders, setCustomProviders] = useState<CustomProviderInfo[]>([]);
   const [projectTitle, setProjectTitle] = useState<string>("");
-  const [contentMode, setContentMode] = useState<string>("narration");
+  const [contentMode, setContentMode] = useState<string>("drama");
   const [saving, setSaving] = useState(false);
   const [loadedAgentProfile, setLoadedAgentProfile] = useState<{
     projectName: string;
@@ -383,7 +383,7 @@ export function ProjectSettingsPage() {
       setSpeechRate(sr);
       setSourceLanguage(sl);
       setProjectTitle(typeof project.title === "string" ? project.title : "");
-      setContentMode(typeof project.content_mode === "string" ? project.content_mode : "narration");
+      setContentMode(typeof project.content_mode === "string" ? project.content_mode : "drama");
       const nextVideoStyle = (project.video_style ?? null) as UnifiedVideoStyle | null;
       const nextVideoStyleDraft = editableVideoStyle(nextVideoStyle);
       setVideoStyle(nextVideoStyle);

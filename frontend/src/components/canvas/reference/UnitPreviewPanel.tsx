@@ -1,5 +1,5 @@
 import { useTranslation } from "react-i18next";
-import { Film, Loader2, Sparkles, RotateCcw, AlertTriangle } from "lucide-react";
+import { Film, Loader2, Sparkles, RotateCcw, AlertTriangle, CheckCircle2 } from "lucide-react";
 import { API } from "@/api";
 import { useProjectsStore } from "@/stores/projects-store";
 import { VersionTimeMachine } from "@/components/canvas/timeline/VersionTimeMachine";
@@ -60,6 +60,8 @@ export interface UnitPreviewPanelProps {
   checkBusy?: (unitId: string) => boolean;
   /** 版本恢复后的刷新回调（重新拉取 units） */
   onRestored?: () => void | Promise<void>;
+  onConfirmVideo?: (unitId: string) => void | Promise<void>;
+  videoConfirmed?: boolean;
 }
 
 function hasCost(b: CostBreakdown | undefined): boolean {
@@ -91,6 +93,8 @@ export function UnitPreviewPanel({
   onRestoringChange,
   checkBusy,
   onRestored,
+  onConfirmVideo,
+  videoConfirmed = false,
 }: UnitPreviewPanelProps) {
   const { t } = useTranslation("dashboard");
   const clip = unit?.generated_assets.video_clip ?? null;
@@ -278,6 +282,18 @@ export function UnitPreviewPanel({
               )}
             </>
           )}
+        </button>
+      )}
+
+      {ready && onConfirmVideo && (
+        <button
+          type="button"
+          disabled={videoConfirmed || busy || restoring}
+          onClick={() => void onConfirmVideo(unit.unit_id)}
+          className="focus-ring inline-flex items-center justify-center gap-2 rounded-lg border border-emerald-500/40 bg-emerald-500/10 px-3.5 py-2 text-sm font-medium text-emerald-200 disabled:cursor-default disabled:opacity-60"
+        >
+          <CheckCircle2 className="h-4 w-4" aria-hidden="true" />
+          {videoConfirmed ? t("course_video_confirmed") : t("course_video_confirm")}
         </button>
       )}
 

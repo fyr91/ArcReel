@@ -9,9 +9,7 @@ import type { GenerationRoute } from "@/utils/generation-mode";
 
 export interface WizardStep1Value {
   title: string;
-  contentMode: "narration" | "drama" | "ad";
-  /** 源文件性质：screenplay（默认）/ novel。仅 drama 暴露，创建即定、不可变。 */
-  sourceKind: "novel" | "screenplay";
+  contentMode: "drama" | "course" | "ad";
   aspectRatio: "9:16" | "16:9";
   /** 生成模式，创建时锁定。默认预选参考生视频（R2V）；null 仅作防御（未选不放行）。 */
   generationRoute: GenerationRoute | null;
@@ -107,16 +105,23 @@ export function WizardStep1Basics({
             />
             {t("dashboard:drama_animation")}
           </label>
-          <label className={radioCardClass(value.contentMode === "narration")}>
+          <label className={radioCardClass(value.contentMode === "course")}>
             <input
               type="radio"
               name="contentMode"
-              value="narration"
-              checked={value.contentMode === "narration"}
-              onChange={() => onChange({ ...value, contentMode: "narration" })}
+              value="course"
+              checked={value.contentMode === "course"}
+              onChange={() =>
+                onChange({
+                  ...value,
+                  contentMode: "course",
+                  generationRoute: "reference_video",
+                  gridStoryboard: false,
+                })
+              }
               className="sr-only"
             />
-            {t("dashboard:narration_visuals")}
+            {t("dashboard:course_video")}
           </label>
           <label className={radioCardClass(value.contentMode === "ad")}>
             <input
@@ -134,49 +139,13 @@ export function WizardStep1Basics({
           </label>
         </div>
         <p className="mt-2 text-[11.5px] leading-[1.55] text-text-3">
-          {value.contentMode === "narration"
-            ? t("dashboard:content_mode_narration_desc")
+          {value.contentMode === "course"
+            ? t("dashboard:content_mode_course_desc")
             : value.contentMode === "drama"
               ? t("dashboard:content_mode_drama_desc")
               : t("dashboard:content_mode_ad_desc")}
         </p>
       </div>
-
-      {/* Source Kind（仅 drama）：上传小说由 AI 改编，或上传成品剧本逐字提取 */}
-      {value.contentMode === "drama" && (
-        <div>
-          <FieldLabel>{t("dashboard:source_kind")}</FieldLabel>
-          <div className="flex gap-2.5" role="radiogroup" aria-label={t("dashboard:source_kind")}>
-            <label className={radioCardClass(value.sourceKind === "screenplay")}>
-              <input
-                type="radio"
-                name="sourceKind"
-                value="screenplay"
-                checked={value.sourceKind === "screenplay"}
-                onChange={() => onChange({ ...value, sourceKind: "screenplay" })}
-                className="sr-only"
-              />
-              {t("dashboard:source_kind_screenplay")}
-            </label>
-            <label className={radioCardClass(value.sourceKind === "novel")}>
-              <input
-                type="radio"
-                name="sourceKind"
-                value="novel"
-                checked={value.sourceKind === "novel"}
-                onChange={() => onChange({ ...value, sourceKind: "novel" })}
-                className="sr-only"
-              />
-              {t("dashboard:source_kind_novel")}
-            </label>
-          </div>
-          <p className="mt-2 text-[11.5px] leading-[1.55] text-text-3">
-            {value.sourceKind === "screenplay"
-              ? t("dashboard:source_kind_screenplay_desc")
-              : t("dashboard:source_kind_novel_desc")}
-          </p>
-        </div>
-      )}
 
       {/* Target Duration（仅 ad）。原生 radio：方向键切换开箱即用 */}
       {value.contentMode === "ad" && (
@@ -269,7 +238,7 @@ export function WizardStep1Basics({
       {/* Generation route — 二选一，创建后不可更改 */}
       <GenerationRouteCards
         value={value.generationRoute}
-        disabledRoutes={["storyboard"]}
+        disabledRoutes={value.contentMode === "course" ? ["storyboard"] : []}
         onChange={(next) =>
           onChange({
             ...value,

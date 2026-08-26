@@ -116,15 +116,17 @@ def resolve_declared_kind(content_mode: str | None, generation_mode: str | None)
 
     - 任意内容模式 + ``generation_mode == "reference_video"`` → ``video_units``
     - ``ad`` + ``storyboard`` → ``shots``
-    - ``narration`` → ``segments``，``drama`` → ``scenes``
+    - ``drama`` → ``scenes``；``course`` 固定走 ``video_units``
     - 未知/缺失 content_mode → 抛 ``ValueError``（fail-loud，不静默默认到 drama/narration）
 
     服务只有项目配置在手的消费方；手持可能缺字段的剧本 dict 的消费方走 ``resolve_script_kind``。
     """
     if content_mode == "ad":
         return "video_units" if generation_mode == "reference_video" else "shots"
-    if content_mode == "narration":
-        return "video_units" if generation_mode == "reference_video" else "segments"
+    if content_mode == "course":
+        if generation_mode != "reference_video":
+            raise ValueError("course 内容模式仅支持 reference_video")
+        return "video_units"
     if content_mode == "drama":
         return "video_units" if generation_mode == "reference_video" else "scenes"
     raise ValueError(f"未知或缺失 content_mode: {content_mode!r}")
