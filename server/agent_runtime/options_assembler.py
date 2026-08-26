@@ -199,6 +199,7 @@ class OptionsAssembler:
         project_name: str,
         resume_id: str | None = None,
         can_use_tool: Callable[[str, dict[str, Any], Any], Any] | None = None,
+        subagent_tool_activity: Callable[[str, str, str, bool], None] | None = None,
         locale: str = DEFAULT_LOCALE,
         stderr: Callable[[str], None] | None = None,
         session_id: str | None = None,
@@ -245,29 +246,55 @@ class OptionsAssembler:
             # on corruption.  Keyed by tool_use_id.
             json_backups: dict[str, tuple[Path, str]] = {}
 
+            pre_tool_hooks = [
+                HookMatcher(matcher=None, hooks=hook_callbacks),
+                HookMatcher(
+                    matcher="Bash",
+                    hooks=[self._bash_env_scrub_hook],  # type: ignore[list-item]
+                ),
+                HookMatcher(
+                    matcher="Write|Edit",
+                    hooks=[
+                        self._build_json_validation_hook(project_cwd, json_backups),
+                    ],
+                ),
+            ]
+            if subagent_tool_activity is not None:
+                pre_tool_hooks.append(
+                    HookMatcher(
+                        matcher=None,
+                        hooks=[self._build_subagent_tool_activity_hook(subagent_tool_activity, active=True)],
+                    )
+                )
+            post_tool_hooks = [
+                HookMatcher(
+                    matcher="Write|Edit",
+                    hooks=[
+                        self._build_json_post_validation_hook(project_cwd, json_backups),
+                    ],
+                )
+            ]
+            if subagent_tool_activity is not None:
+                post_tool_hooks.append(
+                    HookMatcher(
+                        matcher=None,
+                        hooks=[self._build_subagent_tool_activity_hook(subagent_tool_activity, active=False)],
+                    )
+                )
+
             hooks = {
-                "PreToolUse": [
-                    HookMatcher(matcher=None, hooks=hook_callbacks),
-                    HookMatcher(
-                        matcher="Bash",
-                        hooks=[self._bash_env_scrub_hook],  # type: ignore[list-item]
-                    ),
-                    HookMatcher(
-                        matcher="Write|Edit",
-                        hooks=[
-                            self._build_json_validation_hook(project_cwd, json_backups),
-                        ],
-                    ),
-                ],
-                "PostToolUse": [
-                    HookMatcher(
-                        matcher="Write|Edit",
-                        hooks=[
-                            self._build_json_post_validation_hook(project_cwd, json_backups),
-                        ],
-                    ),
-                ],
+                "PreToolUse": pre_tool_hooks,
+                "PostToolUse": post_tool_hooks,
             }
+            if subagent_tool_activity is not None:
+                hooks["PostToolUseFailure"] = [
+                    HookMatcher(
+                        matcher=None,
+                        hooks=[
+                            self._build_subagent_tool_activity_hook(subagent_tool_activity, active=False),
+                        ],
+                    ),
+                ]
 
         sandbox_typed = policy.build_sandbox_settings(project_cwd)
 
@@ -320,6 +347,34 @@ class OptionsAssembler:
     ) -> dict[str, bool]:
         """Required keep-alive hook for Python can_use_tool callback."""
         return {"continue_": True}
+
+    @staticmethod
+    def _build_subagent_tool_activity_hook(
+        callback: Callable[[str, str, str, bool], None],
+        *,
+        active: bool,
+    ) -> Callable[..., Any]:
+        """Forward SDK tool lifecycle events with their subagent identity."""
+
+        async def _subagent_tool_activity_hook(
+            input_data: dict[str, Any],
+            tool_use_id: str | None,
+            _context: Any,
+        ) -> dict[str, bool]:
+            agent_id = input_data.get("agent_id")
+            session_id = input_data.get("session_id")
+            if (
+                isinstance(session_id, str)
+                and session_id
+                and isinstance(agent_id, str)
+                and agent_id
+                and isinstance(tool_use_id, str)
+                and tool_use_id
+            ):
+                callback(session_id, agent_id, tool_use_id, active)
+            return {"continue_": True}
+
+        return _subagent_tool_activity_hook
 
     async def _bash_env_scrub_hook(
         self,

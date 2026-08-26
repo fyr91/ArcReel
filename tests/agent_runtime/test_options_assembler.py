@@ -43,6 +43,9 @@ def _make_assembler(
     provider_env_loader=None,
     user_id: str = "default",
 ) -> OptionsAssembler:
+    async def empty_provider_env_loader():
+        return {}
+
     projects_root = (tmp_path / "projects").resolve()
     projects_root.mkdir(parents=True, exist_ok=True)
     (projects_root / "demo").mkdir(exist_ok=True)
@@ -54,7 +57,7 @@ def _make_assembler(
         access_policy_provider=lambda: resolved_policy,
         max_turns_provider=lambda: max_turns,
         resolve_project_cwd=lambda name: projects_root / name,
-        provider_env_loader=provider_env_loader,
+        provider_env_loader=provider_env_loader or empty_provider_env_loader,
         user_id_provider=lambda: user_id,
     )
 
@@ -67,7 +70,8 @@ async def test_load_provider_env_overrides_injects_anthropic_and_empties() -> No
         "ANTHROPIC_BASE_URL": "https://anthropic.example.com",
     }
 
-    async def fake_build(_session):
+    async def fake_build(_session, *, user_id):
+        assert user_id == "default"
         return fake_dict
 
     with patch("lib.config.service.build_anthropic_env_dict", side_effect=fake_build):
@@ -171,6 +175,36 @@ async def test_build_adds_keep_alive_hook_with_can_use_tool(tmp_path: Path) -> N
     assert len(pre_without) == 1
     assert len(pre_with) == 2
     assert pre_with[0] is assembler._keep_stream_open_hook
+
+
+@pytest.mark.asyncio
+async def test_build_forwards_subagent_tool_lifecycle_hooks(tmp_path: Path) -> None:
+    events: list[tuple[str, str, str, bool]] = []
+    assembler = _make_assembler(tmp_path)
+    options = await assembler.build(
+        "demo",
+        subagent_tool_activity=lambda session_id, agent_id, tool_use_id, active: events.append(
+            (session_id, agent_id, tool_use_id, active)
+        ),
+    )
+
+    pre = options.hooks["PreToolUse"][-1].hooks[0]
+    post = options.hooks["PostToolUse"][-1].hooks[0]
+    failed = options.hooks["PostToolUseFailure"][0].hooks[0]
+    child_input = {"session_id": "session-1", "agent_id": "agent-1", "tool_name": "Bash", "tool_input": {}}
+
+    await pre(child_input, "tool-1", None)
+    await post(child_input, "tool-1", None)
+    await pre(child_input, "tool-2", None)
+    await failed(child_input, "tool-2", None)
+    await pre({"tool_name": "Bash", "tool_input": {}}, "main-tool", None)
+
+    assert events == [
+        ("session-1", "agent-1", "tool-1", True),
+        ("session-1", "agent-1", "tool-1", False),
+        ("session-1", "agent-1", "tool-2", True),
+        ("session-1", "agent-1", "tool-2", False),
+    ]
 
 
 @pytest.mark.asyncio

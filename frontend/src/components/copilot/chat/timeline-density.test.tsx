@@ -150,7 +150,7 @@ describe("SubagentCard", () => {
 
     expect(screen.getByText("执行停滞")).toBeInTheDocument();
     expect(screen.getByText("63258 tokens")).toBeInTheDocument();
-    expect(screen.getByText("连续 5 分钟无 token 增长，已自动终止")).toBeInTheDocument();
+    expect(screen.getByText("连续 5 分钟无输出或工具活动，已自动终止")).toBeInTheDocument();
   });
 
   it("dispatches Agent tool_use blocks to the card", () => {
