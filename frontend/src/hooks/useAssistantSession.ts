@@ -563,6 +563,9 @@ export function useAssistantSession(projectName: string | null) {
           }
           store.getState().appendEntry(result.entry);
         }
+        // 交接消息只负责引导用户发起下一轮；服务端成功受理首条消息后即已完成使命。
+        // 按项目清除，避免长生命周期面板中的迟到回调误伤其他项目刚显示的引导。
+        store.getState().dismissHandoffGuide(projectName!);
         statusRef.current = "running";
         store.getState().setSessionStatus("running");
         store.getState().setSending(false);

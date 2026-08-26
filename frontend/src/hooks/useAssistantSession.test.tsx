@@ -390,6 +390,7 @@ describe("useAssistantSession", () => {
     await waitFor(() => {
       expect(useAssistantStore.getState().currentSessionId).toBe("session-1");
     });
+    useAssistantStore.getState().showHandoffGuide("demo", 1);
 
     let accepted = false;
     await act(async () => {
@@ -402,6 +403,7 @@ describe("useAssistantSession", () => {
     expect(useAssistantStore.getState().turns).toEqual([
       { type: "user", content: [{ type: "text", text: "hello" }], uuid: "u-0", timestamp: undefined },
     ]);
+    expect(useAssistantStore.getState().handoffGuide).toBeNull();
     expect(useAssistantStore.getState().sessionStatus).toBe("running");
     expect(MockEventSource.instances).toHaveLength(1);
     expect(MockEventSource.instances[0].url).toContain("/entries/stream");
@@ -423,6 +425,7 @@ describe("useAssistantSession", () => {
     await waitFor(() => {
       expect(useAssistantStore.getState().currentSessionId).toBe("session-1");
     });
+    useAssistantStore.getState().showHandoffGuide("demo", 1);
 
     let accepted = true;
     await act(async () => {
@@ -434,6 +437,10 @@ describe("useAssistantSession", () => {
     expect(useAssistantStore.getState().sending).toBe(false);
     expect(useAssistantStore.getState().sessionStatus).toBe("idle");
     expect(useAssistantStore.getState().turns).toEqual([]);
+    expect(useAssistantStore.getState().handoffGuide).toEqual({
+      id: "demo:1",
+      projectName: "demo",
+    });
     expect(useAssistantStore.getState().error).toBe("发送失败");
     expect(MockEventSource.instances).toHaveLength(0);
 
@@ -442,6 +449,7 @@ describe("useAssistantSession", () => {
     });
 
     expect(accepted).toBe(true);
+    expect(useAssistantStore.getState().handoffGuide).toBeNull();
     // 同内容重试复用同一幂等键：服务端按键去重，不产生重复
     expect(sendSpy).toHaveBeenCalledTimes(2);
     expect(sendSpy.mock.calls[1][4]).toBe(sendSpy.mock.calls[0][4]);

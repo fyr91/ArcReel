@@ -112,6 +112,7 @@ interface AssistantState {
   setError: (error: string | null) => void;
   setStartupFailure: (failure: FailureObservation | null, origin?: StartupFailureOrigin) => void;
   showHandoffGuide: (projectName: string, triggerKey: number) => void;
+  dismissHandoffGuide: (projectName: string) => void;
   setSessionStatus: (status: SessionStatus | null) => void;
   setSessionStatusDetail: (detail: string | null) => void;
   setPendingQuestion: (question: PendingQuestion | null) => void;
@@ -292,6 +293,9 @@ export const useAssistantStore = create<AssistantState>((set, get) => {
           projectName,
         },
       }),
+    dismissHandoffGuide: (projectName) => {
+      if (get().handoffGuide?.projectName === projectName) set({ handoffGuide: null });
+    },
     setSessionStatus: (status) => set({ sessionStatus: status }),
     setSessionStatusDetail: (detail) => set({ sessionStatusDetail: detail }),
     setPendingQuestion: (question) => set({ pendingQuestion: question }),
