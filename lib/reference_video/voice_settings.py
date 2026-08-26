@@ -27,8 +27,8 @@ class VoiceRenderSettings:
     ``max_reference_audio`` 是每请求可携带的参考音频段数上限（backend 能力声明），
     ``model_id`` 只用于降级 warning 的文案回显。
 
-    ``audio_ready`` 是「音频确实可用」的角色名集合：解析预览不碰文件系统、留 None 表示按角色
-    资产的 ``reference_audio`` 字段非空判定；执行层传入已解析且确实存在的文件对应的角色名。
+    ``audio_ready`` 是「音频确实可用」的角色名集合：预览路由与执行层都传入已解析且确实存在的
+    本地或全局资产音频对应的角色名；留 None 表示调用方不掌握文件状态，按角色资产字段判定。
 
     ``requires_reference_image`` 为 True 时目标 backend 要求音频逐段挂在具体参考素材项上
     （如 wan2.7-r2v），纯画外 speaker 因此不绑定音频。

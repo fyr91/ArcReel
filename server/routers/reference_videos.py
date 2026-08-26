@@ -54,6 +54,7 @@ from lib.reference_video.keyframes import (
     keyframe_mention,
     without_keyframe_mentions,
 )
+from lib.reference_video.prompt_render import resolve_reference_audio_paths
 from lib.reference_video.request_projection import (
     ReferenceRequestOptions,
     ReferenceUnitRequestProjection,
@@ -72,6 +73,7 @@ from server.error_handlers import script_edit_detail
 from server.routers._reorder import full_permutation_error
 from server.routers._script_edits import execute_current_episode_edit, require_script_edit_result
 from server.services.cost_estimation import quote_video_request
+from server.services.effective_global_assets import resolve_linked_global_reference_audio_paths
 from server.services.generation_tasks import emit_generation_success_batch
 from server.services.h3_prompt_optimization import H3PromptOptimizationError, H3PromptOptimizationService
 from server.services.image_model_selection import ImageModelSelection
@@ -1104,10 +1106,22 @@ async def preview_script(
     project, script, _sf = _load_episode_script(project_name, episode, _t)
     caps = await project_video_caps(project, degraded_to="解析预览不发声音相关提示", user_id=user.id)
     unit = _find_unit(script, req.unit_id, _t) if req.unit_id else None
+    voice_settings = VoiceRenderSettings.from_caps(caps)
+    if voice_settings.voice_consistency == "native" and not voice_settings.is_silent:
+        project_path = get_project_manager().get_project_path(project_name)
+        audio_ready = await asyncio.to_thread(resolve_reference_audio_paths, project, project_path)
+        audio_ready.update(
+            await resolve_linked_global_reference_audio_paths(
+                project,
+                project_path.parent,
+                session_factory=async_session_factory,
+            )
+        )
+        voice_settings = VoiceRenderSettings.from_caps(caps, audio_ready=audio_ready)
     preview = build_script_preview(
         req.prompt,
         project,
-        VoiceRenderSettings.from_caps(caps),
+        voice_settings,
         max_reference_images=caps.get("max_reference_images"),
         unit=unit,
     )
