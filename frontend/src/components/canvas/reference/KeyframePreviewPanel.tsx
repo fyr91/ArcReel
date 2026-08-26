@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { AlertTriangle, ImageIcon, Plus, Save, Trash2 } from "lucide-react";
+import { AlertTriangle, ImageIcon, Plus, Trash2 } from "lucide-react";
 import { enqueueReferenceKeyframe } from "@/actions/generation";
 import { API } from "@/api";
 import { ImageModelSelect, imageSelectionFromValue } from "@/components/shared/ImageModelSelect";
@@ -55,21 +55,25 @@ function KeyframeCard({
     setDescription(keyframe.description);
   }, [keyframe.description]);
 
-  const save = async () => {
+  const saveBeforeGenerate = async (): Promise<boolean> => {
     const next = description.trim();
-    if (!next || !dirty || saving || busy) return;
+    if (!next || saving || busy) return false;
+    if (!dirty) return true;
     setSaving(true);
     try {
       await API.patchReferenceKeyframe(projectName, episode, keyframe.keyframe_id, next);
       await onChanged();
+      return true;
     } catch (error) {
       useAppStore.getState().pushToast(errMsg(error), "error");
+      return false;
     } finally {
       setSaving(false);
     }
   };
 
   const generate = async () => {
+    if (!(await saveBeforeGenerate())) return;
     try {
       await enqueueReferenceKeyframe(
         projectName,
@@ -176,22 +180,12 @@ function KeyframeCard({
           />
         </div>
       </div>
-      {dirty && (
-        <button
-          type="button"
-          onClick={() => void save()}
-          disabled={saving || busy || !description.trim()}
-          className="focus-ring mt-2 inline-flex items-center gap-1.5 rounded-md border border-[var(--color-hairline)] px-2.5 py-1 text-xs text-[var(--color-text-2)] disabled:opacity-40"
-        >
-          <Save className="h-3.5 w-3.5" aria-hidden="true" />
-          {t("common:save")}
-        </button>
-      )}
       <div className="mt-3 grid gap-2 sm:grid-cols-[minmax(0,1fr)_auto]">
         <ImageModelSelect value={model} onChange={setModel} capability="any" />
         <GenerateButton
           onClick={() => void generate()}
-          loading={busy}
+          loading={busy || saving}
+          disabled={!description.trim()}
           label={
             keyframe.image_path
               ? t("reference_keyframe_regenerate")

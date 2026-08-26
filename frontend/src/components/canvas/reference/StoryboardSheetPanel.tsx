@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { AlertTriangle, Images, Loader2, Save } from "lucide-react";
+import { AlertTriangle, Images, Loader2 } from "lucide-react";
 import { enqueueReferenceStoryboardSheet } from "@/actions/generation";
 import { API } from "@/api";
 import { ImageEditButton } from "@/components/canvas/timeline/ImageEditButton";
@@ -53,10 +53,29 @@ export function StoryboardSheetPanel({
   const dirty = description.trim() !== savedDescription;
 
   useEffect(() => {
-    setDescription(defaultStoryboardDescription(unit));
-  }, [unit.storyboard_description, unit.text]);
+    // External Agent/browser edits arrive through the unit refresh. Adopt the
+    // latest durable description without resetting drafts for image-only changes.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setDescription(savedDescription);
+  }, [savedDescription]);
 
   const generate = async () => {
+    const next = description.trim();
+    if (!next || saving || busy) return;
+    if (dirty) {
+      setSaving(true);
+      try {
+        await API.patchReferenceVideoUnit(projectName, episode, unit.unit_id, {
+          storyboard_description: next,
+        });
+        await onChanged();
+      } catch (error) {
+        useAppStore.getState().pushToast(errMsg(error), "error");
+        return;
+      } finally {
+        setSaving(false);
+      }
+    }
     try {
       await enqueueReferenceStoryboardSheet(
         projectName,
@@ -66,22 +85,6 @@ export function StoryboardSheetPanel({
       );
     } catch (error) {
       useAppStore.getState().pushToast(errMsg(error), "error");
-    }
-  };
-
-  const save = async () => {
-    const next = description.trim();
-    if (!next || !dirty || saving || busy) return;
-    setSaving(true);
-    try {
-      await API.patchReferenceVideoUnit(projectName, episode, unit.unit_id, {
-        storyboard_description: next,
-      });
-      await onChanged();
-    } catch (error) {
-      useAppStore.getState().pushToast(errMsg(error), "error");
-    } finally {
-      setSaving(false);
     }
   };
 
@@ -164,23 +167,12 @@ export function StoryboardSheetPanel({
             />
           </div>
         </div>
-        {dirty && (
-          <button
-            type="button"
-            onClick={() => void save()}
-            disabled={saving || busy || !description.trim()}
-            className="focus-ring mt-2 inline-flex items-center gap-1.5 rounded-md border border-[var(--color-hairline)] px-2.5 py-1 text-xs text-[var(--color-text-2)] disabled:opacity-40"
-          >
-            <Save className="h-3.5 w-3.5" aria-hidden="true" />
-            {t("common:save")}
-          </button>
-        )}
-
         <div className="mt-3 grid gap-2 sm:grid-cols-[minmax(0,1fr)_auto]">
           <ImageModelSelect value={model} onChange={setModel} capability="any" />
           <GenerateButton
             onClick={() => void generate()}
-            loading={busy}
+            loading={busy || saving}
+            disabled={!description.trim()}
             label={
               sheet
                 ? t("reference_storyboard_sheet_regenerate")
