@@ -393,7 +393,7 @@ async def test_video_style_prompt_does_not_mechanically_rewrite_optimizer_sectio
     assert artifacts[0].sections.non_diegetic_music == "A warm orchestral score."
 
 
-async def test_optimizer_output_contains_the_resolved_storyboard_sequence_constraint(tmp_path: Path) -> None:
+async def test_optimizer_does_not_mechanically_append_the_storyboard_sequence_constraint(tmp_path: Path) -> None:
     class _Generator:
         async def generate(self, request: Any, *, project_name: str) -> TextGenerationResult:
             return TextGenerationResult(text=_prompt(), provider="test", model="optimizer")
@@ -417,9 +417,7 @@ async def test_optimizer_output_contains_the_resolved_storyboard_sequence_constr
         [context],
     )
 
-    constraint = _storyboard_sequence_constraint(2)
-    assert constraint in artifacts[0].sections.subject_definitions
-    assert artifacts[0].rendered_prompt.count(constraint) == 1
+    assert _storyboard_sequence_constraint(2) not in artifacts[0].rendered_prompt
 
 
 async def test_optimizer_keeps_pinned_system_prompt_separate_and_saves_pending_review(

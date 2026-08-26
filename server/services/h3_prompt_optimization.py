@@ -226,27 +226,6 @@ def _storyboard_sequence_constraint(picture_number: int | str) -> str:
     return _STORYBOARD_SEQUENCE_CONSTRAINT.format(picture_number=picture_number)
 
 
-def _ensure_storyboard_sequence_constraints(
-    sections: H3PromptSections,
-    image_references: Sequence[H3PromptReference],
-) -> H3PromptSections:
-    rendered = sections.render()
-    missing = [
-        constraint
-        for index, reference in enumerate(image_references, start=1)
-        if reference.kind == "storyboard_sheet"
-        and (constraint := _storyboard_sequence_constraint(index)) not in rendered
-    ]
-    if not missing:
-        return sections
-    subject_definitions = "\n".join((sections.subject_definitions, *missing))
-    updated = sections.model_copy(update={"subject_definitions": subject_definitions})
-    actual_chars = len(updated.render())
-    if actual_chars > H3_MAX_PROMPT_CHARS:
-        raise H3PromptTooLongError(actual_chars)
-    return updated
-
-
 def _optimizer_retry_prompt(user_prompt: str, error: H3PromptTooLongError) -> str:
     return (
         f"{user_prompt}\n\n"
@@ -286,7 +265,6 @@ async def _generate_valid_h3_prompt(
                 picture_count=len(context.image_paths),
                 audio_count=len(context.audio_paths),
             )
-            sections = _ensure_storyboard_sequence_constraints(sections, context.image_references)
         except H3PromptTooLongError as exc:
             if attempt >= _H3_OPTIMIZATION_MAX_ATTEMPTS:
                 raise
