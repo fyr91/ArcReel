@@ -1,9 +1,13 @@
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { API } from "@/api";
 import { useAssistantSession } from "@/hooks/useAssistantSession";
 import { useAppStore } from "@/stores/app-store";
 import { useAssistantStore } from "@/stores/assistant-store";
 import { useProjectsStore } from "@/stores/projects-store";
+import { useTasksStore } from "@/stores/tasks-store";
+import { useWorkflowStore } from "@/stores/workflow-store";
+import { makePlan, makeTask } from "@/test/factories";
 import { UI_LAYERS } from "@/utils/ui-layers";
 import { AgentCopilot } from "./AgentCopilot";
 
@@ -60,7 +64,18 @@ describe("AgentCopilot", () => {
     useAssistantStore.setState(useAssistantStore.getInitialState(), true);
     useProjectsStore.setState(useProjectsStore.getInitialState(), true);
     useAppStore.setState(useAppStore.getInitialState(), true);
+    useTasksStore.setState(useTasksStore.getInitialState(), true);
+    useWorkflowStore.getState().resetTarget();
     vi.clearAllMocks();
+    vi.spyOn(API, "getWorkflowPlan").mockResolvedValue(makePlan({
+      next_action: {
+        type: "generate_asset_sheets",
+        args: {},
+        requested_ids: [],
+        requires_confirmation: false,
+        reason: "asset inventory completed",
+      },
+    }));
 
     useProjectsStore.getState().setCurrentProject("demo", null);
     mockedUseAssistantSession.mockReturnValue({
@@ -193,6 +208,142 @@ describe("AgentCopilot", () => {
       screen.getByText(/剧本分析已完成，你可以继续项目制作了/),
     ).toBeInTheDocument();
     expect(screen.queryByText("开始对话")).not.toBeInTheDocument();
+  });
+
+  it("offers Start production after analysis handoff and sends the authoritative next action", async () => {
+    useAssistantStore.getState().showHandoffGuide("demo", 1);
+
+    render(<AgentCopilot />);
+
+    expect(await screen.findByText("下一步：生成缺失的资产图")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: /开始制作/ }));
+
+    expect(sendMessage).toHaveBeenCalledWith(
+      "开始制作。请查询当前项目的最新工作流计划，并执行下一步：生成缺失的资产图。",
+    );
+  });
+
+  it("offers the next workflow step after a completed Agent round", async () => {
+    vi.mocked(API.getWorkflowPlan).mockResolvedValue(makePlan({
+      next_action: {
+        type: "plan_episodes",
+        args: {},
+        requested_ids: [],
+        requires_confirmation: false,
+        reason: "asset sheets completed",
+      },
+    }));
+    useAssistantStore.setState({
+      currentSessionId: "session-1",
+      sessionStatus: "completed",
+    });
+
+    render(<AgentCopilot />);
+
+    expect(await screen.findByText("下一步：规划分集")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: /^下一步/ }));
+
+    expect(sendMessage).toHaveBeenCalledWith(
+      "请查询当前项目的最新工作流计划，并执行下一步：规划分集。",
+    );
+  });
+
+  it("waits for a background subagent to settle before offering the next step", async () => {
+    vi.mocked(API.getWorkflowPlan)
+      .mockResolvedValueOnce(makePlan({
+        next_action: {
+          type: "analyze_assets",
+          args: {},
+          requested_ids: [],
+          requires_confirmation: false,
+          reason: "asset inventory running",
+        },
+      }))
+      .mockResolvedValue(makePlan({
+        next_action: {
+          type: "generate_asset_sheets",
+          args: {},
+          requested_ids: [],
+          requires_confirmation: false,
+          reason: "asset inventory completed",
+        },
+      }));
+    useAssistantStore.setState({
+      currentSessionId: "session-1",
+      sessionStatus: "completed",
+      subagents: {
+        "tu-1": {
+          tool_use_id: "tu-1",
+          task_id: "task-1",
+          agent_type: "analyze-assets",
+          description: "提取资产",
+          status: "running",
+          summary: "",
+          usage: null,
+          entries: [],
+        },
+      },
+    });
+
+    render(<AgentCopilot />);
+
+    await waitFor(() => expect(API.getWorkflowPlan).toHaveBeenCalledTimes(1));
+    expect(screen.queryByRole("button", { name: /^下一步/ })).not.toBeInTheDocument();
+
+    act(() => {
+      useAssistantStore.getState().setSubagentSnapshots([
+        {
+          tool_use_id: "tu-1",
+          task_id: "task-1",
+          agent_type: "analyze-assets",
+          description: "提取资产",
+          status: "completed",
+          summary: "已提取资产",
+          usage: null,
+          entries: [],
+        },
+      ]);
+    });
+
+    await waitFor(() => expect(API.getWorkflowPlan).toHaveBeenCalledTimes(2));
+    expect(await screen.findByText("下一步：生成缺失的资产图")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /^下一步/ })).toBeInTheDocument();
+  });
+
+  it("does not offer continuation while a project generation task is active", async () => {
+    useAssistantStore.setState({
+      currentSessionId: "session-1",
+      sessionStatus: "completed",
+    });
+    useTasksStore.getState().setTasks([
+      makeTask({ project_name: "demo", status: "running" }),
+    ]);
+
+    render(<AgentCopilot />);
+
+    await waitFor(() => expect(API.getWorkflowPlan).toHaveBeenCalled());
+    expect(screen.queryByRole("button", { name: /^下一步/ })).not.toBeInTheDocument();
+  });
+
+  it("does not offer continuation when the workflow is waiting or finished", async () => {
+    vi.mocked(API.getWorkflowPlan).mockResolvedValue(makePlan({
+      next_action: {
+        type: "wait_for_task",
+        args: {},
+        requested_ids: [],
+        requires_confirmation: false,
+        reason: "generation in progress",
+      },
+    }));
+    useAssistantStore.setState({
+      currentSessionId: "session-1",
+      sessionStatus: "completed",
+    });
+
+    render(<AgentCopilot />);
+
+    await waitFor(() => expect(API.getWorkflowPlan).toHaveBeenCalled());
+    expect(screen.queryByRole("button", { name: /^下一步/ })).not.toBeInTheDocument();
   });
 
   it("does not render a handoff guide that belongs to another project", () => {
