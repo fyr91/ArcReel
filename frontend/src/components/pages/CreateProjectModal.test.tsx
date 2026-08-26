@@ -369,7 +369,7 @@ describe("CreateProjectModal", () => {
   });
 });
 
-describe("CreateProjectModal ad mode", () => {
+describe("CreateProjectModal creation modes", () => {
   beforeEach(() => {
     navigateMock.mockClear();
     useProjectsStore.setState(useProjectsStore.getInitialState(), true);
@@ -386,34 +386,11 @@ describe("CreateProjectModal ad mode", () => {
     });
   });
 
-  it("submits ad project with target_duration and without default_duration", async () => {
+  it("does not expose ad in the new-project wizard", () => {
     render(<CreateProjectModal />);
-    fireEvent.change(screen.getByRole("textbox"), { target: { value: "ad demo" } });
-    fireEvent.click(screen.getByText(/广告\/短片/));
-    // 改选 30 秒档
-    fireEvent.click(screen.getByRole("radio", { name: /30\s*秒/ }));
-    fireEvent.click(screen.getByRole("button", { name: /下一步/ }));
-    await waitFor(() =>
-      expect(screen.getByRole("button", { name: /下一步/ })).toBeEnabled()
-    );
-    fireEvent.click(screen.getByRole("button", { name: /下一步/ }));
-    await waitFor(() =>
-      expect(screen.getByRole("button", { name: /创建项目/ })).toBeInTheDocument()
-    );
-    fireEvent.click(screen.getByRole("button", { name: /创建项目/ }));
-    await waitFor(() => expect(API.createProject).toHaveBeenCalled());
-
-    expect(API.createProject).toHaveBeenCalledWith(
-      expect.objectContaining({
-        title: "ad demo",
-        content_mode: "ad",
-        aspect_ratio: "16:9",
-        target_duration: 30,
-      })
-    );
-    const payload = vi.mocked(API.createProject).mock.calls[0][0];
-    expect("default_duration" in payload).toBe(false);
-    expect(navigateMock).toHaveBeenCalledWith("/app/projects/ad-proj");
+    expect(
+      screen.queryByRole("radio", { name: /广告\/短片|Ad \/ Short Video/ }),
+    ).not.toBeInTheDocument();
   });
 
   it("does not send target_duration for drama projects", async () => {

@@ -262,36 +262,18 @@ describe("WizardStep1Basics", () => {
     expect(onChange).toHaveBeenLastCalledWith(expect.objectContaining({ gridStoryboard: true }));
   });
 
-  it("emits onChange with ad content mode", () => {
-    const onChange = vi.fn();
+  it("does not expose ad as a creation mode", () => {
     render(
       <WizardStep1Basics
         value={baseValue}
-        onChange={onChange}
+        onChange={() => {}}
         onNext={() => {}}
         onCancel={() => {}}
       />,
     );
-    fireEvent.click(screen.getByText(/广告\/短片|Ad \/ Short Video/));
-    expect(onChange).toHaveBeenCalledWith(
-      expect.objectContaining({ contentMode: "ad" }),
-    );
-  });
-
-  it("switching to ad clears the grid toggle", () => {
-    const onChange = vi.fn();
-    render(
-      <WizardStep1Basics
-        value={{ ...baseValue, gridStoryboard: true }}
-        onChange={onChange}
-        onNext={() => {}}
-        onCancel={() => {}}
-      />,
-    );
-    fireEvent.click(screen.getByText(/广告\/短片|Ad \/ Short Video/));
-    expect(onChange).toHaveBeenCalledWith(
-      expect.objectContaining({ contentMode: "ad", gridStoryboard: false }),
-    );
+    expect(
+      screen.queryByRole("radio", { name: /广告\/短片|Ad \/ Short Video/ }),
+    ).not.toBeInTheDocument();
   });
 
   it("shows four target duration tiers with 60s selected by default for ad", () => {
@@ -360,7 +342,7 @@ describe("WizardStep1Basics", () => {
     );
     expect(screen.getByRole("radio", { name: /剧情演绎/ })).toBeInTheDocument();
     expect(screen.getByRole("radio", { name: /课程视频/ })).toBeInTheDocument();
-    expect(screen.getByRole("radio", { name: /广告\/短片/ })).toBeInTheDocument();
+    expect(screen.getAllByRole("radio", { name: /剧情演绎|课程视频/ })).toHaveLength(2);
   });
 
   it("renders generation route labels with product language", () => {

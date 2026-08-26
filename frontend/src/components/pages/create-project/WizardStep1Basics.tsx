@@ -123,20 +123,6 @@ export function WizardStep1Basics({
             />
             {t("dashboard:course_video")}
           </label>
-          <label className={radioCardClass(value.contentMode === "ad")}>
-            <input
-              type="radio"
-              name="contentMode"
-              value="ad"
-              checked={value.contentMode === "ad"}
-              onChange={() =>
-                // ad 不支持多宫格分镜：切到 ad 时清掉已勾选的装配开关
-                onChange({ ...value, contentMode: "ad", gridStoryboard: false })
-              }
-              className="sr-only"
-            />
-            {t("dashboard:ad_short_video")}
-          </label>
         </div>
         <p className="mt-2 text-[11.5px] leading-[1.55] text-text-3">
           {value.contentMode === "course"
