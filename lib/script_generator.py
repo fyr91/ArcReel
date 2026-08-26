@@ -109,6 +109,7 @@ from lib.text_backends.base import DEFAULT_MAX_OUTPUT_TOKENS, TextGenerationRequ
 from lib.text_generator import TextGenerator
 from lib.text_utils import strip_json_code_fences
 from lib.video_backends.registry import video_capabilities_for_model as builtin_video_capabilities_for_model
+from lib.video_dependency import derive_drama_video_dependencies
 
 logger = logging.getLogger(__name__)
 
@@ -396,7 +397,10 @@ class ScriptGenerator:
         )
 
         visual_scenes = self._parse_drama_visual(result.text)
-        merged_scenes = merge_drama_visual_into_scenes(content_scenes, visual_scenes)
+        merged_scenes = derive_drama_video_dependencies(
+            merge_drama_visual_into_scenes(content_scenes, visual_scenes),
+            break_field="segment_break",
+        )
 
         script_data = {"title": content.get("title") or f"第{episode}集", "scenes": merged_scenes}
         script_data = self._add_metadata(script_data, episode)
@@ -1284,7 +1288,7 @@ class ScriptGenerator:
                     "characters": list(step1_unit.get("characters") or []),
                     "props": list(step1_unit.get("props") or []),
                     "presenters": list(step1_unit.get("presenters") or []),
-                    "depends_on_unit_id": step1_unit.get("depends_on_unit_id"),
+                    "video_dependency": step1_unit.get("video_dependency"),
                 }
             )
 
@@ -1294,6 +1298,16 @@ class ScriptGenerator:
             video_units = derive_course_dependencies(video_units)
             validate_course_assets(self.project_json)
             validate_opening_closing(video_units)
+        elif self.content_mode == "drama":
+            video_units = derive_drama_video_dependencies(
+                [
+                    {
+                        **unit,
+                        "continues_previous": bool(step1.get("video_dependency")),
+                    }
+                    for unit, step1 in zip(video_units, step1_units, strict=True)
+                ]
+            )
         return ReferenceVideoScript.model_validate(
             {"title": flat.title, "content_mode": self.content_mode, "video_units": video_units}
         ).model_dump()

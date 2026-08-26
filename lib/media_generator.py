@@ -30,6 +30,7 @@ if TYPE_CHECKING:
     from lib.config.resolver import ConfigResolver
     from lib.image_backends.base import ImageBackend
     from lib.reference_compression import CompressedRef, PayloadLimits, ReferenceSpec
+    from lib.video_backends.base import VideoContinuationGuide
 
 from lib.async_thread import run_noninterruptible_sync
 from lib.audio_utils import probe_reference_audio_total_seconds
@@ -791,6 +792,7 @@ class MediaGenerator:
         reference_images: list[Path] | None = None,
         reference_audio_files: list[Path] | None = None,
         reference_audio_targets: list[int] | None = None,
+        continuation_guide: "VideoContinuationGuide | None" = None,
         aspect_ratio: str = "9:16",
         duration_seconds: str | int = "8",
         resolution: str | None = None,
@@ -810,6 +812,7 @@ class MediaGenerator:
             reference_audio_targets: 与 reference_audio_files 等长同序，第 i 项是该段音频对应
                 reference_images 的下标（0-based）；仅 backend 声明 reference_audio_per_image
                 时读取，见 VideoGenerationRequest.reference_audio_targets
+            continuation_guide: 已解析的前序 GPU 原始视频续接事实
             aspect_ratio: 宽高比，默认 9:16（竖屏）
             duration_seconds: 视频时长，可选 "4", "6", "8"
             resolution: 分辨率，默认不传（由 backend/SDK 决定）
@@ -828,6 +831,7 @@ class MediaGenerator:
                 reference_images=reference_images,
                 reference_audio_files=reference_audio_files,
                 reference_audio_targets=reference_audio_targets,
+                continuation_guide=continuation_guide,
                 aspect_ratio=aspect_ratio,
                 duration_seconds=duration_seconds,
                 resolution=resolution,
@@ -845,6 +849,7 @@ class MediaGenerator:
         reference_images: list[Path] | None = None,
         reference_audio_files: list[Path] | None = None,
         reference_audio_targets: list[int] | None = None,
+        continuation_guide: "VideoContinuationGuide | None" = None,
         aspect_ratio: str = "9:16",
         duration_seconds: str | int = "8",
         resolution: str | None = None,
@@ -870,6 +875,7 @@ class MediaGenerator:
             reference_audio_targets: 与 reference_audio_files 等长同序，第 i 项是该段音频对应
                 reference_images 的下标（0-based）；仅 backend 声明 reference_audio_per_image
                 时读取，见 VideoGenerationRequest.reference_audio_targets
+            continuation_guide: 已解析的前序 GPU 原始视频续接事实
             aspect_ratio: 宽高比，默认 9:16（竖屏）
             duration_seconds: 视频时长，可选 "4", "6", "8"
             resolution: 分辨率，默认不传（由 backend/SDK 决定）
@@ -934,6 +940,14 @@ class MediaGenerator:
             service_tier=version_metadata.get("service_tier", "default"),
             resolution=resolution,
         )
+        if continuation_guide is not None and (video_caps is None or not video_caps.guided_continuation):
+            from lib.video_backends.base import VideoCapabilityError
+
+            raise VideoCapabilityError(
+                "video_guided_continuation_unsupported",
+                provider=self._video_backend.name,
+                model=model_name,
+            )
         # 总时长校验需要读音频元数据，只能在这层（拿得到文件路径）探测好再传给纯函数的
         # gate_video_request；探测失败（ffprobe 不可用等）按 None 传入，由其按既有降级口径跳过
         # 该项校验，不阻断请求。仅当 caps 声明了总时长约束才探测——未声明该约束的后端
@@ -1055,6 +1069,7 @@ class MediaGenerator:
                         # 数组参考图压缩保序（不改数量、不重排），故调用方按未压缩的
                         # reference_images 下标算出的 targets 对压缩后的 ref_arg 同样有效。
                         reference_audio_targets=reference_audio_targets,
+                        continuation_guide=continuation_guide,
                         generate_audio=effective_generate_audio,
                         project_name=self.project_name,
                         task_id=task_id,

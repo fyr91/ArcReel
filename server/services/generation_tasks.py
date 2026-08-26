@@ -60,6 +60,7 @@ from lib.audio_utils import (
 )
 from lib.config.registry import PROVIDER_REGISTRY
 from lib.config.resolver import constrain_durations, video_bucket_for_generation_mode
+from lib.content_digest import canonical_json_digest
 from lib.db import async_session_factory
 from lib.db.base import DEFAULT_USER_ID
 from lib.db.repositories.asset_repo import AssetRepository
@@ -167,6 +168,7 @@ from server.services.video_artifact_currency import (
     complete_video_artifact_commit,
     freeze_video_speech_facts,
 )
+from server.services.video_dependency_tasks import resolve_video_continuation_guide
 
 logger = logging.getLogger(__name__)
 
@@ -2407,6 +2409,28 @@ async def execute_video_task(
         )
 
     project, project_path, item, content_mode, script_kind, script, script_input = await asyncio.to_thread(_load)
+    continuation_guide, dependency_evidence = await resolve_video_continuation_guide(
+        project_path=project_path,
+        unit=item,
+        resource_type="videos",
+        user_id=user_id,
+    )
+
+    async def _assert_dependency_unchanged() -> None:
+        current_script = await asyncio.to_thread(get_project_manager().load_script, project_name, script_file)
+        current_items, current_id_field, _, _, _ = get_storyboard_items(current_script)
+        current_resolved = find_storyboard_item(current_items, current_id_field, resource_id)
+        if current_resolved is None:
+            raise ValueError(f"video dependency unit disappeared before submission: {resource_id}")
+        latest_guide, latest_evidence = await resolve_video_continuation_guide(
+            project_path=project_path,
+            unit=current_resolved[0],
+            resource_type="videos",
+            user_id=user_id,
+        )
+        if latest_guide != continuation_guide or latest_evidence != dependency_evidence:
+            raise ValueError(f"video dependency changed before submission: {resource_id}")
+
     # Queue execution re-materializes mutable visual intent from the current script unit. Direct/internal callers
     # without a task row retain the request-prompt fallback for compatibility with synchronous service tests.
     current_prompt = item.get("video_prompt") if isinstance(item, dict) else None
@@ -2423,7 +2447,11 @@ async def execute_video_task(
         execution_payload,
         project=project,
         user_id=user_id,
-        video=VideoLaneRequest(capability=video_bucket_for_generation_mode(project.get("generation_mode"))),
+        video=VideoLaneRequest(
+            capability="r2v"
+            if continuation_guide is not None
+            else video_bucket_for_generation_mode(project.get("generation_mode"))
+        ),
         audio=AudioLaneRequest() if delivery_options.narration_delivery == USE_TTS else None,
     )
     generator = ctx.generator
@@ -2453,7 +2481,7 @@ async def execute_video_task(
     seed = payload.get("seed")
 
     def _visual_basis_digest_for(storyboard_image: Path, end_frame_image: Path | None) -> str:
-        return build_storyboard_video_visual_basis(
+        digest = build_storyboard_video_visual_basis(
             prompt=requested_visual_prompt,
             storyboard_image=storyboard_image,
             end_frame_image=end_frame_image,
@@ -2470,6 +2498,11 @@ async def execute_video_task(
             if content_mode == "drama"
             else None,
         ).digest
+        return (
+            canonical_json_digest({"visual_basis_digest": digest, "video_dependency": dependency_evidence})
+            if dependency_evidence is not None
+            else digest
+        )
 
     def _current_visual_basis_digest() -> str:
         return _visual_basis_digest_for(storyboard_file, end_image)
@@ -2626,10 +2659,16 @@ async def execute_video_task(
         if reused is not None:
             return reused
 
-    provider_start_image = storyboard_file
+    if continuation_guide is not None and end_image is not None:
+        raise VideoCapabilityError("video_guided_continuation_end_frame_unsupported", model=model_name)
+    guided_continuation = continuation_guide is not None
+    provider_storyboard_image = storyboard_file
+    provider_start_image = None if guided_continuation else storyboard_file
+    provider_reference_images = [storyboard_file] if guided_continuation else None
     provider_end_image = end_image
 
     async def _admit_before_submit(_api_call_id: int) -> Mapping[str, object] | None:
+        await _assert_dependency_unchanged()
         await asyncio.to_thread(assert_current_artifact_input_claims_usable, project_path, formal_input_claims)
         return None
 
@@ -2659,10 +2698,10 @@ async def execute_video_task(
         media_inputs = [
             ProviderMediaInput(
                 path=storyboard_file,
-                role="start_image",
+                role="reference_image" if guided_continuation else "start_image",
                 logical_type="storyboard",
                 logical_name=resource_id,
-                kind="first_frame",
+                kind="continuity_reference" if guided_continuation else "first_frame",
             )
         ]
         if end_image is not None:
@@ -2684,11 +2723,18 @@ async def execute_video_task(
                     content_digests={media.source_locator: media.sha256 for media in staged_media},
                 )
             )
-            provider_start_image = safe_join(
+            staged_storyboard = safe_join(
                 project_path,
-                next(media.staged_locator for media in staged_media if media.role == "start_image"),
+                next(
+                    media.staged_locator
+                    for media in staged_media
+                    if media.role == ("reference_image" if guided_continuation else "start_image")
+                ),
                 require_file=True,
             )
+            provider_storyboard_image = staged_storyboard
+            provider_start_image = None if guided_continuation else staged_storyboard
+            provider_reference_images = [staged_storyboard] if guided_continuation else None
             staged_end = next((media for media in staged_media if media.role == "end_image"), None)
             provider_end_image = (
                 safe_join(project_path, staged_end.staged_locator, require_file=True)
@@ -2696,15 +2742,16 @@ async def execute_video_task(
                 else None
             )
             visual_basis_digest = await asyncio.to_thread(
-                _visual_basis_digest_for, provider_start_image, provider_end_image
+                _visual_basis_digest_for, provider_storyboard_image, provider_end_image
             )
             artifact_visual_basis = await asyncio.to_thread(
                 lambda: build_storyboard_video_artifact_visual_basis(
                     resource_id=resource_id,
                     visual_prompt=requested_visual_prompt,
-                    storyboard_image=provider_start_image,
+                    storyboard_image=provider_storyboard_image,
                     end_frame_image=provider_end_image,
                     aspect_ratio=aspect_ratio,
+                    video_dependency=dependency_evidence,
                 )
             )
             artifact_video_basis = compose_video_artifact_basis(
@@ -2722,6 +2769,7 @@ async def execute_video_task(
             )
 
             async def _checkpoint_before_submit(api_call_id: int) -> Mapping[str, object]:
+                await _assert_dependency_unchanged()
                 await asyncio.to_thread(assert_current_artifact_input_claims_usable, project_path, formal_input_claims)
                 artifact_currency = VideoArtifactCurrencyFacts(
                     episode=artifact_episode,
@@ -2740,7 +2788,7 @@ async def execute_video_task(
                     project_name=project_name,
                     script_file=script_file,
                     unit_id=resource_id,
-                    capability="i2v",
+                    capability="r2v" if guided_continuation else "i2v",
                     provider_id=ctx.video.provider_model.provider_id,
                     provider_model_id=ctx.video.provider_model.model_id,
                     backend_model_id=ctx.video.backend_model,
@@ -2792,6 +2840,8 @@ async def execute_video_task(
             resource_id=resource_id,
             start_image=provider_start_image,
             end_image=provider_end_image,
+            reference_images=provider_reference_images,
+            continuation_guide=continuation_guide,
             aspect_ratio=aspect_ratio,
             duration_seconds=duration_seconds,
             resolution=resolution,

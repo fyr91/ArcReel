@@ -7,7 +7,11 @@ from unittest.mock import AsyncMock, patch
 import pytest
 
 from lib.config.registry import PROVIDER_REGISTRY
-from lib.video_backends.base import VideoCapabilityError, VideoGenerationRequest
+from lib.video_backends.base import (
+    VideoCapabilityError,
+    VideoContinuationGuide,
+    VideoGenerationRequest,
+)
 from lib.video_backends.croco import CrocoVideoBackend, _resolve_quality
 
 pytestmark = pytest.mark.unit
@@ -93,6 +97,99 @@ async def test_generate_sends_resolved_quality_to_unified_job(tmp_path: Path):
         "quality": "portrait_768p",
         "duration_seconds": 6,
     }
+
+
+async def test_guided_continuation_uses_r2v_and_add_guide(tmp_path: Path):
+    backend = CrocoVideoBackend(api_key="test-token")
+    backend._client.upload_image = AsyncMock(return_value="asset-current")
+    backend._client.submit_job = AsyncMock(return_value={"job_id": "job-new"})
+    backend._client.wait_until_terminal = AsyncMock(return_value={"status": "succeeded"})
+    backend._client.list_outputs = AsyncMock(
+        side_effect=[
+            {
+                "items": [
+                    {
+                        "output_id": "video",
+                        "archive_state": "ready",
+                        "origin": "gpu_original",
+                        "origin_verified": True,
+                    }
+                ]
+            },
+            {"items": [{"output_id": "video", "delivery_state": "ready", "content_url": "https://x/v.mp4"}]},
+        ]
+    )
+    backend._client.download_output = AsyncMock()
+
+    await backend.generate(
+        VideoGenerationRequest(
+            prompt="continue the action",
+            output_path=tmp_path / "guided.mp4",
+            reference_images=[tmp_path / "storyboard.png"],
+            continuation_guide=VideoContinuationGuide(source_job_id="job-source"),
+        )
+    )
+
+    call = backend._client.submit_job.await_args.kwargs
+    assert call["parameters"]["mode"] == "r2v"
+    assert call["parameters"]["add_guide"] == {
+        "source_job_id": "job-source",
+        "guide_frames": 22,
+        "include_guide_audio": False,
+        "source_media": "original_video",
+    }
+
+
+async def test_guided_continuation_rejects_i2v_mode(tmp_path: Path):
+    backend = CrocoVideoBackend(api_key="test-token")
+    backend._client.upload_image = AsyncMock(return_value="asset-current")
+    backend._client.list_outputs = AsyncMock(
+        return_value={
+            "items": [
+                {
+                    "output_id": "video",
+                    "archive_state": "ready",
+                    "origin": "gpu_original",
+                    "origin_verified": True,
+                }
+            ]
+        }
+    )
+    with pytest.raises(VideoCapabilityError) as exc_info:
+        await backend.generate(
+            VideoGenerationRequest(
+                prompt="continue",
+                output_path=tmp_path / "guided.mp4",
+                start_image=tmp_path / "first.png",
+                continuation_guide=VideoContinuationGuide(source_job_id="job-source"),
+            )
+        )
+    assert exc_info.value.code == "video_guided_continuation_mode_unsupported"
+
+
+async def test_guided_continuation_rejects_non_original_source(tmp_path: Path):
+    backend = CrocoVideoBackend(api_key="test-token")
+    backend._client.list_outputs = AsyncMock(
+        return_value={
+            "items": [
+                {
+                    "output_id": "video",
+                    "archive_state": "ready",
+                    "origin": "downloaded_copy",
+                    "origin_verified": False,
+                }
+            ]
+        }
+    )
+    with pytest.raises(VideoCapabilityError) as exc_info:
+        await backend.generate(
+            VideoGenerationRequest(
+                prompt="continue",
+                output_path=tmp_path / "guided.mp4",
+                continuation_guide=VideoContinuationGuide(source_job_id="job-source"),
+            )
+        )
+    assert exc_info.value.code == "video_guided_source_unavailable"
 
 
 async def test_provider_updates_are_persisted_as_h3_progress(tmp_path: Path):

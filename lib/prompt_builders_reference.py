@@ -182,8 +182,18 @@ def build_reference_units_split_prompt(
 - opening 与 closing 的 `scenes` 必须是同一个单元素数组，`characters` + `presenters` 至少一人且两者完全相同。
 - story 用 `scenes` / `characters` / `props` 明确列出场景、演员和道具；`presenters` 为空。
 - explanation 用 `presenters` 明确列出主讲或特邀讲师，且必须紧跟 story 或另一个 explanation。
-- 连续 explanation 的依赖 ID 由程序按最终顺序生成，不要输出 `depends_on_unit_id`。
+- 连续 explanation 的依赖由程序按最终顺序生成，不要输出 `video_dependency`。
 - opening、story、closing 先生成；explanation 后续使用前置视频尾帧叠加讲师方图作为首帧。
+"""
+
+    drama_rules = ""
+    if content_mode == "drama":
+        drama_rules = """
+# 剧情连续性
+
+- 用 `continues_previous=true` 表示当前 unit 在时空、动作和镜头上直接承接上一 unit。
+- 新场景、新时段、明显跳切或独立蒙太奇必须设为 false；第一条必须为 false。
+- 只判断本地连续意图，不输出前序 ID；实际 `video_dependency` 由程序按最终顺序生成。
 """
 
     return f"""# 角色与任务
@@ -225,7 +235,7 @@ def build_reference_units_split_prompt(
 {novel_text}
 </novel>
 
-{_format_outline_block(episode_outline, next_episode_outline)}{course_rules}# 拆分规则
+{_format_outline_block(episode_outline, next_episode_outline)}{course_rules}{drama_rules}# 拆分规则
 
 当前正在生成第 {episode} 集。请覆盖全部源文情节，按叙事顺序逐 unit 产出。
 

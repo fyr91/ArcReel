@@ -66,6 +66,7 @@ from lib.resource_paths import resource_relative_path
 from lib.script_editor import ScriptEditError
 from lib.speech_composition import admit_script_unit, refresh_video_unit_replan_state
 from lib.version_manager import VersionManager
+from lib.video_dependency import dependency_source_unit_id, derive_drama_video_dependencies
 from server.auth import CurrentUser
 from server.error_handlers import script_edit_detail
 from server.routers._reorder import full_permutation_error
@@ -341,7 +342,7 @@ def _build_unit_dict(
         "characters": list(characters or []),
         "props": list(props or []),
         "presenters": list(presenters or []),
-        "depends_on_unit_id": None,
+        "video_dependency": None,
         "video_review_status": "pending_review",
         "confirmed_video_version": None,
         "keyframes": (
@@ -444,7 +445,7 @@ async def add_unit(
         unit = next(item for item in projected if item["unit_id"] == unit["unit_id"])
         insert_after_id = body[-1].get("unit_id") if body else None
         dependency_updates = [
-            {"op": "update", "id": item["unit_id"], "fields": {"depends_on_unit_id": item.get("depends_on_unit_id")}}
+            {"op": "update", "id": item["unit_id"], "fields": {"video_dependency": item.get("video_dependency")}}
             for item in projected
             if item["unit_id"] != unit["unit_id"]
         ]
@@ -524,7 +525,7 @@ def _require_course_generation_phase(project: dict, script: dict, unit: dict) ->
         return
     if not _course_base_units_confirmed(project, script):
         raise HTTPException(status_code=409, detail="请先生成并确认全部引子、故事演绎和总结视频")
-    predecessor_id = unit.get("depends_on_unit_id")
+    predecessor_id = dependency_source_unit_id(unit)
     predecessor = next(
         (
             candidate
@@ -827,14 +828,14 @@ async def patch_unit(
                 candidate.update(fields)
             projected.append(candidate)
         projected = derive_course_dependencies(projected)
-        dependency_by_id = {item["unit_id"]: item.get("depends_on_unit_id") for item in projected}
+        dependency_by_id = {item["unit_id"]: item.get("video_dependency") for item in projected}
         operations = [
             {
                 "op": "update",
                 "id": existing["unit_id"],
                 "fields": {
                     **(fields if existing.get("unit_id") == unit_id else {}),
-                    "depends_on_unit_id": dependency_by_id[existing["unit_id"]],
+                    "video_dependency": dependency_by_id[existing["unit_id"]],
                 },
             }
             for existing in current.get("video_units") or []
@@ -949,7 +950,26 @@ async def reorder_units(
             {
                 "op": "update",
                 "id": unit["unit_id"],
-                "fields": {"depends_on_unit_id": unit.get("depends_on_unit_id")},
+                "fields": {"video_dependency": unit.get("video_dependency")},
+            }
+            for unit in projected
+        )
+    elif _project.get("content_mode") == "drama":
+        by_id = {unit.get("unit_id"): unit for unit in units if isinstance(unit, dict)}
+        projected = derive_drama_video_dependencies(
+            [
+                {
+                    **by_id[unit_id],
+                    "continues_previous": dependency_source_unit_id(by_id[unit_id]) is not None,
+                }
+                for unit_id in req.unit_ids
+            ]
+        )
+        operations.extend(
+            {
+                "op": "update",
+                "id": unit["unit_id"],
+                "fields": {"video_dependency": unit.get("video_dependency")},
             }
             for unit in projected
         )
@@ -1337,7 +1357,7 @@ async def generate_units_batch(
     # 集合里属于这次请求：悄悄略过就等于让同批健康的 unit 独自入队计费。
     units, malformed = screen_script_entries(script.get("video_units", []), requested_ids=requested_ids)
 
-    if project.get("content_mode") == "course":
+    if project.get("content_mode") in {"course", "drama"}:
         selected_units = units
         explanation_selected = any(unit.get("unit_type") == "explanation" for unit in selected_units)
         base_selected = any(unit.get("unit_type") != "explanation" for unit in selected_units)
@@ -1435,10 +1455,10 @@ async def generate_units_batch(
         unit_by_id = {unit.get("unit_id"): unit for unit in targets}
         for index, spec in enumerate(specs):
             unit = unit_by_id.get(spec.resource_id)
-            predecessor = unit.get("depends_on_unit_id") if isinstance(unit, dict) else None
+            predecessor = dependency_source_unit_id(unit) if isinstance(unit, dict) else None
             if isinstance(predecessor, str) and predecessor in target_ids:
                 spec.dependency_resource_id = predecessor
-                spec.dependency_group = f"course-episode-{episode}"
+                spec.dependency_group = f"video-dependency-episode-{episode}"
                 spec.dependency_index = index
     enqueued, enqueue_failures = await batch_enqueue_only(project_name=project_name, specs=specs, user_id=user.id)
     # 入队中断不撤销已创建的任务：它们是准入通过的完整付费单元，照常执行。没轮到的目标

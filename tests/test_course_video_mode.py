@@ -40,7 +40,10 @@ def test_course_dependency_chains_reset_at_each_story() -> None:
             _unit("E1U07", "closing"),
         ]
     )
-    assert [unit.get("depends_on_unit_id") for unit in units] == [
+    assert [
+        dependency.get("source_unit_id") if isinstance(dependency := unit.get("video_dependency"), dict) else None
+        for unit in units
+    ] == [
         None,
         None,
         "E1U02",
@@ -77,19 +80,20 @@ def test_course_script_validates_bookends_and_consecutive_explanations() -> None
                     "E1U03",
                     "explanation",
                     presenters=["老师"],
-                    depends_on_unit_id="E1U02",
+                    video_dependency={"source_unit_id": "E1U02"},
                 ),
                 _unit(
                     "E1U04",
                     "explanation",
                     presenters=["老师", "嘉宾"],
-                    depends_on_unit_id="E1U03",
+                    video_dependency={"source_unit_id": "E1U03"},
                 ),
                 _unit("E1U05", "closing", scenes=["教室"], presenters=["老师"]),
             ],
         }
     )
-    assert script.video_units[3].depends_on_unit_id == "E1U03"
+    assert script.video_units[3].video_dependency is not None
+    assert script.video_units[3].video_dependency.source_unit_id == "E1U03"
 
 
 def test_explanation_keyframe_materializes_square_lecturer_and_overlay(tmp_path: Path) -> None:

@@ -9,6 +9,7 @@ from lib.course_video import compose_explanation_keyframe
 from lib.path_safety import safe_join
 from lib.project_manager import ProjectManager
 from lib.thumbnail import extract_video_last_frame
+from lib.video_dependency import dependency_source_unit_id
 
 
 def _find_unit(script: dict[str, Any], unit_id: str) -> dict[str, Any]:
@@ -27,14 +28,14 @@ async def prepare_explanation_keyframe(
     script: dict[str, Any],
     unit_id: str,
 ) -> dict[str, Any]:
-    """Materialize an explanation's full-frame I2V keyframe from its dependency tail."""
+    """Materialize an explanation reference keyframe from its dependency tail."""
 
     if project.get("content_mode") != "course":
         return _find_unit(script, unit_id)
     unit = _find_unit(script, unit_id)
     if unit.get("unit_type") != "explanation":
         return unit
-    predecessor_id = unit.get("depends_on_unit_id")
+    predecessor_id = dependency_source_unit_id(unit)
     if not isinstance(predecessor_id, str) or not predecessor_id:
         raise ValueError(f"explanation unit {unit_id} has no dependency")
     predecessor = _find_unit(script, predecessor_id)

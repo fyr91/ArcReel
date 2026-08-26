@@ -202,8 +202,14 @@ def _canvas_is_valid(value: object) -> bool:
 
 def _validate_visual_inputs(basis: ArtifactBasis) -> None:
     inputs = _basis_inputs(basis)
+    dependency = inputs.get("video_dependency")
+    if dependency is not None and not _video_dependency_evidence_is_valid(dependency):
+        raise ValueError("video dependency evidence is invalid")
     if basis.kind == _STORYBOARD_VISUAL_KIND:
-        if set(inputs) != {"resource_id", "visual_prompt", "canvas", "frames"}:
+        if set(inputs) not in (
+            {"resource_id", "visual_prompt", "canvas", "frames"},
+            {"resource_id", "visual_prompt", "canvas", "frames", "video_dependency"},
+        ):
             raise ValueError("storyboard visual basis has invalid canonical inputs")
         prompt = inputs["visual_prompt"]
         prompt_valid = (_nonempty(prompt)) or (
@@ -232,7 +238,10 @@ def _validate_visual_inputs(basis: ArtifactBasis) -> None:
             raise ValueError("storyboard visual basis has invalid frame evidence")
         return
 
-    if set(inputs) != {"unit_id", "visual_lines", "style", "canvas", "request_references"}:
+    if set(inputs) not in (
+        {"unit_id", "visual_lines", "style", "canvas", "request_references"},
+        {"unit_id", "visual_lines", "style", "canvas", "request_references", "video_dependency"},
+    ):
         raise ValueError("reference visual basis has invalid canonical inputs")
     lines = inputs["visual_lines"]
     lines_valid = isinstance(lines, list) and all(_nonempty(line) for line in lines)
@@ -246,6 +255,31 @@ def _validate_visual_inputs(basis: ArtifactBasis) -> None:
         or not references_valid
     ):
         raise ValueError("reference visual basis has invalid canonical inputs")
+
+
+def _video_dependency_evidence_is_valid(value: object) -> bool:
+    if not isinstance(value, Mapping):
+        return False
+    return (
+        set(value)
+        == {
+            "source_unit_id",
+            "relation",
+            "audio_policy",
+            "source_version",
+            "source_execution_task_id",
+            "guide_frames",
+            "source_media",
+        }
+        and _nonempty(value["source_unit_id"])
+        and value["relation"] == "continuation"
+        and value["audio_policy"] in {"none", "continue"}
+        and type(value["source_version"]) is int
+        and value["source_version"] > 0
+        and _nonempty(value["source_execution_task_id"])
+        and value["guide_frames"] in {5, 22, 39}
+        and value["source_media"] == "original_video"
+    )
 
 
 def _reference_evidence_is_valid(value: object) -> bool:
@@ -286,10 +320,7 @@ def _validate_speech_inputs(basis: ArtifactBasis) -> None:
         if (
             not isinstance(utterance, Mapping)
             or set(utterance) != {"speaker", "text"}
-            or not (
-                speaker is None
-                or (_nonempty(speaker) and asset_name_comparison_key(speaker) == speaker)
-            )
+            or not (speaker is None or (_nonempty(speaker) and asset_name_comparison_key(speaker) == speaker))
             or not _nonempty(utterance["text"])
         ):
             raise ValueError("character video speech utterance is not canonical")

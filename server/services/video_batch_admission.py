@@ -72,6 +72,7 @@ from lib.script_models import get_generated_assets
 from lib.speech_composition import SpeechAdmission, SpeechAdmissionError, require_script_unit_admitted
 from lib.storyboard_sequence import StoryboardImageUnavailable
 from lib.version_manager import VersionManager
+from lib.video_dependency import dependency_source_unit_id
 from server.services.cost_estimation import quote_video_request
 from server.services.narration_delivery_tasks import (
     active_tts_resource_ids,
@@ -957,6 +958,15 @@ def build_storyboard_video_specs(
             continue
         specs.append(spec)
         order_map[item_id] = idx
+    if content_mode == "drama":
+        target_ids = {spec.resource_id for spec in specs}
+        items_by_id = {str(item.get(id_field) or ""): item for item in items}
+        for spec in specs:
+            source_id = dependency_source_unit_id(items_by_id[spec.resource_id])
+            if source_id in target_ids:
+                spec.dependency_resource_id = source_id
+                spec.dependency_group = f"video-dependency-{script_filename}"
+                spec.dependency_index = order_map[spec.resource_id]
     return specs, order_map, refused
 
 

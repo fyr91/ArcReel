@@ -24,6 +24,7 @@ from lib.config.resolver import (
     constrain_durations,
     get_provider_fallback,
 )
+from lib.content_digest import canonical_json_digest
 from lib.db import async_session_factory
 from lib.db.base import DEFAULT_USER_ID
 from lib.generation_queue import (
@@ -93,6 +94,7 @@ from server.services.video_artifact_currency import (
     freeze_video_speech_facts,
 )
 from server.services.video_caps import project_video_caps
+from server.services.video_dependency_tasks import resolve_video_continuation_guide
 
 logger = logging.getLogger(__name__)
 
@@ -389,6 +391,34 @@ async def execute_reference_video_task(
             script=script,
             script_filename=script_file,
         )
+    continuation_guide, dependency_evidence = await resolve_video_continuation_guide(
+        project_path=project_path,
+        unit=unit,
+        resource_type="reference_videos",
+        user_id=user_id,
+    )
+
+    async def _assert_dependency_unchanged() -> None:
+        current_script = await asyncio.to_thread(get_project_manager().load_script, project_name, script_file)
+        current_unit = next(
+            (
+                candidate
+                for candidate in current_script.get("video_units") or []
+                if isinstance(candidate, dict) and candidate.get("unit_id") == resource_id
+            ),
+            None,
+        )
+        if current_unit is None:
+            raise ValueError(f"video dependency unit disappeared before submission: {resource_id}")
+        latest_guide, latest_evidence = await resolve_video_continuation_guide(
+            project_path=project_path,
+            unit=current_unit,
+            resource_type="reference_videos",
+            user_id=user_id,
+        )
+        if latest_guide != continuation_guide or latest_evidence != dependency_evidence:
+            raise ValueError(f"video dependency changed before submission: {resource_id}")
+
     from server.services.reference_storyboard_sheet_tasks import (
         require_formal_keyframes,
         require_generated_keyframes,
@@ -526,12 +556,17 @@ async def execute_reference_video_task(
         raise RuntimeError("allowed reference request is missing provider capabilities")
 
     def _current_visual_basis_digest() -> str:
-        return reference_video_visual_basis_digest(
+        digest = reference_video_visual_basis_digest(
             project=project,
             project_path=project_path,
             unit=unit,
             request_assets=constrained_entries,
             candidate=candidate,
+        )
+        return (
+            canonical_json_digest({"visual_basis_digest": digest, "video_dependency": dependency_evidence})
+            if dependency_evidence is not None
+            else digest
         )
 
     visual_basis_digest = await asyncio.to_thread(_current_visual_basis_digest)
@@ -762,6 +797,10 @@ async def execute_reference_video_task(
                 reference_audio_targets=reference_audio_targets,
                 candidate=candidate,
             )
+            if dependency_evidence is not None:
+                visual_basis_digest = canonical_json_digest(
+                    {"visual_basis_digest": visual_basis_digest, "video_dependency": dependency_evidence}
+                )
             staged_request_assets = tuple(
                 replace(entry, path=path) for entry, path in zip(constrained_entries, provider_refs, strict=True)
             )
@@ -771,6 +810,7 @@ async def execute_reference_video_task(
                     request_assets=staged_request_assets,
                     style=project.get("style"),
                     aspect_ratio=aspect_ratio,
+                    video_dependency=dependency_evidence,
                 )
             )
             artifact_speech = await asyncio.to_thread(
@@ -826,6 +866,7 @@ async def execute_reference_video_task(
 
             async def _checkpoint_before_submit(api_call_id: int) -> Mapping[str, object]:
                 await _note_selected_unit_change()
+                await _assert_dependency_unchanged()
                 await asyncio.to_thread(
                     assert_current_artifact_input_claims_usable,
                     project_path,
@@ -863,6 +904,7 @@ async def execute_reference_video_task(
     )
     try:
         await _note_selected_unit_change()
+        await _assert_dependency_unchanged()
         await asyncio.to_thread(
             assert_current_artifact_input_claims_usable,
             project_path,
@@ -877,6 +919,7 @@ async def execute_reference_video_task(
             reference_images=provider_refs,
             reference_audio_files=provider_audio,
             reference_audio_targets=reference_audio_targets,
+            continuation_guide=continuation_guide,
             aspect_ratio=aspect_ratio,
             duration_seconds=effective_duration,
             resolution=resolution,

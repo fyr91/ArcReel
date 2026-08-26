@@ -9,6 +9,7 @@ from typing import Any
 from PIL import Image, ImageOps
 
 from lib.path_safety import safe_join
+from lib.video_dependency import derive_course_video_dependencies
 
 COURSE_UNIT_TYPES = frozenset({"opening", "story", "explanation", "closing"})
 COURSE_CHARACTER_ROLES = frozenset({"actor", "main_lecturer", "guest_lecturer"})
@@ -17,32 +18,9 @@ COURSE_ROLE_FIELD = "course_role"
 
 
 def derive_course_dependencies(units: Sequence[Mapping[str, Any]]) -> list[dict[str, Any]]:
-    """Return units with explanation dependencies recomputed from canonical order.
+    """Compatibility name for the canonical course dependency derivation."""
 
-    A story starts a new chain. The first explanation depends on that story and
-    every consecutive explanation depends on the previous explanation.
-    """
-
-    result: list[dict[str, Any]] = []
-    chain_tail: str | None = None
-    story_seen = False
-    for raw in units:
-        unit = dict(raw)
-        unit_type = unit.get("unit_type", "story")
-        unit_id = str(unit.get("unit_id") or "")
-        if unit_type == "story":
-            story_seen = True
-            chain_tail = unit_id
-            unit["depends_on_unit_id"] = None
-        elif unit_type == "explanation":
-            if not story_seen or not chain_tail:
-                raise ValueError(f"explanation unit {unit_id or '<missing>'} must follow a story unit")
-            unit["depends_on_unit_id"] = chain_tail
-            chain_tail = unit_id
-        else:
-            unit["depends_on_unit_id"] = None
-        result.append(unit)
-    return result
+    return derive_course_video_dependencies(units)
 
 
 def validate_course_assets(project: Mapping[str, Any]) -> None:

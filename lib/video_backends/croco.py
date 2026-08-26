@@ -3,13 +3,14 @@
 走 Croco 统一任务协议：POST /api/v2/jobs（video.generate）→ 轮询到终态 → 下载 video 产物。
 H3 V2 合同用 quality 同时表达画幅与清晰度：ArcReel 对外的 resolution + aspect_ratio
 会在提交前转为中枢的 profile token。T2V / I2V（首帧）/ R2V（参考图 ≤9 +
-参考音频 ≤3）三条路径共用统一任务信封，仅 mode 与 inputs 不同。
+参考音频 ≤3）三条路径共用统一任务信封；Guided 续接在 T2V/R2V 参数上叠加 ``add_guide``。
 """
 
 from __future__ import annotations
 
 import asyncio
 import logging
+import time
 from pathlib import Path
 
 from lib.croco_shared import CrocoClient
@@ -117,6 +118,7 @@ class CrocoVideoBackend(ProviderJobIdPersistenceMixin):
             reference_audio_mode=ReferenceAudioMode.DIRECT,
             max_reference_audio_count=3,
             max_prompt_chars=20000,
+            guided_continuation=True,
         )
 
     @property
@@ -124,6 +126,8 @@ class CrocoVideoBackend(ProviderJobIdPersistenceMixin):
         return self.video_capabilities_for_model(self._model)
 
     async def generate(self, request: VideoGenerationRequest) -> VideoGenerationResult:
+        if request.continuation_guide is not None:
+            await self._wait_for_guide_source(request.continuation_guide.source_job_id)
         mode, inputs = await self._build_mode_and_inputs(request)
 
         parameters = {
@@ -132,6 +136,16 @@ class CrocoVideoBackend(ProviderJobIdPersistenceMixin):
             "quality": _resolve_quality(request.resolution, request.aspect_ratio),
             "duration_seconds": request.duration_seconds,
         }
+        if request.continuation_guide is not None:
+            guide = request.continuation_guide
+            if mode == "i2v":
+                raise VideoCapabilityError("video_guided_continuation_mode_unsupported", model=self._model)
+            parameters["add_guide"] = {
+                "source_job_id": guide.source_job_id,
+                "guide_frames": guide.guide_frames,
+                "include_guide_audio": guide.include_guide_audio,
+                "source_media": guide.source_media,
+            }
         job = await self._client.submit_job(
             model_id=self._model,
             operation=_OPERATION,
@@ -149,6 +163,37 @@ class CrocoVideoBackend(ProviderJobIdPersistenceMixin):
         )
 
         return await self._poll_and_download(job_id, request)
+
+    async def _wait_for_guide_source(self, source_job_id: str, *, max_wait_seconds: float = 120.0) -> None:
+        """Wait until H3 exposes a verified archived GPU-original source video."""
+
+        started = time.monotonic()
+        while True:
+            outputs = await self._client.list_outputs(source_job_id)
+            video = next(
+                (item for item in outputs.get("items", []) if item.get("output_id") == "video"),
+                None,
+            )
+            if isinstance(video, dict):
+                metadata = video.get("metadata") if isinstance(video.get("metadata"), dict) else {}
+                archive_state = video.get("archive_state", metadata.get("archive_state"))
+                origin = video.get("origin", metadata.get("origin"))
+                origin_verified = video.get("origin_verified", metadata.get("origin_verified"))
+                if archive_state == "ready" and origin == "gpu_original" and origin_verified is True:
+                    return
+                if archive_state in {"failed", "unavailable"} or (origin is not None and origin != "gpu_original"):
+                    raise VideoCapabilityError(
+                        "video_guided_source_unavailable",
+                        source_job_id=source_job_id,
+                        reason=f"archive_state={archive_state}, origin={origin}, verified={origin_verified}",
+                    )
+            if time.monotonic() - started >= max_wait_seconds:
+                raise VideoCapabilityError(
+                    "video_guided_source_unavailable",
+                    source_job_id=source_job_id,
+                    reason="archive not ready before timeout",
+                )
+            await asyncio.sleep(2.0)
 
     async def resume_video(self, job_id: str, request: VideoGenerationRequest) -> VideoGenerationResult:
         return await self._poll_and_download(job_id, request)
