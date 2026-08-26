@@ -7,10 +7,13 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
+from lib.builtin_styles import sync_builtin_styles
 from lib.db.base import Base
 from lib.project_manager import ProjectManager
+from server.agent_runtime.sdk_tools import global_assets as global_assets_tool_module
 from server.agent_runtime.sdk_tools import update_custom_style as update_custom_style_tool_module
 from server.agent_runtime.sdk_tools._context import ToolContext
+from server.agent_runtime.sdk_tools.global_assets import list_global_assets_tool
 from server.agent_runtime.sdk_tools.update_custom_style import update_custom_style_tool
 from server.auth import CurrentUserInfo, get_current_user
 from server.error_handlers import register_error_handlers
@@ -58,6 +61,64 @@ def _set_source_style(manager: ProjectManager, description: str, *, with_image: 
 
 
 class TestCustomStylesRouter:
+    @pytest.mark.unit
+    async def test_builtin_styles_are_listed_read_only_and_project_changes_fork_them(
+        self,
+        _styles_env,
+        monkeypatch,
+    ):
+        client = _styles_env["client"]
+        manager = _styles_env["manager"]
+        factory = _styles_env["session_factory"]
+        async with factory() as session:
+            await sync_builtin_styles(session, manager.projects_root)
+
+        listed = client.get("/api/v1/styles")
+        assert listed.status_code == 200
+        builtins = listed.json()["items"][:2]
+        assert [item["name"] for item in builtins] == ["子柒田园风", "3D动画风格"]
+        assert all(item["builtin"] is True for item in builtins)
+
+        builtin = builtins[0]
+        rejected = client.patch(
+            f"/api/v1/styles/{builtin['id']}",
+            data={"name": builtin["name"], "description": "changed", "remove_image": "false"},
+        )
+        assert rejected.status_code == 403
+
+        applied = client.post(
+            f"/api/v1/styles/{builtin['id']}/apply",
+            json={"project_name": "source"},
+        )
+        assert applied.status_code == 200
+
+        def _customize(project: dict) -> None:
+            project["style_description"] = "project-specific variation"
+
+        manager.update_project("source", _customize)
+        forked = client.post("/api/v1/styles/from-project", json={"project_name": "source"})
+        assert forked.status_code == 200
+        assert forked.json()["style"]["id"] != builtin["id"]
+        assert forked.json()["style"]["builtin"] is False
+        assert forked.json()["style"]["description"] == "project-specific variation"
+
+        monkeypatch.setattr(global_assets_tool_module, "async_session_factory", factory)
+        ctx = ToolContext(project_name="source", projects_root=manager.projects_root, pm=manager)
+        agent_result = await list_global_assets_tool(ctx).handler({})
+        payload = agent_result["content"][0]["text"]
+        assert '"name": "子柒田园风"' in payload
+        assert '"builtin": true' in payload
+
+        monkeypatch.setattr(update_custom_style_tool_module, "async_session_factory", factory)
+        agent_edit = await update_custom_style_tool(ctx).handler(
+            {
+                "style_id": builtin["id"],
+                "name": builtin["name"],
+                "description": "agent change",
+            }
+        )
+        assert agent_edit.get("is_error") is True
+
     @pytest.mark.unit
     def test_save_list_and_apply_style_snapshot(self, _styles_env):
         client = _styles_env["client"]

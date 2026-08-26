@@ -134,6 +134,7 @@ describe("WizardStep3Style", () => {
           description: "soft k-drama light",
           image_path: null,
           source_project: "demo",
+          builtin: false,
           updated_at: null,
         }]}
       />,
@@ -146,6 +147,32 @@ describe("WizardStep3Style", () => {
     }));
   });
 
+  it("marks built-in custom styles and does not expose the edit action", () => {
+    const onChange = vi.fn();
+    const value = { ...baseValue, mode: "custom" as const, templateId: null };
+    render(
+      <WizardStep3Style
+        value={value}
+        onChange={onChange}
+        {...commonProps}
+        customStyles={[{
+          id: "builtin-style",
+          name: "3D动画风格",
+          description: "cinematic 3D animation",
+          image_path: "_global_assets/style/builtin/3d-animation.png",
+          source_project: null,
+          updated_at: null,
+          builtin: true,
+        }]}
+      />,
+    );
+
+    expect(screen.getByText(/内置|Built-in/i)).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /编辑3D动画风格|Edit 3D动画风格/i })).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "3D动画风格" }));
+    expect(onChange).toHaveBeenCalledWith(expect.objectContaining({ customStyleId: "builtin-style" }));
+  });
+
   it("edits a saved custom style without selecting the card", async () => {
     const onChange = vi.fn();
     const onCustomStyleUpdated = vi.fn();
@@ -156,6 +183,7 @@ describe("WizardStep3Style", () => {
       description: "soft k-drama light",
       image_path: null,
       source_project: "demo",
+      builtin: false,
       updated_at: null,
     };
     const updated = { ...style, name: "暖调纪实", description: "warm documentary light" };

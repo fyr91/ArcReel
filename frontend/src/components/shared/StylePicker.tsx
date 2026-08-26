@@ -46,8 +46,7 @@ interface TemplateCardProps {
   label: string;
   tagline: string;
   isSelected: boolean;
-  isDefault: boolean;
-  defaultLabel: string;
+  badgeLabel?: string;
   onClick: () => void;
   editLabel?: string;
   onEdit?: () => void;
@@ -58,8 +57,7 @@ function TemplateCard({
   label,
   tagline,
   isSelected,
-  isDefault,
-  defaultLabel,
+  badgeLabel,
   onClick,
   editLabel,
   onEdit,
@@ -128,7 +126,7 @@ function TemplateCard({
           </span>
         )}
 
-        {isDefault && (
+        {badgeLabel && (
           <span
             className="absolute left-1.5 top-1.5 rounded-full px-1.5 py-0.5 font-mono text-[8.5px] font-bold uppercase tracking-[0.12em]"
             style={{
@@ -139,7 +137,7 @@ function TemplateCard({
               WebkitBackdropFilter: "blur(6px)",
             }}
           >
-            {defaultLabel}
+            {badgeLabel}
           </span>
         )}
       </button>
@@ -312,11 +310,10 @@ export function StylePicker({
                     label={style.name}
                     tagline={style.description}
                     isSelected={value.customStyleId === style.id}
-                    isDefault={false}
-                    defaultLabel=""
+                    badgeLabel={style.builtin ? t("templates:custom_style_builtin") : undefined}
                     onClick={() => handleSelectSavedStyle(style)}
                     editLabel={t("templates:custom_style_edit_action", { name: style.name })}
-                    onEdit={() => setEditingStyle(style)}
+                    onEdit={style.builtin ? undefined : () => setEditingStyle(style)}
                   />
                 ))}
                 <button
@@ -400,8 +397,9 @@ export function StylePicker({
               label={t(`templates:name.${tpl.id}`)}
               tagline={t(`templates:tagline.${tpl.id}`, "")}
               isSelected={value.templateId === tpl.id}
-              isDefault={tpl.id === DEFAULT_TEMPLATE_ID}
-              defaultLabel={t("templates:template_selected_default")}
+              badgeLabel={tpl.id === DEFAULT_TEMPLATE_ID
+                ? t("templates:template_selected_default")
+                : undefined}
               onClick={() => onChange({ ...value, mode: "template", templateId: tpl.id })}
             />
           ))}

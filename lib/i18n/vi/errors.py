@@ -241,6 +241,7 @@ MESSAGES = {
     "style_library_requires_custom": "Chỉ có thể lưu phong cách tùy chỉnh vào thư viện phong cách",
     "style_library_empty": "Hãy nhập mô tả phong cách hoặc tải lên ảnh tham chiếu phong cách trước",
     "style_library_item_not_found": "Không còn tìm thấy phong cách tùy chỉnh này; hãy làm mới và thử lại",
+    "style_library_builtin_read_only": "Phong cách tùy chỉnh tích hợp chỉ có thể đọc; hãy áp dụng vào dự án rồi lưu thành phong cách tùy chỉnh mới",
     "style_image_required_for_analysis": "Hãy tải ảnh tham chiếu phong cách lên trước khi phân tích",
     "ad_only_field": "{field} chỉ khả dụng cho dự án quảng cáo/video ngắn (content_mode=ad)",
     "ad_no_default_duration": "Dự án quảng cáo/video ngắn không hỗ trợ thời lượng mặc định; thời lượng cảnh quay được lên kế hoạch theo tổng thời lượng mục tiêu",

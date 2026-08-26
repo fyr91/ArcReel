@@ -17,6 +17,7 @@ from fastapi import APIRouter, File, Form, HTTPException, UploadFile
 from pydantic import BaseModel
 
 from lib.api_errors import NotFoundError
+from lib.builtin_styles import builtin_style_order, is_builtin_style_source
 from lib.db import async_session_factory
 from lib.db.repositories.asset_repo import AssetRepository
 from lib.i18n import Translator
@@ -24,6 +25,7 @@ from lib.path_safety import PathTraversalError, safe_join
 from lib.project_change_hints import project_change_source
 from lib.project_manager import get_project_manager
 from server.services.custom_styles import (
+    CustomStyleBuiltinReadOnlyError,
     CustomStyleEmptyError,
     CustomStyleImage,
     CustomStyleImageError,
@@ -47,6 +49,7 @@ def _serialize(style) -> dict:
         "image_path": style.image_path,
         "source_project": style.source_project,
         "updated_at": style.updated_at.isoformat() if style.updated_at else None,
+        "builtin": is_builtin_style_source(style.external_source),
     }
 
 
@@ -87,6 +90,12 @@ async def _unique_style_name(repo: AssetRepository, base: str) -> str:
 async def list_styles(_t: Translator):
     async with async_session_factory() as session:
         items = await AssetRepository(session).list(type=STYLE_ASSET_TYPE, q=None, limit=200, offset=0)
+        items.sort(
+            key=lambda item: (
+                0 if is_builtin_style_source(item.external_source) else 1,
+                builtin_style_order(item.external_id) if is_builtin_style_source(item.external_source) else 0,
+            )
+        )
         return {"items": [_serialize(item) for item in items]}
 
 
@@ -121,6 +130,8 @@ async def edit_style(
         raise HTTPException(status_code=400, detail=_t("asset_invalid_name", name=name)) from exc
     except CustomStyleNotFoundError as exc:
         raise HTTPException(status_code=404, detail=_t("style_library_item_not_found")) from exc
+    except CustomStyleBuiltinReadOnlyError as exc:
+        raise HTTPException(status_code=403, detail=_t("style_library_builtin_read_only")) from exc
     except CustomStyleNameConflictError as exc:
         raise HTTPException(status_code=409, detail=_t("asset_already_exists", name=name.strip())) from exc
     except CustomStyleEmptyError as exc:
@@ -163,7 +174,9 @@ async def save_style_from_project(req: SaveProjectStyleRequest, _t: Translator):
         async with async_session_factory() as session:
             repo = AssetRepository(session)
             existing = await repo.get_by_id(existing_id) if existing_id else None
-            if existing is not None and existing.type != STYLE_ASSET_TYPE:
+            if existing is not None and (
+                existing.type != STYLE_ASSET_TYPE or is_builtin_style_source(existing.external_source)
+            ):
                 existing = None
 
             if existing is not None:

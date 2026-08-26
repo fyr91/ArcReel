@@ -34,6 +34,7 @@ from lib.agent_session_store.import_local import migrate_local_transcripts_to_st
 from lib.agent_session_store.store import DbSessionStore
 from lib.app_data_dir import app_data_dir
 from lib.background_job_worker import BackgroundJobWorker
+from lib.builtin_styles import sync_builtin_styles
 from lib.config.env_keys import PROVIDER_SECRET_KEYS
 from lib.db import async_session_factory, close_db, init_db
 from lib.generation_worker import GenerationWorker
@@ -362,6 +363,14 @@ async def lifespan(app: FastAPI):
     await init_db()
 
     projects_root = app_data_dir()
+
+    try:
+        async with async_session_factory() as session:
+            builtin_style_sync = await sync_builtin_styles(session, projects_root)
+        if any(builtin_style_sync[key] for key in ("added", "promoted", "updated")):
+            logger.info("Builtin custom styles synchronized: %s", builtin_style_sync)
+    except Exception:  # noqa: BLE001 - bundled styles must not make the server unavailable
+        logger.exception("Builtin custom style synchronization failed; server startup continues")
 
     # 源文件编码迁移（幂等；失败不阻塞启动）。先于 schema 迁移跑：源文一律先归到 UTF-8，
     # 之后所有按 UTF-8 读源文的链路（分集规划、派生文件对账）才有统一的输入。

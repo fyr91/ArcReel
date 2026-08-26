@@ -471,6 +471,7 @@ export interface CustomStyle {
   image_path: string | null;
   source_project: string | null;
   updated_at: string | null;
+  builtin: boolean;
 }
 
 function normalizeDiagnosticsBucket(value: unknown): { code: string; message: string; location?: string }[] {

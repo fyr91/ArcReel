@@ -1060,6 +1060,7 @@ describe("API", () => {
         description: "soft light",
         image_path: null,
         source_project: "demo",
+        builtin: false,
         updated_at: null,
       };
       const fetchMock = vi.fn()
@@ -1090,6 +1091,7 @@ describe("API", () => {
         description: "warm documentary light",
         image_path: "_global_assets/style/new.webp",
         source_project: "demo",
+        builtin: false,
         updated_at: "2026-08-23T12:00:00Z",
       };
       const fetchMock = vi.fn().mockResolvedValue(mockResponse({ jsonData: { style } }));

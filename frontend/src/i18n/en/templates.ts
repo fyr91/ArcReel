@@ -126,6 +126,7 @@ export default {
   tab_custom_desc: "Choose a saved custom style, or define a new one with a reference image and editable prompt.",
   custom_styles_saved: "Saved custom styles",
   custom_styles_loading: "Loading saved styles…",
+  custom_style_builtin: "Built-in",
   custom_style_new: "Define new style",
   custom_style_new_hint: "Upload an image or enter a prompt",
   custom_style_selected_hint: "This saved style will be copied into the project as an independent snapshot.",

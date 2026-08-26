@@ -243,6 +243,7 @@ MESSAGES = {
     "style_library_requires_custom": "Only custom styles can be saved to the style library",
     "style_library_empty": "Enter a style description or upload a style reference image first",
     "style_library_item_not_found": "This custom style no longer exists; refresh and try again",
+    "style_library_builtin_read_only": "Built-in custom styles are read-only; apply one to a project and save it as a new custom style",
     "style_image_required_for_analysis": "Upload a style reference image before analyzing it",
     "ad_only_field": "{field} is only available for ad/short-video projects (content_mode=ad)",
     "ad_no_default_duration": "Ad/short-video projects do not support a default duration; shot lengths are planned against the target duration",

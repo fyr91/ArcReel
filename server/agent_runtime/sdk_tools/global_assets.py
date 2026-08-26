@@ -7,6 +7,7 @@ from typing import Any
 
 from claude_agent_sdk import tool
 
+from lib.builtin_styles import is_builtin_style_source
 from lib.db import async_session_factory
 from lib.db.repositories.asset_repo import AssetRepository
 from server.agent_runtime.sdk_tools._context import ToolContext, tool_error
@@ -47,6 +48,7 @@ def list_global_assets_tool(ctx: ToolContext):
                         "image_path": asset.image_path,
                         "audio_path": asset.audio_path,
                         "voice_id": asset.voice_id,
+                        "builtin": is_builtin_style_source(asset.external_source),
                     }
                 )
             return {

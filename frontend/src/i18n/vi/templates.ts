@@ -129,6 +129,7 @@ export default {
   tab_custom_desc: "Chọn một phong cách tùy chỉnh đã lưu hoặc định nghĩa phong cách mới bằng ảnh tham chiếu và lời nhắc có thể chỉnh sửa.",
   custom_styles_saved: "Phong cách tùy chỉnh đã lưu",
   custom_styles_loading: "Đang tải phong cách đã lưu…",
+  custom_style_builtin: "Tích hợp",
   custom_style_new: "Định nghĩa phong cách mới",
   custom_style_new_hint: "Tải ảnh lên hoặc nhập lời nhắc",
   custom_style_selected_hint: "Phong cách đã lưu này sẽ được sao chép vào dự án dưới dạng ảnh chụp độc lập.",

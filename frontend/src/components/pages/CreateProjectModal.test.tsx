@@ -99,6 +99,7 @@ describe("CreateProjectModal", () => {
         description: "soft light, muted palette",
         image_path: null,
         source_project: "demo-proj",
+        builtin: false,
         updated_at: null,
       },
       project: {} as never,
@@ -110,6 +111,7 @@ describe("CreateProjectModal", () => {
         description: "soft k-drama light",
         image_path: "_global_assets/style/kdrama.png",
         source_project: "old-project",
+        builtin: false,
         updated_at: null,
       },
       project: {} as never,
@@ -321,6 +323,7 @@ describe("CreateProjectModal", () => {
         description: "soft k-drama light",
         image_path: "_global_assets/style/kdrama.png",
         source_project: "old-project",
+        builtin: false,
         updated_at: null,
       }],
     });

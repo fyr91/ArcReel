@@ -18,7 +18,8 @@ def update_custom_style_tool(ctx: ToolContext):
     @tool(
         "update_custom_style",
         "编辑全局自定义风格卡片的名称、提示词和参考图。已有项目保存的是独立快照，编辑风格库不会反向修改项目；"
-        "use_current_project_image=true 时用当前项目的风格参考图替换卡片图片。先调用 list_global_assets 获取 style_id。",
+        "内置自定义风格不可编辑；use_current_project_image=true 时用当前项目的风格参考图替换卡片图片。"
+        "先调用 list_global_assets 获取 style_id 和 builtin 状态。",
         {
             "type": "object",
             "properties": {

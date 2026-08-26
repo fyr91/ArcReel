@@ -84,6 +84,7 @@ describe("ProjectSettingsPage – style picker", () => {
         description: "soft pastel",
         image_path: null,
         source_project: "demo",
+        builtin: false,
         updated_at: null,
       },
       project: {} as never,
@@ -95,6 +96,7 @@ describe("ProjectSettingsPage – style picker", () => {
         description: "soft k-drama light",
         image_path: null,
         source_project: "old-project",
+        builtin: false,
         updated_at: null,
       },
       project: {} as never,
@@ -328,6 +330,7 @@ describe("ProjectSettingsPage – style picker", () => {
         description: "soft k-drama light",
         image_path: null,
         source_project: "old-project",
+        builtin: false,
         updated_at: null,
       }],
     });
@@ -361,6 +364,7 @@ describe("ProjectSettingsPage – style picker", () => {
       description: "library prompt",
       image_path: null,
       source_project: "old-project",
+      builtin: false,
       updated_at: null,
     };
     vi.mocked(API.listCustomStyles).mockResolvedValueOnce({ items: [savedStyle] });

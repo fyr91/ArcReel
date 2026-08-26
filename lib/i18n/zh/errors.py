@@ -220,6 +220,7 @@ MESSAGES = {
     "style_library_requires_custom": "只有自定义风格可以保存到风格库",
     "style_library_empty": "请先填写风格描述或上传风格参考图",
     "style_library_item_not_found": "找不到该自定义风格，请刷新后重试",
+    "style_library_builtin_read_only": "内置自定义风格不可编辑；请先应用到项目，再另存为新的自定义风格",
     "style_image_required_for_analysis": "请先上传风格参考图再进行解析",
     "ad_only_field": "{field} 仅广告/短片项目（content_mode=ad）可用",
     "ad_no_default_duration": "广告/短片项目不支持默认时长，镜头时长按目标总时长规划",

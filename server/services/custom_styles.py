@@ -12,6 +12,7 @@ from typing import Any, Literal
 from sqlalchemy.exc import IntegrityError
 
 from lib.asset_types import validate_asset_name
+from lib.builtin_styles import is_builtin_style_source
 from lib.db.repositories.asset_repo import AssetRepository
 from lib.path_safety import PathTraversalError, safe_join
 
@@ -36,6 +37,11 @@ class CustomStyleEmptyError(CustomStyleEditError):
     pass
 
 
+class CustomStyleBuiltinReadOnlyError(CustomStyleEditError):
+    def __init__(self, style_id: str):
+        super().__init__(f"built-in custom style is read-only: {style_id}")
+
+
 class CustomStyleImageError(CustomStyleEditError):
     def __init__(self, reason: Literal["format", "size"]):
         super().__init__(reason)
@@ -56,8 +62,9 @@ class CustomStyleRecord:
     image_path: str | None
     source_project: str | None
     updated_at: datetime | None
+    builtin: bool
 
-    def serialize(self) -> dict[str, str | None]:
+    def serialize(self) -> dict[str, str | bool | None]:
         return {
             "id": self.id,
             "name": self.name,
@@ -65,6 +72,7 @@ class CustomStyleRecord:
             "image_path": self.image_path,
             "source_project": self.source_project,
             "updated_at": self.updated_at.isoformat() if self.updated_at else None,
+            "builtin": self.builtin,
         }
 
 
@@ -76,6 +84,7 @@ def _record(style: Any) -> CustomStyleRecord:
         image_path=style.image_path,
         source_project=style.source_project,
         updated_at=style.updated_at,
+        builtin=is_builtin_style_source(style.external_source),
     )
 
 
@@ -131,6 +140,8 @@ async def update_custom_style(
             style = await repo.get_by_id(style_id)
             if style is None or style.type != STYLE_ASSET_TYPE:
                 raise CustomStyleNotFoundError(style_id)
+            if is_builtin_style_source(style.external_source):
+                raise CustomStyleBuiltinReadOnlyError(style_id)
 
             if normalized_name != style.name and await repo.exists(STYLE_ASSET_TYPE, normalized_name):
                 raise CustomStyleNameConflictError(normalized_name)
@@ -170,6 +181,7 @@ __all__ = [
     "MAX_STYLE_IMAGE_BYTES",
     "STYLE_ASSET_TYPE",
     "CustomStyleEditError",
+    "CustomStyleBuiltinReadOnlyError",
     "CustomStyleEmptyError",
     "CustomStyleImage",
     "CustomStyleImageError",

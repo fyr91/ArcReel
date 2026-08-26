@@ -129,6 +129,7 @@ export default {
   tab_custom_desc: "可以选择已经保存的自定义风格，也可以通过参考图和可编辑提示词定义一个新风格。",
   custom_styles_saved: "已保存的自定义风格",
   custom_styles_loading: "正在加载已保存风格…",
+  custom_style_builtin: "内置",
   custom_style_new: "定义新风格",
   custom_style_new_hint: "上传图片或直接输入提示词",
   custom_style_selected_hint: "该风格会以独立快照复制到当前项目，之后修改风格库不会影响本项目。",
