@@ -240,7 +240,6 @@ def compute_source_revision(
     canonical_fingerprints = sorted(reads, key=lambda item: item[0].rel_path)
     payload = {
         "files": [{"path": read.rel_path, "sha256": digest} for read, digest in canonical_fingerprints],
-        "source_kind": project.get("source_kind", "novel"),
         "source_language": project.get("source_language"),
     }
     revision = prefixed_canonical_json_digest(payload)

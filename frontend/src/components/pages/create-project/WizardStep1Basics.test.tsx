@@ -5,8 +5,7 @@ import { WizardStep1Basics } from "./WizardStep1Basics";
 
 const baseValue = {
   title: "",
-  contentMode: "narration" as const,
-  sourceKind: "novel" as const,
+  contentMode: "drama" as const,
   aspectRatio: "9:16" as const,
   generationRoute: "storyboard" as const,
   gridStoryboard: false,
@@ -64,13 +63,13 @@ describe("WizardStep1Basics", () => {
         onCancel={() => {}}
       />,
     );
-    fireEvent.click(screen.getByText(/剧情演绎|Drama/));
+    fireEvent.click(screen.getByRole("radio", { name: /课程视频|Course Video/ }));
     expect(onChange).toHaveBeenCalledWith(
-      expect.objectContaining({ contentMode: "drama" }),
+      expect.objectContaining({ contentMode: "course", generationRoute: "reference_video" }),
     );
   });
 
-  it("hides the source-kind selector outside drama mode", () => {
+  it("does not render a source-kind selector", () => {
     render(
       <WizardStep1Basics
         value={baseValue}
@@ -82,36 +81,16 @@ describe("WizardStep1Basics", () => {
     expect(screen.queryByRole("radiogroup", { name: /源文件性质|Source type|Loại tệp nguồn/ })).toBeNull();
   });
 
-  it("emits onChange with screenplay when source kind selected in drama mode", () => {
-    const onChange = vi.fn();
+  it("keeps source-kind absent in drama mode", () => {
     render(
       <WizardStep1Basics
         value={{ ...baseValue, contentMode: "drama" }}
-        onChange={onChange}
-        onNext={() => {}}
-        onCancel={() => {}}
-      />,
-    );
-    const group = screen.getByRole("radiogroup", { name: /源文件性质|Source type|Loại tệp nguồn/ });
-    fireEvent.click(within(group).getByText(/剧本|Screenplay|Kịch bản/));
-    expect(onChange).toHaveBeenCalledWith(
-      expect.objectContaining({ sourceKind: "screenplay" }),
-    );
-  });
-
-  it("renders screenplay first and keeps it selected when drama uses the default source kind", () => {
-    render(
-      <WizardStep1Basics
-        value={{ ...baseValue, contentMode: "drama", sourceKind: "screenplay" }}
         onChange={() => {}}
         onNext={() => {}}
         onCancel={() => {}}
       />,
     );
-    const group = screen.getByRole("radiogroup", { name: /源文件性质|Source type|Loại tệp nguồn/ });
-    const radios = within(group).getAllByRole("radio");
-    expect(radios.map((radio) => radio.getAttribute("value"))).toEqual(["screenplay", "novel"]);
-    expect(radios[0]).toBeChecked();
+    expect(screen.queryByRole("radiogroup", { name: /源文件性质|Source type|Loại tệp nguồn/ })).toBeNull();
   });
 
   it("emits onChange when aspect ratio changes", () => {
@@ -157,11 +136,11 @@ describe("WizardStep1Basics", () => {
     }
   });
 
-  it("keeps the storyboard route disabled", () => {
+  it("keeps the storyboard route disabled for course", () => {
     const onChange = vi.fn();
     render(
       <WizardStep1Basics
-        value={{ ...baseValue, generationRoute: null }}
+        value={{ ...baseValue, contentMode: "course", generationRoute: "reference_video" }}
         onChange={onChange}
         onNext={() => {}}
         onCancel={() => {}}
@@ -379,9 +358,9 @@ describe("WizardStep1Basics", () => {
         onCancel={() => {}}
       />,
     );
-    expect(screen.getByText(/旁白\/解说/)).toBeInTheDocument();
-    expect(screen.getByText(/剧情演绎/)).toBeInTheDocument();
-    expect(screen.getByText(/广告\/短片/)).toBeInTheDocument();
+    expect(screen.getByRole("radio", { name: /剧情演绎/ })).toBeInTheDocument();
+    expect(screen.getByRole("radio", { name: /课程视频/ })).toBeInTheDocument();
+    expect(screen.getByRole("radio", { name: /广告\/短片/ })).toBeInTheDocument();
   });
 
   it("renders generation route labels with product language", () => {
@@ -400,7 +379,7 @@ describe("WizardStep1Basics", () => {
       "storyboard",
     ]);
     expect(radios[0]).toBeEnabled();
-    expect(radios[1]).toBeDisabled();
+    expect(radios[1]).toBeEnabled();
   });
 
   it("renders the multi-grid storyboard toggle with product language", () => {

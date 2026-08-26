@@ -1155,7 +1155,7 @@ class WorkflowStateService:
         mode = project.get("content_mode")
         generation_mode = project.get("generation_mode")
         blockers: list[WorkflowBlocker] = []
-        if not isinstance(mode, str) or mode not in {"narration", "drama", "ad"}:
+        if not isinstance(mode, str) or mode not in {"drama", "course", "ad"}:
             blockers.append(
                 WorkflowBlocker(code="invalid_content_mode", path="content_mode", reason="unsupported mode")
             )
@@ -1285,11 +1285,14 @@ class WorkflowStateService:
                             reason="script_file must resolve to a bare filename under scripts/",
                         )
                     )
+                source_file = entry.get("source_file") if mode == "course" else None
                 target = WorkflowTarget(
                     episode=number,
                     script=script_path,
                     script_filename=script_filename,
-                    source=f"source/episode_{number}.txt",
+                    source=(
+                        source_file if isinstance(source_file, str) and source_file else f"source/episode_{number}.txt"
+                    ),
                 )
 
         state: WorkflowStateName
@@ -1320,21 +1323,21 @@ class WorkflowStateService:
                 "asset definitions need sheets before episode planning",
                 ids=missing_sheets,
             )
-        elif mode != "ad" and _planning_fingerprints_diverged(project, shared.planning_sources):
+        elif mode not in {"ad", "course"} and _planning_fingerprints_diverged(project, shared.planning_sources):
             state = "EPISODE_PLAN"
             next_action = _action(
                 WorkflowActionType.RESET_EPISODE_PLANNING,
                 "source files changed after episode planning",
                 args={"from_episode": 1},
             )
-        elif mode != "ad" and _new_source_precedes_cursor(project, shared.planning_sources):
+        elif mode not in {"ad", "course"} and _new_source_precedes_cursor(project, shared.planning_sources):
             state = "EPISODE_PLAN"
             next_action = _action(
                 WorkflowActionType.RESET_EPISODE_PLANNING,
                 "new source text precedes the current planning cursor",
                 args={"from_episode": 1},
             )
-        elif mode != "ad" and selected is None:
+        elif mode not in {"ad", "course"} and selected is None:
             state = "EPISODE_PLAN"
             if episode is not None and shared.planning_complete:
                 blockers.append(
@@ -1570,8 +1573,7 @@ class WorkflowStateService:
                         elif replan_ids := [
                             str(item.get(SKELETONS[kind].id_field))
                             for item in items
-                            if kind == "video_units"
-                            and video_unit_replan_problems(item, content_mode=mode)
+                            if kind == "video_units" and video_unit_replan_problems(item, content_mode=mode)
                         ]:
                             state = "VIDEO"
                             next_action = _action(
@@ -1589,7 +1591,7 @@ class WorkflowStateService:
                                 args={"episode": target.episode},
                                 ids=missing,
                             )
-                        elif episode is None and mode != "ad":
+                        elif episode is None and mode not in {"ad", "course"}:
                             later_status = next(
                                 (
                                     status
@@ -1613,6 +1615,26 @@ class WorkflowStateService:
                             else:
                                 state = "EXPORT_READY"
                                 next_action = _action(WorkflowActionType.EXPORT, "all required artifacts are usable")
+                        elif episode is None and mode == "course":
+                            later_status = next(
+                                (
+                                    status
+                                    for number, _entry in episodes
+                                    if number != target.episode
+                                    and (
+                                        status := self._get_status(project_name, project, project_path, number, shared)
+                                    ).state
+                                    != "EXPORT_READY"
+                                ),
+                                None,
+                            )
+                            if later_status is not None:
+                                return later_status
+                            state = "EXPORT_READY"
+                            next_action = _action(
+                                WorkflowActionType.EXPORT,
+                                "all uploaded course episodes are usable",
+                            )
                         else:
                             state = "EXPORT_READY"
                             next_action = _action(WorkflowActionType.EXPORT, "all required artifacts are usable")

@@ -316,8 +316,8 @@ export function OverviewCanvas({
                 letterSpacing: "1.4px",
               }}
             >
-              {projectData.content_mode === "narration"
-                ? t("narration_visuals_mode")
+              {projectData.content_mode === "course"
+                ? t("course_video_mode")
                 : projectData.content_mode === "ad"
                   ? t("ad_short_video_mode")
                   : t("drama_animation_mode")}

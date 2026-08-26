@@ -84,7 +84,7 @@ class _FakePM:
                 "scenes": [{"scene_id": "001", "duration_seconds": 8}],
             },
             ("ready", "narration.json"): {
-                "content_mode": "narration",
+                "content_mode": "drama",
                 "segments": [{"segment_id": "E1S01", "duration_seconds": 4}],
             },
         }
@@ -148,7 +148,7 @@ class _FakePM:
         self.profile_reset_calls.append(project_dir.name)
         return {"repaired": 2, "errors": 0}
 
-    def create_project(self, name, content_mode="narration"):
+    def create_project(self, name, content_mode="drama"):
         if not name or not re.fullmatch(r"[A-Za-z0-9-]+", name):
             raise ValueError("项目标识仅允许英文字母、数字和中划线")
         if name == "exists":
@@ -171,13 +171,11 @@ class _FakePM:
         extras=None,
         target_duration=None,
         brief=None,
-        source_kind=None,
     ):
         payload = {
             "title": (title or name),
             "style": style or "",
             "content_mode": content_mode,
-            "source_kind": source_kind or "novel",
             "aspect_ratio": aspect_ratio,
             "episodes": [],
         }
@@ -632,7 +630,7 @@ class TestProjectsRouter:
 
             create_ok = client.post(
                 "/api/v1/projects",
-                json={"generation_mode": "storyboard", "title": "New", "style": "Real", "content_mode": "narration"},
+                json={"generation_mode": "storyboard", "title": "New", "style": "Real", "content_mode": "drama"},
             )
             assert create_ok.status_code == 200
             assert create_ok.json()["name"] == "project-aa11bb22"
@@ -644,7 +642,7 @@ class TestProjectsRouter:
                     "generation_mode": "storyboard",
                     "name": "manual-project",
                     "style": "Anime",
-                    "content_mode": "narration",
+                    "content_mode": "drama",
                 },
             )
             assert create_manual_name.status_code == 200
@@ -658,7 +656,7 @@ class TestProjectsRouter:
                     "name": "exists",
                     "title": "Dup",
                     "style": "",
-                    "content_mode": "narration",
+                    "content_mode": "drama",
                 },
             )
             assert create_exists.status_code == 400
@@ -670,14 +668,14 @@ class TestProjectsRouter:
                     "name": "bad_name",
                     "title": "Bad",
                     "style": "",
-                    "content_mode": "narration",
+                    "content_mode": "drama",
                 },
             )
             assert create_invalid.status_code == 400
 
             create_missing_title = client.post(
                 "/api/v1/projects",
-                json={"generation_mode": "storyboard", "style": "", "content_mode": "narration"},
+                json={"generation_mode": "storyboard", "style": "", "content_mode": "drama"},
             )
             assert create_missing_title.status_code == 400
 
@@ -685,52 +683,78 @@ class TestProjectsRouter:
             assert delete_ok.status_code == 200
 
     @pytest.mark.unit
-    def test_create_persists_source_kind_and_defaults_novel(self, tmp_path, monkeypatch):
+    def test_create_uses_screenplay_semantics_without_source_kind(self, tmp_path, monkeypatch):
         client = _client(monkeypatch, _FakePM(tmp_path))
         with client:
-            # 显式 screenplay 持久化于 project.json 顶层
-            screenplay = client.post(
+            created = client.post(
                 "/api/v1/projects",
                 json={
                     "generation_mode": "storyboard",
                     "name": "scr",
                     "title": "剧本项目",
                     "content_mode": "drama",
-                    "source_kind": "screenplay",
                 },
             )
-            assert screenplay.status_code == 200
-            assert screenplay.json()["project"]["source_kind"] == "screenplay"
+            assert created.status_code == 200
+            assert "source_kind" not in created.json()["project"]
 
-            # 缺省 source_kind 落 novel
-            default_novel = client.post(
-                "/api/v1/projects",
-                json={"generation_mode": "storyboard", "name": "nov", "title": "默认项目", "content_mode": "drama"},
-            )
-            assert default_novel.status_code == 200
-            assert default_novel.json()["project"]["source_kind"] == "novel"
-
-            # 非法值被 Pydantic 拒（422，不是 500）
-            invalid = client.post(
+            retired_dimension = client.post(
                 "/api/v1/projects",
                 json={
                     "generation_mode": "storyboard",
-                    "name": "bad",
-                    "title": "X",
+                    "name": "old-source-kind",
+                    "title": "旧输入",
                     "content_mode": "drama",
-                    "source_kind": "screen_play",
+                    "source_kind": "screenplay",
                 },
             )
-            assert invalid.status_code == 422
+            assert retired_dimension.status_code == 422
 
     @pytest.mark.unit
-    def test_source_kind_silently_ignored_on_patch(self, tmp_path, monkeypatch):
+    def test_course_creation_is_reference_video_only_and_narration_is_retired(self, tmp_path, monkeypatch):
+        client = _client(monkeypatch, _FakePM(tmp_path))
+        with client:
+            wrong_route = client.post(
+                "/api/v1/projects",
+                json={
+                    "name": "course-storyboard",
+                    "title": "课程",
+                    "content_mode": "course",
+                    "generation_mode": "storyboard",
+                },
+            )
+            assert wrong_route.status_code == 400
+
+            created = client.post(
+                "/api/v1/projects",
+                json={
+                    "name": "course-reference",
+                    "title": "课程",
+                    "content_mode": "course",
+                    "generation_mode": "reference_video",
+                },
+            )
+            assert created.status_code == 200, created.text
+            assert created.json()["project"]["content_mode"] == "course"
+
+            retired = client.post(
+                "/api/v1/projects",
+                json={
+                    "name": "old-narration",
+                    "title": "旧模式",
+                    "content_mode": "narration",
+                    "generation_mode": "storyboard",
+                },
+            )
+            assert retired.status_code == 422
+
+    @pytest.mark.unit
+    def test_source_kind_rejected_on_patch(self, tmp_path, monkeypatch):
         fake_pm = _FakePM(tmp_path)
         client = _client(monkeypatch, fake_pm)
         with client:
             resp = client.patch("/api/v1/projects/ready", json={"source_kind": "screenplay"})
-            assert resp.status_code == 200
-            # 「不接受该字段」的实质保证：请求体里的值不得落进项目数据
+            assert resp.status_code == 422
             assert "source_kind" not in fake_pm.project_data["ready"]
 
     @pytest.mark.unit
@@ -793,22 +817,22 @@ class TestProjectsRouter:
     @pytest.mark.integration
     def test_revisioned_batch_endpoint_returns_shared_result_and_rejects_stale_write(self, tmp_path, monkeypatch):
         pm = ProjectManager(str(tmp_path))
-        pm.create_project("demo", content_mode="narration")
-        pm.create_project_metadata("demo", "Demo", "Anime", "narration")
+        pm.create_project("demo", content_mode="drama")
+        pm.create_project_metadata("demo", "Demo", "Anime", "drama")
         pm.save_script(
             "demo",
             {
                 "episode": 1,
                 "title": "第一集",
-                "content_mode": "narration",
+                "content_mode": "drama",
                 "summary": "摘要",
                 "novel": {"title": "小说", "chapter": "第一章"},
-                "segments": [
+                "scenes": [
                     {
-                        "segment_id": "E1S01",
+                        "scene_id": "E1S01",
                         "duration_seconds": 4,
-                        "novel_text": "风吹过旷野。",
-                        "characters_in_segment": [],
+                        "source_text": "风吹过旷野。",
+                        "characters_in_scene": [],
                         "scenes": [],
                         "props": [],
                         "image_prompt": {
@@ -824,6 +848,7 @@ class TestProjectsRouter:
                             "camera_motion": "Static",
                             "ambiance_audio": "风声",
                         },
+                        "utterances": [],
                         "generated_assets": {},
                     }
                 ],
@@ -862,7 +887,7 @@ class TestProjectsRouter:
 
             assert stale.status_code == 409
             assert stale.json()["problems"][0]["code"] == "revision_conflict"
-            assert pm.load_script("demo", "episode_1.json")["segments"][0]["note"] == "first"
+            assert pm.load_script("demo", "episode_1.json")["scenes"][0]["note"] == "first"
 
     @pytest.mark.unit
     def test_revisioned_batch_endpoint_tags_webui_source_across_worker_thread(self, tmp_path, monkeypatch):
@@ -978,21 +1003,21 @@ class TestProjectsRouter:
             assert bad_duration.status_code == 422
 
             # target_duration / brief 仅 ad 可用
-            narration_with_td = client.post(
+            drama_with_td = client.post(
                 "/api/v1/projects",
                 json={
                     "generation_mode": "storyboard",
                     "name": "n-a",
-                    "content_mode": "narration",
+                    "content_mode": "drama",
                     "target_duration": 60,
                 },
             )
-            assert narration_with_td.status_code == 400
-            narration_with_brief = client.post(
+            assert drama_with_td.status_code == 400
+            drama_with_brief = client.post(
                 "/api/v1/projects",
-                json={"generation_mode": "storyboard", "name": "n-b", "content_mode": "narration", "brief": "x"},
+                json={"generation_mode": "storyboard", "name": "n-b", "content_mode": "drama", "brief": "x"},
             )
-            assert narration_with_brief.status_code == 400
+            assert drama_with_brief.status_code == 400
 
     @pytest.mark.unit
     def test_create_requires_binary_generation_mode(self, tmp_path, monkeypatch):
@@ -2496,7 +2521,7 @@ class TestProjectsRouter:
     def test_patch_project_episode_rebinding_forgets_unbound_resource_claims(self, tmp_path, monkeypatch):
         pm = ProjectManager(tmp_path / "projects")
         pm.create_project("demo")
-        pm.create_project_metadata("demo", "Demo", "Anime", "narration")
+        pm.create_project_metadata("demo", "Demo", "Anime", "drama")
         project_dir = pm.get_project_path("demo")
 
         def _script(resource_id: str) -> dict:
@@ -3084,7 +3109,7 @@ class TestUnexpectedErrorsDoNotLeak:
         with client:
             resp = client.post(
                 "/api/v1/projects",
-                json={"generation_mode": "storyboard", "name": "demo", "title": "T", "content_mode": "narration"},
+                json={"generation_mode": "storyboard", "name": "demo", "title": "T", "content_mode": "drama"},
             )
             assert resp.status_code == 500
             assert sentinel not in self._body(resp)

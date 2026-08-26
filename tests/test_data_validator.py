@@ -17,7 +17,7 @@ def _write_json(path: Path, payload: dict):
     path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
 
 
-def _project_payload(content_mode: str = "narration") -> dict:
+def _project_payload(content_mode: str = "drama") -> dict:
     return {
         "title": "Demo",
         "content_mode": content_mode,
@@ -1540,7 +1540,7 @@ class TestAdReferenceVideoUnitsValidation:
 
 
 class TestSourceKindValidation:
-    """source_kind 顶层枚举校验：缺省 novel（缺失放行），仅拦非法值；并锁泛指 speaker 回归。"""
+    """source_kind 已退役：缺失放行，任何残留值都拒绝；并锁泛指 speaker 回归。"""
 
     def _validate(self, tmp_path, project):
         project_dir = tmp_path / "projects" / "demo"
@@ -1549,23 +1549,15 @@ class TestSourceKindValidation:
 
     @pytest.mark.unit
     def test_missing_source_kind_is_valid(self, tmp_path):
-        # 存量项目无 source_kind 字段：缺省 novel，不报错
         result = self._validate(tmp_path, _project_payload("drama"))
         assert result.valid, result.errors
         assert not any("source_kind" in e for e in result.errors)
 
     @pytest.mark.unit
-    @pytest.mark.parametrize("kind", ["novel", "screenplay"])
-    def test_valid_source_kind_passes(self, tmp_path, kind):
+    @pytest.mark.parametrize("kind", ["novel", "screenplay", "screen_play"])
+    def test_any_source_kind_is_rejected(self, tmp_path, kind):
         payload = _project_payload("drama")
         payload["source_kind"] = kind
-        result = self._validate(tmp_path, payload)
-        assert result.valid, result.errors
-
-    @pytest.mark.unit
-    def test_invalid_source_kind_rejected(self, tmp_path):
-        payload = _project_payload("drama")
-        payload["source_kind"] = "screen_play"
         result = self._validate(tmp_path, payload)
         assert not result.valid
         assert any("source_kind" in e for e in result.errors)
@@ -1579,7 +1571,6 @@ class TestSourceKindValidation:
         """
         project_dir = tmp_path / "projects" / "demo"
         payload = _project_payload("drama")
-        payload["source_kind"] = "screenplay"
         _write_json(project_dir / "project.json", payload)
         _write_json(
             project_dir / "scripts" / "episode_1.json",

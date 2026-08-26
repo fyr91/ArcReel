@@ -366,6 +366,25 @@ class PresentationReadModelService:
         resource_type = "reference_videos" if kind == "video_units" else "videos"
         project_path = await asyncio.to_thread(self._project_manager.get_project_path, project_name)
         versions = VersionManager(project_path)
+        if snapshot.project.get("content_mode") == "course":
+            incomplete: list[str] = []
+            for item in items:
+                if not isinstance(item, dict):
+                    continue
+                resource_id = item.get(id_field)
+                if not isinstance(resource_id, str) or not resource_id:
+                    continue
+                current_version = await asyncio.to_thread(versions.get_current_version, resource_type, resource_id)
+                if (
+                    current_version <= 0
+                    or item.get("video_review_status") != "confirmed"
+                    or item.get("confirmed_video_version") != current_version
+                ):
+                    incomplete.append(resource_id)
+            if incomplete:
+                raise PresentationUnavailableError(
+                    "course episode has unconfirmed video units: " + ", ".join(incomplete)
+                )
         results: list[MaterializedPresentation] = []
         for item in items:
             if not isinstance(item, dict):

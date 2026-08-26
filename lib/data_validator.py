@@ -40,7 +40,6 @@ from lib.json_io import load_json_or_none
 from lib.path_safety import PathTraversalError, safe_join
 from lib.profile_manifest import VALID_CONTENT_MODES as _VALID_CONTENT_MODES
 from lib.project_manager import VALID_GENERATION_MODES as _VALID_GENERATION_MODES
-from lib.project_manager import VALID_SOURCE_KINDS as _VALID_SOURCE_KINDS
 from lib.script_models import (
     AD_TARGET_DURATION_DRIFT_THRESHOLD,
     REFERENCE_UNIT_DURATION_RANGE,
@@ -141,9 +140,6 @@ class DataValidator:
     # content_mode 严格只表达"内容类型"；"视频来源"维度由项目级 generation_mode 字段表达。
     # 合法集真相源在 lib.profile_manifest，避免两处枚举漂移。
     VALID_CONTENT_MODES = set(_VALID_CONTENT_MODES)
-    # 源文件性质（novel / screenplay）合法集，真相源在 lib.project_manager（创建写入方），
-    # 避免两处枚举漂移。缺省 novel：缺失字段不报错，仅拦截非法值（如 screen_play）。
-    VALID_SOURCE_KINDS = set(_VALID_SOURCE_KINDS)
     # 生成路线合法集（storyboard / reference_video），真相源在 lib.project_manager（创建写入方），
     # 避免两处枚举漂移。必填：存量项目由 v4→v5 迁移补写显式值，缺失即非法。
     VALID_GENERATION_MODES = set(_VALID_GENERATION_MODES)
@@ -382,10 +378,8 @@ class DataValidator:
                 _m("val_content_mode_invalid", value=content_mode, allowed=_allowed(self.VALID_CONTENT_MODES))
             )
 
-        # source_kind 缺省 novel：缺失字段（存量项目）放行，仅拦截非法值（如 screen_play）。
-        source_kind = project.get("source_kind")
-        if source_kind is not None and (not isinstance(source_kind, str) or source_kind not in self.VALID_SOURCE_KINDS):
-            errors.append(_m("val_source_kind_invalid", value=source_kind, allowed=_allowed(self.VALID_SOURCE_KINDS)))
+        if "source_kind" in project:
+            errors.append(_m("val_field_invalid", field="source_kind", detail="field has been retired"))
 
         # 生成路线必填二值：存量项目由 v4→v5 迁移补写显式值（含 grid 重编码），无缺省语义
         generation_mode = project.get("generation_mode")
@@ -417,6 +411,11 @@ class DataValidator:
                 )
 
         self._validate_ad_project_fields(project, content_mode, errors)
+        if content_mode == "course":
+            if generation_mode != "reference_video":
+                errors.append(_m("val_generation_mode_invalid", value=generation_mode, allowed="reference_video"))
+            if grid_storyboard is True:
+                errors.append(_m("val_field_invalid", field="grid_storyboard", detail="course requires false"))
 
         video_style = project.get("video_style")
         if video_style is not None:
@@ -524,14 +523,35 @@ class DataValidator:
                 image_usage = char_data.get(GLOBAL_ASSET_IMAGE_USAGE_FIELD)
                 if image_usage is not None and image_usage not in GLOBAL_ASSET_IMAGE_USAGES:
                     errors.append(
-                        _m("val_asset_field_invalid_value", asset_type=_asset("character"), name=char_name,
-                           field=GLOBAL_ASSET_IMAGE_USAGE_FIELD, value=repr(image_usage))
+                        _m(
+                            "val_asset_field_invalid_value",
+                            asset_type=_asset("character"),
+                            name=char_name,
+                            field=GLOBAL_ASSET_IMAGE_USAGE_FIELD,
+                            value=repr(image_usage),
+                        )
                     )
                 voice_source = char_data.get(GLOBAL_ASSET_VOICE_SOURCE_FIELD)
                 if voice_source is not None and voice_source not in GLOBAL_ASSET_VOICE_SOURCES:
                     errors.append(
-                        _m("val_asset_field_invalid_value", asset_type=_asset("character"), name=char_name,
-                           field=GLOBAL_ASSET_VOICE_SOURCE_FIELD, value=repr(voice_source))
+                        _m(
+                            "val_asset_field_invalid_value",
+                            asset_type=_asset("character"),
+                            name=char_name,
+                            field=GLOBAL_ASSET_VOICE_SOURCE_FIELD,
+                            value=repr(voice_source),
+                        )
+                    )
+                course_role = char_data.get("course_role")
+                if course_role not in {None, "", "actor", "main_lecturer", "guest_lecturer"}:
+                    errors.append(
+                        _m(
+                            "val_asset_field_invalid_value",
+                            asset_type=_asset("character"),
+                            name=char_name,
+                            field="course_role",
+                            value=repr(course_role),
+                        )
                     )
                 # voice_updated_at 不在 extra_string_fields 里（系统专用戳字段，故意不开放
                 # 通用 PATCH 覆写），但仍需校验类型与值：外部编辑/导入的 project.json 若把它写成
@@ -619,8 +639,13 @@ class DataValidator:
             image_usage = data.get(GLOBAL_ASSET_IMAGE_USAGE_FIELD)
             if image_usage is not None and image_usage not in GLOBAL_ASSET_IMAGE_USAGES:
                 errors.append(
-                    _m("val_asset_field_invalid_value", asset_type=kind, name=name,
-                       field=GLOBAL_ASSET_IMAGE_USAGE_FIELD, value=repr(image_usage))
+                    _m(
+                        "val_asset_field_invalid_value",
+                        asset_type=kind,
+                        name=name,
+                        field=GLOBAL_ASSET_IMAGE_USAGE_FIELD,
+                        value=repr(image_usage),
+                    )
                 )
             for field_name in extra_list_fields:
                 # spec 声明的 extra_list_fields（reference_images / selling_points 等）若存在

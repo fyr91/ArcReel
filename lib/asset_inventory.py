@@ -126,6 +126,10 @@ def complete_asset_inventory(
                     if materialized is not None:
                         materialized_characters.add(name)
                 bucket[name] = entry
+        if project.get("content_mode") == "course":
+            from lib.course_video import validate_course_assets
+
+            validate_course_assets(project)
         after_errors = set(DataValidator(str(pm.projects_root)).validate_project_payload(project).errors)
         new_errors = after_errors - before_errors
         if new_errors:
@@ -226,7 +230,7 @@ def _prepare_entries(entries: object) -> dict[str, dict[str, dict[str, Any]]]:
                 raise AssetInventoryInvalidRequest(f"{bucket_name}[{name!r}].{GLOBAL_ASSET_ID_FIELD} must be a string")
             entry: dict[str, Any] = {"description": description, spec.sheet_field: ""}
             for field in spec.extra_string_fields:
-                entry[field] = attrs.get(field, "")
+                entry[field] = attrs.get(field, "actor" if field == "course_role" else "")
             for field in spec.extra_list_fields:
                 entry[field] = []
             linked_id = global_asset_id or matched_global_asset_id

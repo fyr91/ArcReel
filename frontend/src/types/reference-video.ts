@@ -58,6 +58,7 @@ export interface UnitGeneratedAssets {
   video_generated_at: string | null;
   /** Legacy migration history only; runtime never reads or creates it. */
   source_signature?: string | null;
+  course_composite_keyframe?: string | null;
 }
 
 export interface ReferenceKeyframe {
@@ -79,12 +80,20 @@ export interface ReferenceStoryboardSheet {
 export interface ReferenceVideoUnit {
   /** Format: "E{episode}U{index}" */
   unit_id: string;
+  unit_type?: "opening" | "story" | "explanation" | "closing";
   /** Unit body — free-form text carrying `@[名称]` mentions; the only persisted content truth. */
   text: string;
   /** Planning duration in seconds — provider request duration is resolved during precheck. */
   duration_seconds: number;
   transition_to_next: TransitionType;
   note: string | null;
+  scenes?: string[];
+  characters?: string[];
+  props?: string[];
+  presenters?: string[];
+  depends_on_unit_id?: string | null;
+  video_review_status?: "pending_review" | "confirmed";
+  confirmed_video_version?: number | null;
   generated_assets: UnitGeneratedAssets;
   /** Core-scene first frames, in manuscript order. Maximum five per unit. */
   keyframes?: ReferenceKeyframe[];
@@ -293,12 +302,18 @@ export interface ScriptPreview {
  */
 export interface ReferenceStep1Unit {
   unit_id: string;
+  unit_type?: "opening" | "story" | "explanation" | "closing";
   /** 单元正文，用 `@[名称]` 引用已登记资产。 */
   text: string;
   /** Unit duration in seconds — one generation call, one duration. */
   duration_seconds: number;
   /** 逐字原文摘录（追溯锚）；存量草稿可能为空串。 */
   source_text: string;
+  scenes?: string[];
+  characters?: string[];
+  props?: string[];
+  presenters?: string[];
+  depends_on_unit_id?: string | null;
 }
 
 export interface ReferenceStep1Draft {
@@ -314,6 +329,12 @@ export interface ReferenceStep1FlatUnit {
   duration_seconds: number;
   source_text: string;
   text: string;
+  unit_type?: "opening" | "story" | "explanation" | "closing";
+  scenes?: string[];
+  characters?: string[];
+  props?: string[];
+  presenters?: string[];
+  depends_on_unit_id?: string | null;
 }
 
 export interface ReferenceStep1FlatDraft {
@@ -351,10 +372,10 @@ export interface ReferenceVideoScript {
   episode: number;
   title: string;
   /**
-   * 内容类型——参考视频集继承项目级 narration/drama，决定画面比例等次级配置；
+   * 内容类型——参考视频集继承项目级 drama/course/ad，决定课程结构等次级配置；
    * "视频来源"维度由项目的生成路线表达，不落在剧本上。
    */
-  content_mode?: "narration" | "drama" | "ad";
+  content_mode?: "drama" | "course" | "ad" | "narration";
   duration_seconds: number;
   schema_version?: number;
   novel: { title: string; chapter: string };

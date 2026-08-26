@@ -9,20 +9,18 @@ import { ImageModelSelect, imageSelectionFromValue } from "@/components/shared/I
 import { useAppStore } from "@/stores/app-store";
 import { useCostStore } from "@/stores/cost-store";
 import { useActiveResourceIds, useHasActiveTaskForScriptFile } from "@/stores/tasks-store";
-import { getScriptItemId, sumItemDuration } from "@/utils/script-shape";
+import { sumItemDuration } from "@/utils/script-shape";
 import type { DurationOutOfRangeReason } from "@/hooks/useModelCapabilities";
 import type {
   EpisodeScript,
-  NarrationEpisodeScript,
   DramaEpisodeScript,
-  NarrationSegment,
   DramaScene,
   ProjectData,
   ReferenceGenerationRequestOptions,
   ImageModelSelection,
 } from "@/types";
 
-type Segment = NarrationSegment | DramaScene;
+type Segment = DramaScene;
 type GridTab = "preprocessing" | "grid_preview" | "units";
 
 interface GridImageToVideoCanvasProps {
@@ -76,7 +74,6 @@ export function GridImageToVideoCanvas({
   onGenerateStoryboard,
   onGenerateVideo,
   onGenerateNarration,
-  onGenerateEpisodeNarration,
   onGenerateGrid,
   onRestoreStoryboard,
   onRestoreVideo,
@@ -84,12 +81,9 @@ export function GridImageToVideoCanvas({
   canEditTitle,
 }: GridImageToVideoCanvasProps) {
   const { t } = useTranslation("dashboard");
-  const contentMode = projectData?.content_mode ?? "narration";
-  // grid 画布仅服务 narration/drama（ad 不开放宫格生视频）；
-  // 子视图按窄类型接收，ad 显式不进（不落 drama 兜底）。
-  // 未知/脏 content_mode 沿用历史兜底落 drama 视图，仅 ad 显式排除。
-  const editorContentMode: "narration" | "drama" | null =
-    contentMode === "narration" ? "narration" : contentMode === "ad" ? null : "drama";
+  const contentMode = projectData?.content_mode ?? "drama";
+  // grid 画布只服务剧情演绎的 storyboard 路线。
+  const editorContentMode: "drama" | null = contentMode === "drama" ? "drama" : null;
 
   const hasScript = Boolean(episodeScript);
   const showTabs = Boolean(hasDraft);
@@ -114,8 +108,7 @@ export function GridImageToVideoCanvas({
   const rawAspect =
     typeof projectData?.aspect_ratio === "string"
       ? projectData.aspect_ratio
-      : (projectData?.aspect_ratio?.storyboard ??
-        (contentMode === "narration" ? "9:16" : "16:9"));
+      : (projectData?.aspect_ratio?.storyboard ?? "16:9");
   const aspectRatio: "9:16" | "16:9" =
     rawAspect === "9:16" || rawAspect === "16:9" ? rawAspect : "16:9";
 
@@ -123,11 +116,9 @@ export function GridImageToVideoCanvas({
     () =>
       !episodeScript || !projectData
         ? []
-        : contentMode === "narration"
-          ? ((episodeScript as NarrationEpisodeScript).segments ?? [])
-          : contentMode === "drama"
-            ? ((episodeScript as DramaEpisodeScript).scenes ?? [])
-            : [],
+        : contentMode === "drama"
+          ? ((episodeScript as DramaEpisodeScript).scenes ?? [])
+          : [],
     [contentMode, episodeScript, projectData],
   );
 
@@ -151,16 +142,6 @@ export function GridImageToVideoCanvas({
     (segId: string) => ttsBusyIds.has(segId),
     [ttsBusyIds],
   );
-  // 批量旁白进行中：当前分集还有未完结的 tts 任务时禁用批量按钮，避免重复入队
-  const currentSegmentIds = useMemo(
-    () => new Set(segments.map((s) => getScriptItemId(s, editorContentMode ?? "drama"))),
-    [segments, editorContentMode],
-  );
-  const narrationBatchBusy = useMemo(
-    () => [...currentSegmentIds].some((id) => ttsBusyIds.has(id)),
-    [ttsBusyIds, currentSegmentIds],
-  );
-
   const invalidateGrids = useAppStore((s) => s.invalidateGrids);
   const [generatingAllGrids, setGeneratingAllGrids] = useState(false);
   const [gridImageModel, setGridImageModel] = useState("");
@@ -304,18 +285,6 @@ export function GridImageToVideoCanvas({
               <Sparkles className="h-3 w-3" />
               <span>{t("batch_generate_videos")}</span>
             </button>
-            {contentMode === "narration" && onGenerateEpisodeNarration && (
-              <button
-                type="button"
-                className="sv-navbtn inline-flex items-center gap-1.5"
-                disabled={narrationBatchBusy}
-                onClick={() => onGenerateEpisodeNarration(scriptFile)}
-                title={t("batch_generate_narration")}
-              >
-                <Sparkles className="h-3 w-3" />
-                <span>{t("batch_generate_narration")}</span>
-              </button>
-            )}
           </div>
         )}
       </div>

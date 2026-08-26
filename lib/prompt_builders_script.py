@@ -168,16 +168,12 @@ _AMBIANCE_AUDIO_WRITING_GUIDE = (
 # 两段式分层文案（见 ADR 0041）：step1（normalize）= 内容、step2（drama）= 视觉。
 #
 # 内容抽取前移到 step1：场景边界、出场资产、逐字口播 utterances、原文锚 source_text、
-# 视觉改编描述 scene_description 一次定稿，并按 source_kind 切「改编 / 提取」口径。
+# 视觉改编描述 scene_description 一次定稿；剧情输入固定按成品剧本抽取。
 # step2 只补视觉层（image_prompt / video_prompt），按 scene_id 透传内容、不再识别口播、
-# 不分 source_kind——故 step2 文案无 novel/screenplay 分支。
+# 不再维护小说/剧本分支。
 # ---------------------------------------------------------------------------
 
 # step1（build_normalize_prompt）开篇任务句
-_NORMALIZE_TASK_NOVEL = (
-    "你的任务是将小说原文**改编**为结构化的分镜场景内容（含视觉改编描述、逐字口播 utterances "
-    "与原文锚 source_text），用于后续 AI 视频生成。"
-)
 _NORMALIZE_TASK_SCREENPLAY = (
     "你的任务是从作者已写好的剧本中**提取**结构化的分镜场景内容："
     "逐字保留台词与画外音（落在 utterances）、摘录原文锚 source_text、把视觉层转写为场景描述，"
@@ -185,12 +181,6 @@ _NORMALIZE_TASK_SCREENPLAY = (
 )
 
 # step1 scene_description（视觉改编自由文本）填写规则——只承载视觉内容，口播不内嵌
-_NORMALIZE_SCENE_RULE_NOVEL = (
-    "改编后的视觉化描述：角色动作、神态、环境、光影氛围，适合画面呈现。"
-    "以本场景当下的单一时空落笔——原文的回忆、闪回、心理活动，改编为此刻可见的载体"
-    "（人物神态、手中物件、环境痕迹）；这段描述是后续单帧分镜画面的内容来源。"
-    "**台词 / 画外音不要写进这里**——口播统一落在 utterances。"
-)
 _NORMALIZE_SCENE_RULE_SCREENPLAY = (
     "把作者写下的运镜、景别、舞台提示、视觉场景转写为画面视觉描述。"
     "**台词 / 画外音不要写进这里**——逐字落在 utterances；"
@@ -199,11 +189,6 @@ _NORMALIZE_SCENE_RULE_SCREENPLAY = (
 
 # step1 utterances（场景级有序发声序列）填写规则。条目形状与 kind ⇄ speaker 约束
 # （dialogue 必带非空 speaker、voiceover 必无 speaker）由 Utterance schema 强制，此处只写内容指导。
-_NORMALIZE_UTTERANCES_NOVEL = (
-    "按口播出现顺序产出发声序列，台词（dialogue）的 speaker 必须出现在 characters_in_scene。"
-    "叙述、心理独白等不靠画面演出的内容，可按剧情语境判断写为画外音（voiceover）——"
-    "是否产出由你依语境创作判断，自然需要则产出。场景无口播则留空。"
-)
 _NORMALIZE_UTTERANCES_SCREENPLAY = (
     "把作者写下的台词与画外音**逐字照搬**为有序发声序列，按它们在场景中的先后排列："
     "台词（dialogue）的 speaker 填原文说话人——命名角色应来自 characters_in_scene，"
@@ -211,19 +196,16 @@ _NORMALIZE_UTTERANCES_SCREENPLAY = (
     "画外音 / 旁白写为 voiceover。不改写、不润色、不删减、不补写。场景无口播则留空。"
 )
 
-# step1 source_text（逐字原文锚）填写规则——两源共用
+# step1 source_text（逐字原文锚）填写规则
 _NORMALIZE_SOURCE_TEXT_GUIDE = "逐字摘录本场景对应的原文片段，尽量与原文一致、宁缺毋造（无把握可留空）。"
 
-# step1 segment_break 规则。novel 分支无增量判断标准（「是否为场景切换点」由 schema
-# description 表达），不再单列；screenplay 分支保留「沿用作者场次、不重新切碎」的实质指导。
-# 变体自带前导换行，空值时模板中不留空行。
-_NORMALIZE_BREAK_RULE_NOVEL = ""
+# step1 segment_break 沿用作者场次，不重新切碎。
 _NORMALIZE_BREAK_RULE_SCREENPLAY = (
     "\n- **segment_break**：沿用剧本自带的场次/场景切换——场次变更（地点 / 时间 / 场景切换）标「是」，"
     "同一场次内标「否」；不要重新切碎作者的场次"
 )
 
-# step2（build_drama_prompt）开篇角色定位 + 收尾目标——视觉层专责，无 source_kind 分支
+# step2（build_drama_prompt）开篇角色定位 + 收尾目标——视觉层专责
 _DRAMA_VISUAL_ROLE = (
     "你是一位资深的短剧分镜摄影 / 动作设计师。下方分镜内容（场景边界、出场资产、逐字口播、"
     "原文锚、视觉改编描述）均已定稿，你的唯一职责是为每个分镜补全视觉生产层："
@@ -528,7 +510,6 @@ def build_normalize_prompt(
     default_duration: int | None,
     supported_durations: list[int],
     episode: int,
-    source_kind: str = "novel",
     target_language: str = "中文",
     source_language: str | None = None,
     speech_rate_override: float | None = None,
@@ -541,8 +522,7 @@ def build_normalize_prompt(
     边界、出场资产、逐字口播、原文锚与视觉改编描述，step2 仅透传 + 补视觉。输出受 response_schema
     （``DramaNormalizedScript``）约束为结构化 JSON。
 
-    ``source_kind="screenplay"`` 翻为「提取/逐字保留」：台词与画外音逐字落 utterances、视觉转写为
-    scene_description；默认 ``"novel"`` 维持「改编」语义、画外音由语境判断放开。``episode_outline`` /
+    输入固定为剧本文档：台词与画外音逐字落 utterances、视觉转写为 scene_description。``episode_outline`` /
     ``next_episode_outline`` 来自分集账本，驱动内容覆盖故事节点、末场落地集尾钩子。
 
     ``source_language`` 供时长指引的「台词口播时长」单向下界软指引取语速（阅读单位 / 秒，来自
@@ -557,13 +537,12 @@ def build_normalize_prompt(
     scene_names = list(scenes.keys())
     prop_names = list(props.keys())
 
-    is_screenplay = source_kind == "screenplay"
-    task_line = _NORMALIZE_TASK_SCREENPLAY if is_screenplay else _NORMALIZE_TASK_NOVEL
-    source_heading = "剧本原文" if is_screenplay else "小说原文"
-    source_tag = "screenplay" if is_screenplay else "novel"
-    scene_rule = _NORMALIZE_SCENE_RULE_SCREENPLAY if is_screenplay else _NORMALIZE_SCENE_RULE_NOVEL
-    utterances_rule = _NORMALIZE_UTTERANCES_SCREENPLAY if is_screenplay else _NORMALIZE_UTTERANCES_NOVEL
-    break_rule = _NORMALIZE_BREAK_RULE_SCREENPLAY if is_screenplay else _NORMALIZE_BREAK_RULE_NOVEL
+    task_line = _NORMALIZE_TASK_SCREENPLAY
+    source_heading = "剧本原文"
+    source_tag = "screenplay"
+    scene_rule = _NORMALIZE_SCENE_RULE_SCREENPLAY
+    utterances_rule = _NORMALIZE_UTTERANCES_SCREENPLAY
+    break_rule = _NORMALIZE_BREAK_RULE_SCREENPLAY
     outline_block = _format_episode_outline_block(episode_outline, next_episode_outline)
 
     # 资产引用字段（characters_in_scene / scenes / props，须逐字等于 project.json 登记名）与
@@ -571,20 +550,12 @@ def build_normalize_prompt(
     # 两者被翻译都会与已登记资产失配（speaker 失配会破坏字幕归属 / 后续 TTS 配音映射）。source_text 是逐字
     # 原文锚、两源都摘录原文不译。screenplay 额外把台词 `utterances[].text` 也逐字保留（提取优先）；
     # novel 的台词 text 仍按目标语言改编。
-    if is_screenplay:
-        language_rule = (
-            f"自然语言字符串值必须使用 {target_language}；JSON 键名 / 枚举值保持英文。"
-            "例外（逐字保留原文、不翻译、不改写）：资产引用字段（`characters_in_scene[]` / `scenes[]` / `props[]`，"
-            "须逐字等于 project.json 登记名）与逐字字段（`utterances[].text` / `utterances[].speaker` / `source_text`）；"
-            "speaker 沿用 characters_in_scene 中登记的角色名原文，群演沿用原文称呼。"
-        )
-    else:
-        language_rule = (
-            f"自然语言字符串值必须使用 {target_language}；JSON 键名 / 枚举值保持英文。"
-            "例外（逐字保留、不翻译）：资产引用字段（`characters_in_scene[]` / `scenes[]` / `props[]`，"
-            "须逐字等于 project.json 登记名）、说话人引用 `utterances[].speaker`"
-            "（须等于 characters_in_scene 中登记的角色名）与逐字原文锚 `source_text`。"
-        )
+    language_rule = (
+        f"自然语言字符串值必须使用 {target_language}；JSON 键名 / 枚举值保持英文。"
+        "例外（逐字保留原文、不翻译、不改写）：资产引用字段（`characters_in_scene[]` / `scenes[]` / `props[]`，"
+        "须逐字等于 project.json 登记名）与逐字字段（`utterances[].text` / `utterances[].speaker` / `source_text`）；"
+        "speaker 沿用 characters_in_scene 中登记的角色名原文，群演沿用原文称呼。"
+    )
 
     # 规范化 + 校验：空集合或 default 不在集合内都会产出自相矛盾的提示词，
     # 让生成阶段失败比让 LLM 见到"只能取 — 中的值"更便于诊断。
@@ -808,15 +779,13 @@ _OVERVIEW_TASK_SCREENPLAY = (
 )
 
 
-def build_overview_prompt(source_content: str, source_kind: str = "novel", target_language: str = "中文") -> str:
+def build_overview_prompt(source_content: str, target_language: str = "中文") -> str:
     """构建项目概述（overview）生成 prompt。
 
-    ``source_kind="screenplay"`` 时翻为「提取优先」：作者若在剧本内写下创作方案前言
-    （题材 / 主题 / 一句话故事 / 世界观，形态不限、无固定标记），优先照用其设定填充
-    overview 字段，缺失才退回从正文归纳。``"novel"``（默认，含非法值）维持从正文归纳的原行为。
+    输入固定为成品剧本。作者若写下创作方案前言（题材 / 主题 / 一句话故事 / 世界观，
+    形态不限、无固定标记），优先照用其设定填充 overview 字段，缺失才退回从正文归纳。
 
     overview 产出的字段会注入后续所有生成 prompt，输出语言须与其余 builder 同口径
     （target_language 由调用方按 project.json 的 source_language 解析）。
     """
-    task = _OVERVIEW_TASK_SCREENPLAY if source_kind == "screenplay" else _OVERVIEW_TASK_NOVEL
-    return f"{task}\n\n**输出语言**：所有字符串值必须使用 {target_language}；JSON 键名 / 枚举值保持英文。\n\n{source_content}"
+    return f"{_OVERVIEW_TASK_SCREENPLAY}\n\n**输出语言**：所有字符串值必须使用 {target_language}；JSON 键名 / 枚举值保持英文。\n\n{source_content}"

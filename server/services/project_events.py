@@ -750,7 +750,7 @@ class ProjectEventService:
         # 取证解析：由剧本数据形状判别骨架种类（narration/drama 走 reference 时 content_mode 仍是
         # narration/drama，按 content_mode 二值兜底会把 ad 的 shots 与 reference 的 video_units
         # 全部漏读，差分恒空、分镜级事件从不发出）。键即条目数组键。
-        content_mode = str(script.get("content_mode") or "narration")
+        content_mode = str(script.get("content_mode") or "drama")
         raw_items, id_field, kind = resolve_kind_items(script)
         chars_field = SKELETONS[kind].chars_field
         if kind not in script:

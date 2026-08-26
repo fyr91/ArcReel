@@ -46,6 +46,25 @@ describe("UnitList", () => {
     expect(screen.getByText("8s")).toBeInTheDocument();
   });
 
+  it("shows semantic unit types only for course projects", () => {
+    const unit = mkUnit("E1U1", { unit_type: "story" });
+    const { rerender } = render(
+      <UnitList units={[unit]} selectedId={null} onSelect={vi.fn()} onAdd={vi.fn()} />,
+    );
+    expect(screen.queryByText(/Story|故事演绎/)).toBeNull();
+
+    rerender(
+      <UnitList
+        units={[unit]}
+        selectedId={null}
+        onSelect={vi.fn()}
+        onAdd={vi.fn()}
+        showCourseTypes
+      />,
+    );
+    expect(screen.getByText(/Story|故事演绎/)).toBeInTheDocument();
+  });
+
   it("highlights the selected unit", () => {
     render(
       <UnitList

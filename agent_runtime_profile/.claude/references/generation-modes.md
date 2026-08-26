@@ -1,6 +1,6 @@
 # 生成模式参考
 
-ArcReel 把"做什么内容"和"怎么生成视频"拆成两条独立维度。`content_mode` 严格表达**内容类型**（narration / drama），`generation_mode` 表达**视频来源 / 生成路径**（storyboard / reference_video）。二者均由 `project.json` 顶层字段唯一决定，项目创建后不可更改，不存在集级覆盖。组合上可枚举如下；参考生视频路径下内容类型仅作画面比例 / 默认时长等次级决策。
+ArcReel 的 `content_mode` 表达内容类型（drama / course / ad），`generation_mode` 表达视频来源（storyboard / reference_video）。剧情演绎支持两种生成方式，课程视频固定 reference_video，广告短片支持两种生成方式。项目创建后不可更改。
 
 宫格不是独立生成模式：`grid_storyboard` 是仅在 `generation_mode="storyboard"` 下生效的独立布尔开关（由用户在设置页开关，agent 无对应写入权限），决定分镜图步骤走单图还是宫格图，不影响其余步骤的分派。
 
@@ -8,9 +8,10 @@ ArcReel 把"做什么内容"和"怎么生成视频"拆成两条独立维度。`c
 
 | generation_mode | content_mode | 数据主结构 | 预处理子任务 | step1 中间文件 | 脚本 schema | 视觉参考来源 |
 |---|---|---|---|---|---|---|
-| `storyboard` | `narration` | `segments[]` | split-narration-segments | `step1_segments.json` | NarrationEpisodeScript | 每片段一张分镜图作起始帧（`grid_storyboard=true` 时为宫格图切块） |
 | `storyboard` | `drama` | `scenes[]` | normalize-drama-script | `step1_normalized_script.json` | DramaNormalizedScript（step1）→ DramaVisualScript（step2）→ DramaEpisodeScript（合并） | 每场景一张分镜图作起始帧（`grid_storyboard=true` 时为宫格图切块） |
-| `reference_video` | `narration` / `drama` | `video_units[]` | split-reference-video-units | `step1_reference_units.json`（每 unit 含 1–5 个 `keyframe_plan`） | ReferenceVideoScript | 每 unit 自动生成一张 Video Unit Storyboard Sheet，用户必须确认当前 Sheet 后才生成关键场景 Keyframes；该 Sheet、Keyframes 与角色 / 场景 / 道具图共同作为 `reference_images` |
+| `reference_video` | `drama` | `video_units[]` | split-reference-video-units | `step1_reference_units.json` | ReferenceVideoScript | Video Unit Storyboard Sheet、Keyframes 与项目资产图共同作为参考 |
+| `reference_video` | `course` | `video_units[]` | split-reference-video-units | `step1_reference_units.json` | ReferenceVideoScript | 同 drama；explanation 实际首帧额外由前置视频尾帧和讲师方形头像程序合成 |
+| `storyboard` / `reference_video` | `ad` | `shots[]` / `video_units[]` | 无 step1 | 无 | AdEpisodeScript / ReferenceVideoScript | 按选择的既有路线 |
 
 > drama 走两段式（见 ADR 0041）：step1（normalize-drama-script）产出**结构化内容** `step1_normalized_script.json`（场景边界 / 出场资产 / 逐字口播 utterances / 原文锚 source_text / 视觉改编描述）；step2（create-episode-script）LLM 只出视觉层 `DramaVisualScript`（scene_id + image_prompt + video_prompt），后端按 scene_id 合并回 step1 内容得 `DramaEpisodeScript`、透传非视觉字段。
 >
@@ -28,7 +29,7 @@ ArcReel 把"做什么内容"和"怎么生成视频"拆成两条独立维度。`c
 
 几条不由计划表达、需要在这里说清的事实：
 
-- `reference_video` 的固定视觉流程是：每个 Video Unit 必须先有非空 `keyframe_plan`，剧本落盘后自动生成一张 **Video Unit Storyboard Sheet**，用户确认当前版本后系统才批量生成正式 Keyframes。重生、编辑或恢复该 Sheet 都会使确认失效。这里的 Sheet 始终指整段 Video Unit 的多格叙事预览，绝不是 storyboard 模式的逐镜头分镜图；旁白交付选择在两种生成模式下都要逐次做。
+- `reference_video` 的固定视觉流程沿用 Video Unit Storyboard Sheet 与 Keyframes。课程模式不另建画布；只在 explanation 执行前根据依赖合成实际首帧。
 - 视频入队按项目 `generation_mode` 定生成模式，剧本骨架只作校验；失配（如 storyboard 项目里残留
   `video_units[]` 旧剧本）直接拒绝入队，正解是按项目当前生成模式重跑预处理与剧本生成，而非指望旧剧本被执行。
 - 预处理中间文件被修改 / 重拆后必须重新生成剧本 JSON——剧本不会自动跟随中间文件更新。
@@ -57,7 +58,7 @@ projects/{name}/          # ← session cwd 已在此
 ├── grids/                # storyboard 模式且 grid_storyboard=true（宫格大图）
 ├── reference_videos/     # reference_video 模式视频输出
 ├── videos/               # storyboard 模式视频输出
-└── audio/                # 旁白音频（仅旁白/解说，首次生成时创建）
+└── audio/                # 按具体 unit 的语音交付需要生成
 ```
 
 > 参考 [Gemini 图像生成官方指南](https://ai.google.dev/gemini-api/docs/image-generation)的 prompting strategies。

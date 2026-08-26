@@ -63,8 +63,9 @@ _EPISODIC_STEPS = frozenset(
 )
 
 _CONTENT_STEPS: dict[str, frozenset[str]] = {
-    "narration": _EPISODIC_STEPS,
     "drama": _EPISODIC_STEPS,
+    # 课程项目由用户逐集上传文档，不走自动分集；其余阶段复用参考生视频工作流。
+    "course": _EPISODIC_STEPS - {"episode_plan"},
     "ad": frozenset(
         {
             "project_input",
@@ -80,10 +81,9 @@ _CONTENT_STEPS: dict[str, frozenset[str]] = {
 }
 
 _PREPROCESSORS: dict[tuple[str, str], str | None] = {
-    ("narration", "storyboard"): "split-narration-segments",
-    ("narration", "reference_video"): "split-reference-video-units",
     ("drama", "storyboard"): "normalize-drama-script",
     ("drama", "reference_video"): "split-reference-video-units",
+    ("course", "reference_video"): "split-reference-video-units",
     ("ad", "storyboard"): None,
     ("ad", "reference_video"): None,
 }
@@ -125,8 +125,13 @@ def _build_rule(content_mode: str, generation_mode: str) -> WorkflowRule:
 
 WORKFLOW_RULES: dict[tuple[str, str], WorkflowRule] = {
     (content_mode, generation_mode): _build_rule(content_mode, generation_mode)
-    for content_mode in ("narration", "drama", "ad")
-    for generation_mode in ("storyboard", "reference_video")
+    for content_mode, generation_mode in (
+        ("drama", "storyboard"),
+        ("drama", "reference_video"),
+        ("course", "reference_video"),
+        ("ad", "storyboard"),
+        ("ad", "reference_video"),
+    )
 }
 
 

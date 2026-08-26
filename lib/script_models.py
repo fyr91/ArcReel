@@ -65,6 +65,9 @@ TransitionType = Literal[
     "dissolve",
 ]
 
+CourseUnitType = Literal["opening", "story", "explanation", "closing"]
+CourseCharacterRole = Literal["actor", "main_lecturer", "guest_lecturer"]
+
 logger = logging.getLogger(__name__)
 
 
@@ -183,6 +186,10 @@ class GeneratedAssets(BaseModel):
     # 漏声明的话 extra="forbid" 会让「不更坏」检测到 extra_forbidden 差集,拒整集写盘。
     video_thumbnail: str | None = Field(default=None, description="视频缩略图路径")
     video_uri: str | None = Field(default=None, description="视频 URI")
+    course_composite_keyframe: str | None = Field(
+        default=None,
+        description="课程解说单元由前置视频尾帧与讲师方图程序合成的首帧",
+    )
     # narration_audio 由 TTS 任务（generation_tasks.execute_tts_task）在合成后写回，
     # 显式声明使其通过 extra="forbid" + 「不更坏」守卫；仅说书 segment 写入，drama/refvideo 恒 None。
     narration_audio: str | None = Field(default=None, description="旁白音频路径")
@@ -849,11 +856,29 @@ class ReferenceVideoUnit(BaseModel):
     model_config = _STRICT_CONFIG
 
     unit_id: str = Field(description="格式 E{集}U{序号}")
+    unit_type: SkipJsonSchema[CourseUnitType] = Field(default="story", description="课程视频单元类型")
     text: str = Field(description="单元正文，可包含 @[商品]/@[角色]/@[场景]/@[道具] 引用；迁移问题壳可为空")
     duration_seconds: int = Field(
         ge=0,
         le=REFERENCE_UNIT_DURATION_RANGE[1],
         description="该单元时长（秒）",
+    )
+    scenes: SkipJsonSchema[list[str]] = Field(default_factory=list, description="本单元使用的场景资产")
+    characters: SkipJsonSchema[list[str]] = Field(default_factory=list, description="本单元使用的演员角色")
+    props: SkipJsonSchema[list[str]] = Field(default_factory=list, description="本单元使用的道具资产")
+    presenters: SkipJsonSchema[list[str]] = Field(default_factory=list, description="本单元出镜讲师")
+    depends_on_unit_id: SkipJsonSchema[str | None] = Field(
+        default=None,
+        description="explanation 首帧所依赖的直接前置视频单元；由单元顺序机械派生",
+    )
+    video_review_status: SkipJsonSchema[Literal["pending_review", "confirmed"]] = Field(
+        default="pending_review",
+        description="当前选中视频版本的人工确认状态",
+    )
+    confirmed_video_version: SkipJsonSchema[int | None] = Field(
+        default=None,
+        ge=1,
+        description="用户确认时对应的当前视频版本",
     )
     # transition_to_next / note / generated_assets 均为 UI / runtime / 人工字段，对 LLM 隐藏。
     transition_to_next: SkipJsonSchema[TransitionType] = Field(default="cut", description="转场类型")
@@ -900,8 +925,8 @@ class ReferenceVideoScript(BaseModel):
 
     title: str = Field(description="剧集标题")
     # 对 LLM 隐藏：由 _add_metadata 注入。
-    content_mode: SkipJsonSchema[Literal["narration", "drama", "ad"]] = Field(
-        default="narration", description="内容类型（narration/drama/ad）"
+    content_mode: SkipJsonSchema[Literal["drama", "course", "ad"]] = Field(
+        default="drama", description="内容类型（drama/course/ad）"
     )
     # 见 NarrationEpisodeScript.novel 说明
     novel: SkipJsonSchema[NovelInfo] = Field(default_factory=NovelInfo, description="小说来源信息")
@@ -910,13 +935,53 @@ class ReferenceVideoScript(BaseModel):
     next_episode_teaser: SkipJsonSchema[str | None] = Field(default=None, description="下集预告语（来自分集账本）")
     video_units: list[ReferenceVideoUnit] = Field(description="视频单元列表")
 
+    @model_validator(mode="after")
+    def _validate_course_structure(self) -> "ReferenceVideoScript":
+        if self.content_mode != "course":
+            return self
+        if len(self.video_units) < 3:
+            raise ValueError("课程视频至少包含引子、故事演绎和总结三个单元")
+        types = [unit.unit_type for unit in self.video_units]
+        if types[0] != "opening" or types[-1] != "closing":
+            raise ValueError("课程视频首尾单元必须分别为 opening 与 closing")
+        if types.count("opening") != 1 or types.count("closing") != 1:
+            raise ValueError("课程视频只能有一个 opening 和一个 closing")
+        if "story" not in types:
+            raise ValueError("课程视频至少需要一个 story 单元")
+        opening, closing = self.video_units[0], self.video_units[-1]
+        if len(opening.scenes) != 1 or opening.scenes != closing.scenes:
+            raise ValueError("opening 与 closing 必须共用同一个场景")
+        opening_people = {*opening.characters, *opening.presenters}
+        closing_people = {*closing.characters, *closing.presenters}
+        if not opening_people or opening_people != closing_people:
+            raise ValueError("opening 与 closing 必须共用同一组且至少一位角色")
+        last_chain_unit: str | None = None
+        story_seen = False
+        for unit in self.video_units:
+            if unit.unit_type == "story":
+                story_seen = True
+                last_chain_unit = unit.unit_id
+                if unit.depends_on_unit_id is not None:
+                    raise ValueError(f"story 单元 {unit.unit_id} 不应声明 depends_on_unit_id")
+            elif unit.unit_type == "explanation":
+                if not story_seen or last_chain_unit is None:
+                    raise ValueError(f"explanation 单元 {unit.unit_id} 前必须存在 story")
+                if unit.depends_on_unit_id != last_chain_unit:
+                    raise ValueError(f"explanation 单元 {unit.unit_id} 必须直接依赖 {last_chain_unit}")
+                if not unit.presenters:
+                    raise ValueError(f"explanation 单元 {unit.unit_id} 至少需要一位讲师")
+                last_chain_unit = unit.unit_id
+            elif unit.depends_on_unit_id is not None:
+                raise ValueError(f"{unit.unit_type} 单元 {unit.unit_id} 不应声明 depends_on_unit_id")
+        return self
+
 
 def resolve_content_mode(script: dict[str, Any], project: dict[str, Any]) -> str:
     """剧本级 ``content_mode`` 缺失（存量 episode 未打戳）时回退到项目级配置，与
     ``lib.data_validator._validate_episode_payload`` 已校验通过的既定口径一致——存量
     episode 允许省略该字段、由项目值兜底，读侧（生成任务）不能另起一份更严格的判定。
     """
-    return script.get("content_mode", project.get("content_mode", "narration"))
+    return script.get("content_mode", project.get("content_mode", "drama"))
 
 
 # ============ 参考生视频 step1 结构化中间态 ============
@@ -962,6 +1027,12 @@ class ReferenceStep1Unit(BaseModel):
     # 辅助源文映射：供 gate 对照与失真定位，不作为逐字机械校验依据。
     # 默认空串：不带该字段的存量草稿照常通过校验。
     source_text: SkipJsonSchema[str] = Field(default="", description="该 unit 所依据的源文内容（辅助追溯）")
+    unit_type: CourseUnitType = Field(default="story", description="课程视频单元类型")
+    scenes: list[str] = Field(default_factory=list, description="本单元使用的场景")
+    characters: list[str] = Field(default_factory=list, description="本单元使用的演员")
+    props: list[str] = Field(default_factory=list, description="本单元使用的道具")
+    presenters: list[str] = Field(default_factory=list, description="本单元出镜讲师")
+    depends_on_unit_id: str | None = Field(default=None, description="直接前置依赖，由程序重算")
 
 
 class ReferenceStep1Draft(BaseModel):
@@ -1006,6 +1077,11 @@ class ReferenceStep1FlatUnit(BaseModel):
     )
     source_text: str = Field(min_length=1, description="该单元所依据的源文内容（辅助审阅与追溯，不做逐字校验）")
     text: str = Field(min_length=1, description="该单元的书写层正文：画面描述 + 行内的台词 / 画外音记号")
+    unit_type: CourseUnitType = Field(default="story", description="课程视频单元类型")
+    scenes: list[str] = Field(default_factory=list, description="本单元使用的场景")
+    characters: list[str] = Field(default_factory=list, description="本单元使用的演员")
+    props: list[str] = Field(default_factory=list, description="本单元使用的道具")
+    presenters: list[str] = Field(default_factory=list, description="本单元出镜讲师")
 
 
 class ReferenceStep2Keyframe(BaseModel):

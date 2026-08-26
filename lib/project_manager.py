@@ -91,13 +91,6 @@ PROJECT_SLUG_SANITIZER = re.compile(r"[^a-zA-Z0-9]+")
 VALID_GENERATION_MODES: frozenset[str] = frozenset({"storyboard", "reference_video"})
 _DEFAULT_GENERATION_MODE = "storyboard"
 
-# 源文件性质（source_kind）：与 content_mode / generation_mode 正交的第三轴，project.json
-# 顶层字段，创建时确定、之后不可变。novel（默认，现状改编链路）/ screenplay（成品剧本，
-# drama 链路翻为提取优先）。详见 docs/adr/0036 与 CONTEXT.md「源文件类型」词条。
-SourceKind = Literal["novel", "screenplay"]
-VALID_SOURCE_KINDS: frozenset[str] = frozenset({"novel", "screenplay"})
-DEFAULT_SOURCE_KIND: SourceKind = "novel"
-
 
 class _Unset:
     """哨兵：区分「未传 before」（写盘统一入口自行读盘取改前）与「显式传 None」（无改前）。"""
@@ -163,14 +156,6 @@ def is_reference_video_project(project: Mapping[str, Any]) -> bool:
     （见 ``script_generator``），只看剧本判不出参考生视频。
     """
     return project.get("generation_mode") == "reference_video"
-
-
-def resolve_source_kind(project: Mapping[str, Any]) -> SourceKind:
-    """项目源文件性质（novel / screenplay），缺失或非法值回退默认 novel，兼容脏数据。"""
-    value = project.get("source_kind")
-    if isinstance(value, str) and value in VALID_SOURCE_KINDS:
-        return cast(SourceKind, value)
-    return DEFAULT_SOURCE_KIND
 
 
 def _resolve_items_or_warn(script: dict, *, script_filename: str | None = None) -> list[dict]:
@@ -353,13 +338,13 @@ class ProjectManager:
             (root / sub).mkdir(exist_ok=True)
         return root
 
-    def create_project(self, name: str, content_mode: ContentMode = "narration") -> Path:
+    def create_project(self, name: str, content_mode: ContentMode = "drama") -> Path:
         """
         创建新项目
 
         Args:
             name: 项目标识（全局唯一，用于 URL 和文件系统）
-            content_mode: 内容模式（narration / drama），影响 profile 物化时选哪份变体
+            content_mode: 内容模式（drama / course / ad），影响 profile 物化时选哪份变体
 
         Returns:
             项目目录路径
@@ -418,8 +403,7 @@ class ProjectManager:
     ) -> dict:
         """同步 agent_runtime_profile 到项目目录的 .claude / CLAUDE.md。
 
-        ``content_mode=None`` 时从 ``project_dir/project.json`` 读取；
-        project.json 缺失或 ``content_mode`` 字段缺失 → 回退到 ``"narration"`` + log info。
+        ``content_mode=None`` 时从 ``project_dir/project.json`` 读取。
         ``content_mode`` 显式非法值 → 抛 ``ValueError``。
 
         详见 ``lib.profile_manifest.sync_profile_to_project``：manifest-driven
@@ -460,23 +444,15 @@ class ProjectManager:
         return get_profile_status(agent_profile_dir(), project_dir, content_mode)
 
     def _resolve_content_mode(self, project_dir: Path) -> ContentMode:
-        """从 project_dir/project.json 读 content_mode；缺失回退 narration。
-
-        ``project.json`` 不存在或缺 ``content_mode`` 字段 → 回退 narration（兼容
-        老项目）。文件存在但读取/解析失败 → raise，让上层 sync_all_agent_profiles
-        走 failed_projects 分支；若静默回退到 narration，drama 项目会因 manifest
-        记录的 mode 不匹配触发破坏性 reset，把 profile 错误切回说书变体。
-        """
+        """从 project_dir/project.json 读取必填 content_mode。"""
         pj_path = project_dir / self.PROJECT_FILE
         try:
             data = load_json(pj_path)
         except FileNotFoundError:
-            logger.info("project.json missing under %s, defaulting content_mode=narration", project_dir)
-            return "narration"
+            raise ValueError(f"project.json missing under {project_dir}") from None
         mode = data.get("content_mode") if isinstance(data, dict) else None
         if mode is None:
-            logger.info("project.json has no content_mode under %s, defaulting narration", project_dir)
-            return "narration"
+            raise ValueError(f"project.json has no content_mode under {project_dir}")
         if not isinstance(mode, str) or mode not in VALID_CONTENT_MODES:
             raise ValueError(
                 f"project {project_dir.name}: invalid content_mode={mode!r} "
@@ -1263,12 +1239,12 @@ class ProjectManager:
     # ==================== 数据结构标准化 ====================
 
     @staticmethod
-    def create_generated_assets(content_mode: str = "narration") -> dict:
+    def create_generated_assets(content_mode: str = "drama") -> dict:
         """
         创建标准的 generated_assets 结构
 
         Args:
-            content_mode: 内容模式（'narration' 或 'drama'）
+            content_mode: 内容模式（drama/course/ad）
 
         Returns:
             标准的 generated_assets 字典
@@ -1491,7 +1467,7 @@ class ProjectManager:
     ) -> dict[str, Any]:
         """Mutate one loaded script; the caller owns its canonical script lock."""
 
-        content_mode = script.get("content_mode", "narration")
+        content_mode = script.get("content_mode", "drama")
         items, id_field, _kind = resolve_items(script)
         for item in items:
             # 损坏脚本的非 dict 元素跳过（镜像 script_editor._find_index 的 isinstance 守卫），
@@ -1627,7 +1603,7 @@ class ProjectManager:
             on_commit=on_commit,
             prepare_on_commit=prepare_on_commit,
         ) as script:
-            content_mode = script.get("content_mode", "narration")
+            content_mode = script.get("content_mode", "drama")
             items, id_field, _kind = resolve_items(script)
 
             # 建立 scene_id → item 索引，避免 O(N*M) 查找。损坏脚本的非 dict 元素过滤掉
@@ -2222,14 +2198,13 @@ class ProjectManager:
         project_name: str,
         title: str | None = None,
         style: str | None = None,
-        content_mode: str | None = "narration",
+        content_mode: str | None = "drama",
         aspect_ratio: str | None = "9:16",
         default_duration: int | None = None,
         style_template_id: str | None = None,
         extras: dict | None = None,
         target_duration: int | None = None,
         brief: str | None = None,
-        source_kind: str | None = None,
     ) -> dict:
         """
         创建新的项目元数据文件
@@ -2242,15 +2217,13 @@ class ProjectManager:
         `target_duration` / `brief` 仅 content_mode=ad 可用；ad 项目不持有
         `default_duration`，且 episodes 恒为第 1 集单条。
 
-        `source_kind` 为源文件性质（novel / screenplay），缺省 novel，创建即定、之后不可变
-        （可变性守卫在路由 PATCH 层，与 content_mode 同性质）。
+        drama 与 course 都把上传文档直接作为剧本文档解析，不再持久化 source_kind 维度。
         """
         project_name = self.normalize_project_name(project_name)
         project_title = str(title).strip() if title is not None else ""
-        resolved_mode = content_mode or "narration"
-        resolved_source_kind = DEFAULT_SOURCE_KIND if source_kind is None else source_kind
-        if resolved_source_kind not in VALID_SOURCE_KINDS:
-            raise ValueError(f"source_kind 值无效: {source_kind!r}，必须是 {sorted(VALID_SOURCE_KINDS)}")
+        resolved_mode = content_mode or "drama"
+        if resolved_mode not in VALID_CONTENT_MODES:
+            raise ValueError(f"content_mode 值无效: {resolved_mode!r}，必须是 {sorted(VALID_CONTENT_MODES)}")
 
         # 数据层守卫：模式专属字段互斥。路由层已返回 400，这里再兜一道防非路由调用方。
         if resolved_mode == "ad":
@@ -2278,7 +2251,6 @@ class ProjectManager:
             # 风格的 project_name 固化为用户可见的标题。
             "title": project_title,
             "content_mode": resolved_mode,
-            "source_kind": resolved_source_kind,
             "aspect_ratio": aspect_ratio or "9:16",
             "style": style or "",
             "episodes": [],
@@ -2297,6 +2269,15 @@ class ProjectManager:
             )
             project["brief"] = brief if brief is not None else ""
             project["episodes"] = [dict(self.AD_SINGLE_EPISODE)]
+        elif resolved_mode == "course":
+            project["episodes"] = [
+                {
+                    "episode": 1,
+                    "title": "",
+                    "script_file": episode_script_relpath(1),
+                    "source_file": None,
+                }
+            ]
         if default_duration is not None:
             project["default_duration"] = default_duration
         if style_template_id is not None:
@@ -2324,6 +2305,10 @@ class ProjectManager:
             raise ValueError(f"grid_storyboard 必须是布尔值，当前为 {grid_storyboard!r}")
         if resolved_mode == "ad" and grid_storyboard:
             raise ValueError("广告/短片项目不支持宫格分镜（grid_storyboard）")
+        if resolved_mode == "course" and generation_mode != "reference_video":
+            raise ValueError("课程视频项目固定使用 reference_video")
+        if resolved_mode == "course" and grid_storyboard:
+            raise ValueError("课程视频项目不支持宫格分镜（grid_storyboard）")
 
         self.save_project(project_name, project)
         return project
@@ -3445,16 +3430,15 @@ class ProjectManager:
         # 创建 TextGenerator（自动追踪用量）
         generator = await TextGenerator.create(TextTaskType.OVERVIEW, project_name)
 
-        # 调用 TextGenerator（Structured Outputs）。source_kind=screenplay 时翻为「提取优先」：
-        # 作者写下的创作方案前言优先照用，缺失才退回从正文归纳（novel 行为不变）。
+        # 调用 TextGenerator（Structured Outputs）。剧本文档固定采用「提取优先」：
+        # 作者写下的创作方案前言优先照用，缺失才退回从正文归纳。
         project_data = self.load_project(project_name)
-        source_kind = resolve_source_kind(project_data)
         # source_language 来自 project.json，可能是非字符串脏数据；非字符串或空串回退默认语言
         raw_source_language = project_data.get("source_language")
         target_language = (
             raw_source_language if isinstance(raw_source_language, str) and raw_source_language.strip() else "中文"
         )
-        prompt = build_overview_prompt(source_content, source_kind=source_kind, target_language=target_language)
+        prompt = build_overview_prompt(source_content, target_language=target_language)
 
         result = await generator.generate(
             TextGenerationRequest(

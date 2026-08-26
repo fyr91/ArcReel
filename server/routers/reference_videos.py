@@ -17,6 +17,7 @@ from pydantic import BaseModel, ConfigDict, Field, PositiveInt
 from lib.api_errors import ApiError, BadRequestError, NotFoundError
 from lib.artifact_activation import resolve_artifact_episode
 from lib.batch_admission import BatchAdmission, BatchAdmissionDecision, refused_ticket
+from lib.course_video import derive_course_dependencies
 from lib.db import async_session_factory
 from lib.generation_queue import get_generation_queue
 from lib.generation_queue_client import (
@@ -135,6 +136,11 @@ class AddUnitRequest(BaseModel):
     duration_seconds: int | None = Field(default=None, ge=1)
     transition_to_next: str = Field(default="cut", pattern=r"^(cut|fade|dissolve)$")
     note: str | None = None
+    unit_type: str = Field(default="story", pattern=r"^(opening|story|explanation|closing)$")
+    scenes: list[str] = Field(default_factory=list)
+    characters: list[str] = Field(default_factory=list)
+    props: list[str] = Field(default_factory=list)
+    presenters: list[str] = Field(default_factory=list)
 
 
 class GenerateUnitRequest(BaseModel):
@@ -315,16 +321,29 @@ def _build_unit_dict(
     duration_seconds: int,
     transition: str,
     note: str | None,
+    unit_type: str = "story",
+    scenes: list[str] | None = None,
+    characters: list[str] | None = None,
+    props: list[str] | None = None,
+    presenters: list[str] | None = None,
 ) -> dict:
     has_body = bool(prompt.strip())
     first_keyframe_id = keyframe_id(unit_id, 1) if has_body else None
     unit = {
         "unit_id": unit_id,
+        "unit_type": unit_type,
         "text": f"{keyframe_mention(first_keyframe_id)} {prompt}".strip() if first_keyframe_id else prompt,
         "storyboard_description": prompt.strip() or None,
         "duration_seconds": duration_seconds,
         "transition_to_next": transition,
         "note": note,
+        "scenes": list(scenes or []),
+        "characters": list(characters or []),
+        "props": list(props or []),
+        "presenters": list(presenters or []),
+        "depends_on_unit_id": None,
+        "video_review_status": "pending_review",
+        "confirmed_video_version": None,
         "keyframes": (
             [
                 {
@@ -408,14 +427,37 @@ async def add_unit(
         duration_seconds=int(duration_seconds),
         transition=req.transition_to_next,
         note=req.note,
+        unit_type=req.unit_type,
+        scenes=req.scenes,
+        characters=req.characters,
+        props=req.props,
+        presenters=req.presenters,
     )
+    dependency_updates: list[dict[str, Any]] = []
+    insert_after_id = units[-1].get("unit_id") if units else None
+    if project.get("content_mode") == "course":
+        # opening/closing are fixed bookends; newly authored body units belong
+        # immediately before closing so the script remains valid after one edit.
+        body = units[:-1] if units and units[-1].get("unit_type") == "closing" else units
+        closing = units[-1:] if len(body) != len(units) else []
+        projected = derive_course_dependencies([*body, unit, *closing])
+        unit = next(item for item in projected if item["unit_id"] == unit["unit_id"])
+        insert_after_id = body[-1].get("unit_id") if body else None
+        dependency_updates = [
+            {"op": "update", "id": item["unit_id"], "fields": {"depends_on_unit_id": item.get("depends_on_unit_id")}}
+            for item in projected
+            if item["unit_id"] != unit["unit_id"]
+        ]
     result = execute_current_episode_edit(
         get_project_manager(),
         project_name,
         episode,
         script_file,
         current,
-        [{"op": "insert_after", "after_id": units[-1].get("unit_id") if units else None, "item": unit}],
+        [
+            {"op": "insert_after", "after_id": insert_after_id, "item": unit},
+            *dependency_updates,
+        ],
     )
     require_script_edit_result(result)
     saved = get_project_manager().load_script(project_name, result.script)
@@ -435,6 +477,19 @@ class PatchUnitRequest(BaseModel):
     duration_seconds: int | None = Field(default=None, ge=1)
     transition_to_next: str | None = Field(default=None, pattern=r"^(cut|fade|dissolve)$")
     note: str | None = None
+    unit_type: str | None = Field(default=None, pattern=r"^(opening|story|explanation|closing)$")
+    scenes: list[str] | None = None
+    characters: list[str] | None = None
+    props: list[str] | None = None
+    presenters: list[str] | None = None
+
+
+class PatchCourseBookendsRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    scenes: list[str]
+    characters: list[str]
+    presenters: list[str]
 
 
 def _find_unit(script: dict, unit_id: str, _t: Translator) -> dict:
@@ -446,6 +501,41 @@ def _find_unit(script: dict, unit_id: str, _t: Translator) -> dict:
 
 def _find_unit_for_project(_project: dict, script: dict, unit_id: str, _t: Translator) -> dict:
     return _find_unit(script, unit_id, _t)
+
+
+def _course_base_units_confirmed(project: dict, script: dict) -> bool:
+    if project.get("content_mode") != "course":
+        return True
+    base_units = [
+        unit
+        for unit in script.get("video_units") or []
+        if isinstance(unit, dict) and unit.get("unit_type") in {"opening", "story", "closing"}
+    ]
+    return bool(base_units) and all(
+        unit.get("video_review_status") == "confirmed"
+        and isinstance(unit.get("generated_assets"), dict)
+        and bool(unit["generated_assets"].get("video_clip"))
+        for unit in base_units
+    )
+
+
+def _require_course_generation_phase(project: dict, script: dict, unit: dict) -> None:
+    if project.get("content_mode") != "course" or unit.get("unit_type") != "explanation":
+        return
+    if not _course_base_units_confirmed(project, script):
+        raise HTTPException(status_code=409, detail="请先生成并确认全部引子、故事演绎和总结视频")
+    predecessor_id = unit.get("depends_on_unit_id")
+    predecessor = next(
+        (
+            candidate
+            for candidate in script.get("video_units") or []
+            if isinstance(candidate, dict) and candidate.get("unit_id") == predecessor_id
+        ),
+        None,
+    )
+    assets = predecessor.get("generated_assets") if isinstance(predecessor, dict) else None
+    if not isinstance(assets, dict) or not assets.get("video_clip"):
+        raise HTTPException(status_code=409, detail=f"前置单元 {predecessor_id} 的视频尚未完成")
 
 
 def _next_keyframe_id(unit: dict[str, Any]) -> str:
@@ -722,20 +812,85 @@ async def patch_unit(
         fields["transition_to_next"] = req.transition_to_next
     if req.note is not None:
         fields["note"] = req.note
+    for field_name in ("unit_type", "scenes", "characters", "props", "presenters"):
+        value = getattr(req, field_name)
+        if value is not None:
+            fields[field_name] = value
     if not fields:
         return {"unit": _find_unit(current, unit_id, _t)}
+    operations: list[dict[str, Any]] = [{"op": "update", "id": unit_id, "fields": fields}]
+    if _project.get("content_mode") == "course":
+        projected: list[dict[str, Any]] = []
+        for existing in current.get("video_units") or []:
+            candidate = dict(existing)
+            if candidate.get("unit_id") == unit_id:
+                candidate.update(fields)
+            projected.append(candidate)
+        projected = derive_course_dependencies(projected)
+        dependency_by_id = {item["unit_id"]: item.get("depends_on_unit_id") for item in projected}
+        operations = [
+            {
+                "op": "update",
+                "id": existing["unit_id"],
+                "fields": {
+                    **(fields if existing.get("unit_id") == unit_id else {}),
+                    "depends_on_unit_id": dependency_by_id[existing["unit_id"]],
+                },
+            }
+            for existing in current.get("video_units") or []
+            if isinstance(existing, dict) and existing.get("unit_id") in dependency_by_id
+        ]
     result = execute_current_episode_edit(
         get_project_manager(),
         project_name,
         episode,
         script_file,
         current,
-        [{"op": "update", "id": unit_id, "fields": fields}],
+        operations,
     )
     require_script_edit_result(result, operation_not_found=True)
     saved = get_project_manager().load_script(project_name, result.script)
     unit = _find_unit(saved, unit_id, _t)
     return {"unit": unit, "edit_result": result.model_dump(mode="json")}
+
+
+@router.patch("/episodes/{episode}/course-bookends")
+async def patch_course_bookends(
+    project_name: str,
+    episode: int,
+    req: PatchCourseBookendsRequest,
+    _t: Translator,
+) -> dict[str, Any]:
+    project, current, script_file = _load_episode_script(project_name, episode, _t)
+    if project.get("content_mode") != "course":
+        raise HTTPException(status_code=409, detail="仅课程视频项目支持首尾场景联动编辑")
+    units = [unit for unit in current.get("video_units") or [] if isinstance(unit, dict)]
+    opening = next((unit for unit in units if unit.get("unit_type") == "opening"), None)
+    closing = next((unit for unit in units if unit.get("unit_type") == "closing"), None)
+    if opening is None or closing is None:
+        raise HTTPException(status_code=409, detail="课程视频缺少 opening 或 closing 单元")
+    fields = {
+        "scenes": req.scenes,
+        "characters": req.characters,
+        "presenters": req.presenters,
+    }
+    result = execute_current_episode_edit(
+        get_project_manager(),
+        project_name,
+        episode,
+        script_file,
+        current,
+        [
+            {"op": "update", "id": opening["unit_id"], "fields": fields},
+            {"op": "update", "id": closing["unit_id"], "fields": fields},
+        ],
+    )
+    require_script_edit_result(result)
+    saved = get_project_manager().load_script(project_name, result.script)
+    return {
+        "units": [unit for unit in saved.get("video_units") or [] if unit.get("unit_type") in {"opening", "closing"}],
+        "edit_result": result.model_dump(mode="json"),
+    }
 
 
 @router.delete("/episodes/{episode}/units/{unit_id}", status_code=status.HTTP_204_NO_CONTENT)
@@ -787,12 +942,51 @@ async def reorder_units(
         {"op": "move_after", "id": unit_id, "after_id": req.unit_ids[index - 1] if index else None}
         for index, unit_id in enumerate(req.unit_ids)
     ]
+    if _project.get("content_mode") == "course":
+        by_id = {unit.get("unit_id"): unit for unit in units if isinstance(unit, dict)}
+        projected = derive_course_dependencies([by_id[unit_id] for unit_id in req.unit_ids])
+        operations.extend(
+            {
+                "op": "update",
+                "id": unit["unit_id"],
+                "fields": {"depends_on_unit_id": unit.get("depends_on_unit_id")},
+            }
+            for unit in projected
+        )
     result = execute_current_episode_edit(
         get_project_manager(), project_name, episode, script_file, current, operations
     )
     require_script_edit_result(result)
     reordered = get_project_manager().load_script(project_name, result.script)["video_units"]
     return {"units": reordered, "edit_result": result.model_dump(mode="json")}
+
+
+@router.post("/episodes/{episode}/units/{unit_id}/confirm-video")
+async def confirm_unit_video(
+    project_name: str,
+    episode: int,
+    unit_id: str,
+    _t: Translator,
+) -> dict[str, Any]:
+    project, script, script_file = _load_episode_script(project_name, episode, _t)
+    unit = _find_unit(script, unit_id, _t)
+    assets = unit.get("generated_assets")
+    if not isinstance(assets, dict) or not assets.get("video_clip"):
+        raise HTTPException(status_code=409, detail="视频尚未生成，无法确认")
+    project_path = get_project_manager().get_project_path(project_name)
+    version = await asyncio.to_thread(VersionManager(project_path).get_current_version, "reference_videos", unit_id)
+    if version <= 0:
+        raise HTTPException(status_code=409, detail="当前视频版本不存在，无法确认")
+    with get_project_manager().locked_script(project_name, script_file, validate=True) as current:
+        target = _find_unit(current, unit_id, _t)
+        target["video_review_status"] = "confirmed"
+        target["confirmed_video_version"] = version
+    return {
+        "success": True,
+        "unit_id": unit_id,
+        "confirmed_video_version": version,
+        "content_mode": project.get("content_mode"),
+    }
 
 
 @router.get("/episodes/{episode}/units/{unit_id}/duration-precheck")
@@ -999,6 +1193,7 @@ async def generate_unit(
 ) -> dict[str, Any]:
     project, script, script_file = _load_episode_script(project_name, episode, _t)
     unit = _find_unit(script, unit_id, _t)  # raises 404 if missing
+    _require_course_generation_phase(project, script, unit)
     _require_unit_ready(unit, content_mode=script.get("content_mode") or project.get("content_mode"))
     guard_prompt = str(unit.get("text") or "")
     request_options = (req or GenerateUnitRequest()).projection_options()
@@ -1142,6 +1337,28 @@ async def generate_units_batch(
     # 集合里属于这次请求：悄悄略过就等于让同批健康的 unit 独自入队计费。
     units, malformed = screen_script_entries(script.get("video_units", []), requested_ids=requested_ids)
 
+    if project.get("content_mode") == "course":
+        selected_units = units
+        explanation_selected = any(unit.get("unit_type") == "explanation" for unit in selected_units)
+        base_selected = any(unit.get("unit_type") != "explanation" for unit in selected_units)
+        if requested_ids is not None and explanation_selected and base_selected:
+            raise HTTPException(status_code=409, detail="课程基础视频与知识解说视频需分两批生成")
+        if requested_ids is None:
+            base_units = [unit for unit in units if unit.get("unit_type") != "explanation"]
+            base_missing = [
+                unit
+                for unit in base_units
+                if not isinstance(unit.get("generated_assets"), dict) or not unit["generated_assets"].get("video_clip")
+            ]
+            if base_missing:
+                units = base_units
+            elif not _course_base_units_confirmed(project, script):
+                raise HTTPException(status_code=409, detail="请先确认全部基础视频，再生成知识解说")
+            else:
+                units = [unit for unit in units if unit.get("unit_type") == "explanation"]
+        elif explanation_selected and not _course_base_units_confirmed(project, script):
+            raise HTTPException(status_code=409, detail="请先确认全部基础视频，再生成知识解说")
+
     project_path = get_project_manager().get_project_path(project_name)
     artifact_episode = resolve_artifact_episode(project=project, script=script, script_filename=script_file) or episode
     targets, selection, _states = resolve_reference_batch_targets(
@@ -1213,6 +1430,16 @@ async def generate_units_batch(
             **(spec.payload or {}),
             "reference_request_options": options.to_payload(),
         }
+    if project.get("content_mode") == "course":
+        target_ids = {spec.resource_id for spec in specs}
+        unit_by_id = {unit.get("unit_id"): unit for unit in targets}
+        for index, spec in enumerate(specs):
+            unit = unit_by_id.get(spec.resource_id)
+            predecessor = unit.get("depends_on_unit_id") if isinstance(unit, dict) else None
+            if isinstance(predecessor, str) and predecessor in target_ids:
+                spec.dependency_resource_id = predecessor
+                spec.dependency_group = f"course-episode-{episode}"
+                spec.dependency_index = index
     enqueued, enqueue_failures = await batch_enqueue_only(project_name=project_name, specs=specs, user_id=user.id)
     # 入队中断不撤销已创建的任务：它们是准入通过的完整付费单元，照常执行。没轮到的目标
     # 逐 ID 报出来，界面据此释放乐观占用标记，下次「缺失即生成」只补这些。

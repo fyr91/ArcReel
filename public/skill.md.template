@@ -67,10 +67,9 @@ curl {{BASE_URL}}/api/v1/projects \
 |------|------|------|
 | `name` | string | 项目标识，仅字母、数字与连字符 |
 | `title` | string | 项目标题 |
-| `content_mode` | string | 选填，创作类型：`drama`（剧情演绎，角色驱动）/ `narration`（旁白/解说，旁白驱动）/ `ad`（广告/短片，商品与目标时长驱动）。默认 `narration`。创建后不可更改 |
-| `source_kind` | string | 选填，源文件类型：`novel`（小说，AI 改编为脚本）/ `screenplay`（剧本，优先保留原稿）。默认 `novel`。创建后不可更改 |
-| `generation_mode` | string | **必填**，视频生成方法二选一：`storyboard`（分镜图生视频）/ `reference_video`（参考图直接生视频，无分镜图步骤）。创建后不可更改 |
-| `grid_storyboard` | bool | 选填，默认 `false`。按多宫格分镜批量产出分镜图，仅 `generation_mode` 为 `storyboard` 时生效；广告/短片项目不可开启。创建后可经项目 PATCH 切换 |
+| `content_mode` | string | 选填，创作类型：`drama`（剧情演绎）/ `course`（课程视频）/ `ad`（广告/短片）。默认 `drama`。创建后不可更改 |
+| `generation_mode` | string | **必填**，视频生成方法二选一：`storyboard`（分镜图生视频）/ `reference_video`（参考图直接生视频，无分镜图步骤）。`course` 固定为 `reference_video`。创建后不可更改 |
+| `grid_storyboard` | bool | 选填，默认 `false`。按多宫格分镜批量产出分镜图，仅 `generation_mode` 为 `storyboard` 时生效；课程视频和广告/短片项目不可开启。创建后可经项目 PATCH 切换 |
 | `brief` | string | 选填，仅 `content_mode` 为 `ad` 可用：创作诉求短文本，不经上传源文件接口传入。非广告/短片项目携带该字段返回 400 |
 | `target_duration` | int | 选填，仅 `content_mode` 为 `ad` 可用：成片目标总时长（秒），须为正整数。非广告/短片项目携带该字段返回 400 |
 
@@ -89,7 +88,8 @@ curl -X POST {{BASE_URL}}/api/v1/projects \
 
 适用范围按创作类型区分：
 
-- `content_mode` 为 `drama` 或 `narration`：必须先调用本端点，脚本生成读取这里传入的源文件。`source_kind` 为 `novel` 时传入小说原文，为 `screenplay` 时传入成品剧本，两者走同一端点、同一表单字段，差别在于脚本生成阶段是改编还是保留原稿
+- `content_mode` 为 `drama`：必须先调用本端点并上传剧本文档，脚本生成读取这里传入的源文件
+- `content_mode` 为 `course`：不调用本端点；改用 `POST /api/v1/files/projects/{name}/course/episodes`，每次上传一份单集课程文档
 - `content_mode` 为 `ad`：不需要调用本端点。广告/短片的脚本由创建时的 `brief`、`target_duration` 与项目商品资产驱动，不读源文件
 
 - **端点**：`POST {{BASE_URL}}/api/v1/projects/{name}/source`
@@ -164,7 +164,7 @@ curl {{BASE_URL}}/api/v1/projects/my-novel \
 
 ### 5. 更新项目设置
 
-修改项目配置（标题、风格、多宫格分镜开关等）。`generation_mode`、`content_mode`、`source_kind` 创建后不可更改；请求中携带这些字段不会报错，服务端会忽略它们，项目数据保持原值。
+修改项目配置（标题、风格、多宫格分镜开关等）。`generation_mode`、`content_mode` 创建后不可更改；请求中携带这些字段不会报错，服务端会忽略它们，项目数据保持原值。
 
 广告/短片项目可经本端点改 `brief` 与 `target_duration`：非广告/短片项目携带这两个字段返回 400，`target_duration` 显式传 `null` 同样返回 400。
 

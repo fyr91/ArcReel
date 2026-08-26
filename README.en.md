@@ -13,7 +13,7 @@
 <p align="center">
   <strong>An open-source, self-hosted AI video production workspace</strong>
   <br>
-  Turn novels, finished screenplays, or product assets into character-consistent, controllable, cost-trackable short videos that remain editable.
+  Turn screenplay documents, course documents, or product assets into character-consistent, controllable, cost-trackable short videos that remain editable.
 </p>
 
 <p align="center">
@@ -43,9 +43,9 @@
 
 ## What ArcReel is
 
-ArcReel is an open-source, self-hosted workspace for AI drama and novel adaptation, narrated short videos, ads, and product shorts. It organizes content analysis, asset management, storyboards, media generation, cost tracking, and export into an inspectable and resumable production pipeline.
+ArcReel is an open-source, self-hosted workspace for AI drama, course videos, ads, and product shorts. It organizes content analysis, asset management, storyboards, media generation, cost tracking, and export into an inspectable and resumable production pipeline.
 
-- **One production workflow**: turn novels, finished screenplays, or product assets into characters, scenes, props, storyboards, video clips, and final videos step by step.
+- **One production workflow**: turn screenplay documents, course documents, or product assets into characters, scenes, props, storyboards, video clips, and final videos step by step.
 - **Visual continuity with human control**: reuse reference assets across shots, review key stages, regenerate individual assets, and roll back to earlier versions.
 - **Manageable models and costs**: configure text, image, video, and TTS capabilities in one place, then review estimated costs and actual usage.
 - **Editable delivery**: render final videos directly or export Jianying drafts to refine subtitles, voice-over, pacing, and transitions. Exports target the mainland-China edition of Jianying; CapCut compatibility has not been verified.
@@ -54,7 +54,7 @@ ArcReel is an open-source, self-hosted workspace for AI drama and novel adaptati
 
 ```mermaid
 flowchart LR
-    A["Novel / Screenplay / Product Assets"] --> B["Content Analysis & Project Planning"]
+    A["Screenplay / Course Document / Product Assets"] --> B["Content Analysis & Project Planning"]
     B --> C["Character / Scene / Prop Assets"]
     C --> D["Episode Plan & Structured Script"]
     D --> E["Storyboard Image / Grid Storyboard"]
@@ -99,7 +99,7 @@ For the complete first-run workflow, see [Getting Started](https://docs.arc-reel
 |---|---|
 | [Documentation Home](https://docs.arc-reel.com/en/) | Entry points for users, operators, and developers |
 | [Getting Started](https://docs.arc-reel.com/en/guide/getting-started) | From first deployment to the first generated video |
-| [Workflows and Modes](https://docs.arc-reel.com/en/guide/workflows) | Novel, screenplay, and ad modes, plus the three video-making workflows |
+| [Workflows and Modes](https://docs.arc-reel.com/en/guide/workflows) | Drama, course video, and ad modes and their production workflows |
 | [Provider Configuration](https://docs.arc-reel.com/en/guide/providers) | Selection and configuration of Agent, text, image, video, and TTS providers |
 | [Jianying Draft Export](https://docs.arc-reel.com/en/guide/jianying-export) | Continue editing ArcReel output in Jianying |
 | [FAQ](https://docs.arc-reel.com/en/guide/faq) | Deployment, cost, model, data, and licensing questions |

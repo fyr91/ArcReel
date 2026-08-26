@@ -39,6 +39,7 @@ from lib.config.resolver import (
     resolve_raw_supported_durations,
 )
 from lib.content_digest import sha256_file
+from lib.course_video import derive_course_dependencies, validate_course_assets, validate_opening_closing
 from lib.db import async_session_factory
 from lib.draft_quarantine import (
     PROMOTE_TOOL_NAME,
@@ -183,7 +184,7 @@ class ScriptGenerator:
 
         # 加载 project.json
         self.project_json = self._load_project_json()
-        self.content_mode = self.project_json.get("content_mode", "narration")
+        self.content_mode = self.project_json.get("content_mode", "drama")
 
     @property
     def generation_mode(self) -> str | None:
@@ -1278,12 +1279,24 @@ class ScriptGenerator:
                     "duration_seconds": step1_unit["duration_seconds"],
                     "keyframes": keyframes,
                     "storyboard_description": without_keyframe_mentions(rendered_text),
+                    "unit_type": step1_unit.get("unit_type", "story"),
+                    "scenes": list(step1_unit.get("scenes") or []),
+                    "characters": list(step1_unit.get("characters") or []),
+                    "props": list(step1_unit.get("props") or []),
+                    "presenters": list(step1_unit.get("presenters") or []),
+                    "depends_on_unit_id": step1_unit.get("depends_on_unit_id"),
                 }
             )
 
         if violations:
             raise DraftViolations(violations)
-        return ReferenceVideoScript.model_validate({"title": flat.title, "video_units": video_units}).model_dump()
+        if self.content_mode == "course":
+            video_units = derive_course_dependencies(video_units)
+            validate_course_assets(self.project_json)
+            validate_opening_closing(video_units)
+        return ReferenceVideoScript.model_validate(
+            {"title": flat.title, "content_mode": self.content_mode, "video_units": video_units}
+        ).model_dump()
 
     def _step2_flat_content(self, response_text: str, episode: int) -> dict:
         """把 step2 响应还原成隔离草稿要装的扁平形状 ``{title, units: [{text}]}``。

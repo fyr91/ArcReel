@@ -50,7 +50,7 @@ def seeded_client(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> tuple[Test
             {
                 "schema_version": 7,
                 "title": "T",
-                "content_mode": "narration",
+                "content_mode": "drama",
                 "generation_mode": "reference_video",
                 "style": "s",
                 "characters": {"张三": {"description": "x", "character_sheet": "characters/张三.png"}},
@@ -67,7 +67,7 @@ def seeded_client(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> tuple[Test
             {
                 "episode": 1,
                 "title": "E1",
-                "content_mode": "narration",
+                "content_mode": "drama",
                 "generation_mode": "reference_video",
                 "summary": "x",
                 "novel": {"title": "t", "chapter": "c"},
@@ -129,14 +129,37 @@ async def test_end_to_end_generate_unit_to_executor(
     assert resp.status_code == 201, resp.text
     uid = resp.json()["unit"]["unit_id"]
 
+    # 剧情参考路线沿用正式 Storyboard Sheet + Keyframe 前置。
+    sheet = proj_dir / "storyboard_sheets" / f"{uid}.png"
+    keyframe = proj_dir / "keyframes" / f"{uid}K01.png"
+    sheet.parent.mkdir(exist_ok=True)
+    keyframe.parent.mkdir(exist_ok=True)
+    sheet.write_bytes(_TINY_PNG)
+    keyframe.write_bytes(_TINY_PNG)
+    from server.routers import reference_videos as router_mod
+
+    pm = router_mod.get_project_manager()
+    with pm.locked_script("demo", "episode_1.json", validate=False) as script:
+        unit = next(item for item in script["video_units"] if item["unit_id"] == uid)
+        unit["storyboard_sheet"] = {
+            "image_path": f"storyboard_sheets/{uid}.png",
+            "status": "confirmed",
+            "confirmed_at": "2026-08-26T00:00:00+00:00",
+        }
+        unit["keyframes"] = [
+            {
+                "keyframe_id": f"{uid}K01",
+                "description": "首帧",
+                "image_path": f"keyframes/{uid}K01.png",
+            }
+        ]
+
     # 2) Patch GenerationQueue.enqueue_task 直接返回 task dict（跳过 DB）
     captured_payload: dict = {}
 
     async def _fake_enqueue(**kwargs):
         captured_payload.update(kwargs)
         return {"task_id": "t1", "deduped": False}
-
-    from server.routers import reference_videos as router_mod
 
     fake_queue = MagicMock()
     fake_queue.enqueue_task = AsyncMock(side_effect=_fake_enqueue)

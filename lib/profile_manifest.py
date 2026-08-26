@@ -56,8 +56,8 @@ class ProfileMisconfiguredError(RuntimeError):
     """profile 端变体文件不合法（成对缺失或与通用文件并存）→ 部署错误。sync 拒绝运行。"""
 
 
-ContentMode = Literal["narration", "drama", "ad"]
-VALID_CONTENT_MODES: frozenset[str] = frozenset({"narration", "drama", "ad"})
+ContentMode = Literal["drama", "course", "ad"]
+VALID_CONTENT_MODES: frozenset[str] = frozenset({"drama", "course", "ad"})
 
 
 # ---------- 基础工具 ----------
@@ -679,7 +679,7 @@ def sync_profile_to_project(
         ProfileMissingError: profile 目录不存在
         ProfileEmptyError: profile 目录无可同步文件
         ProfileMisconfiguredError: 变体文件配置违规
-        ValueError: content_mode 非 narration/drama
+        ValueError: content_mode 非 drama/course/ad
     """
     if not profile_dir.exists():
         raise ProfileMissingError(f"Profile dir not found: {profile_dir}")

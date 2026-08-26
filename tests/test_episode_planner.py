@@ -844,8 +844,8 @@ class TestPlan:
         assert eps[0]["outline"] == {"story_beats": ["山村习武", "后山得玉"], "next_episode_teaser": "下集李恒下山"}
 
     @pytest.mark.unit
-    async def test_plan_prompt_branches_on_source_kind(self, tmp_path: Path):
-        """screenplay 规划 prompt 携带「尊重作者分集 / 无则按剧情弧语义切 / 不依赖固定标记」；novel 不翻面。"""
+    async def test_plan_prompt_uses_screenplay_semantics(self, tmp_path: Path):
+        """规划固定尊重剧本文档自带分集，无分集线索时才按剧情弧语义切分。"""
 
         def _one_episode_generator() -> _FakeTextGenerator:
             return _FakeTextGenerator(
@@ -864,25 +864,15 @@ class TestPlan:
                 ]
             )
 
-        screenplay_dir = _write_project(tmp_path / "scr", content_mode="drama", extra={"source_kind": "screenplay"})
+        screenplay_dir = _write_project(tmp_path / "scr", content_mode="drama")
         scr_fake = _one_episode_generator()
         await EpisodePlanner(screenplay_dir, generator=scr_fake).plan()
         scr_prompt = scr_fake.requests[0].prompt
 
-        novel_dir = _write_project(tmp_path / "nov", content_mode="drama")
-        nov_fake = _one_episode_generator()
-        await EpisodePlanner(novel_dir, generator=nov_fake).plan()
-        nov_prompt = nov_fake.requests[0].prompt
-
-        # screenplay：尊重作者分集、无则按剧情弧语义切、不依赖固定标记
         assert "尊重作者" in scr_prompt
         assert "固定标记" in scr_prompt
         assert "剧情弧" in scr_prompt
         assert "剧本原文片段" in scr_prompt
-        # novel：仍是「切分为若干集」的创作口径，不含 screenplay 专属指令（回归）
-        assert "尊重作者" not in nov_prompt
-        assert "固定标记" not in nov_prompt
-        assert "小说原文片段" in nov_prompt
 
     @pytest.mark.unit
     async def test_plan_window_setting_limits_prompt_window(self, tmp_path: Path):

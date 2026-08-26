@@ -16,6 +16,7 @@ import { UnitRail } from "./UnitRail";
 import { UnitPreviewPanel } from "./UnitPreviewPanel";
 import { ReferenceVideoCard } from "./ReferenceVideoCard";
 import { ScriptPreviewPanel } from "./ScriptPreviewPanel";
+import { CourseUnitFields } from "./CourseUnitFields";
 import { deriveUnitStatus } from "./unit-status";
 import { EpisodeHeader } from "./EpisodeHeader";
 import { ReferenceDurationConfirmDialog } from "./ReferenceDurationConfirmDialog";
@@ -203,6 +204,18 @@ export function ReferenceVideoCanvas({
   const error = useReferenceVideoStore((s) => s.error);
   const loading = useReferenceVideoStore((s) => s.loading);
   const project = useProjectsStore((s) => s.currentProjectData);
+  const isCourse = project?.content_mode === "course";
+  const courseSceneNames = Object.keys(project?.scenes ?? {});
+  const coursePropNames = Object.keys(project?.props ?? {});
+  const courseCharacterNames = Object.keys(project?.characters ?? {});
+  const courseActorNames = courseCharacterNames.filter((name) => {
+    const role = project?.characters?.[name]?.course_role;
+    return !role || role === "actor";
+  });
+  const courseLecturerNames = courseCharacterNames.filter((name) => {
+    const role = project?.characters?.[name]?.course_role;
+    return role === "main_lecturer" || role === "guest_lecturer";
+  });
   const videoStyleSummary = useMemo(() => {
     const style = project?.video_style;
     if (!style) return t("reference_video_style_missing");
@@ -246,6 +259,7 @@ export function ReferenceVideoCanvas({
   const [h3PromptDrafts, setH3PromptDrafts] = useState<Record<string, string>>({});
   const [editingH3PromptKey, setEditingH3PromptKey] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  const [courseFieldsSaving, setCourseFieldsSaving] = useState(false);
   const [h3PromptSaving, setH3PromptSaving] = useState(false);
 
   // resource（=unit）→ 最新任务行。「最新行胜出」下沉到 store selector：
@@ -938,6 +952,53 @@ export function ReferenceVideoCanvas({
     }
   }, [selected, drafts, patchUnit, projectName, episode, clearFlushedDraft]);
 
+  const handleCoursePatch = useCallback(
+    async (patch: Partial<Pick<ReferenceVideoUnit, "unit_type" | "scenes" | "characters" | "props" | "presenters">>) => {
+      if (!selected) return;
+      setCourseFieldsSaving(true);
+      try {
+        await patchUnit(projectName, episode, selected.unit_id, patch);
+      } catch (e) {
+        toastError(e);
+      } finally {
+        setCourseFieldsSaving(false);
+      }
+    },
+    [episode, patchUnit, projectName, selected],
+  );
+
+  const handleCourseBookendsPatch = useCallback(
+    async (patch: { scenes?: string[]; characters?: string[]; presenters?: string[] }) => {
+      setCourseFieldsSaving(true);
+      try {
+        await API.patchCourseBookends(projectName, episode, {
+          scenes: patch.scenes ?? [],
+          characters: patch.characters ?? [],
+          presenters: patch.presenters ?? [],
+        });
+        await loadUnits(projectName, episode);
+      } catch (e) {
+        toastError(e);
+      } finally {
+        setCourseFieldsSaving(false);
+      }
+    },
+    [episode, loadUnits, projectName],
+  );
+
+  const handleConfirmVideo = useCallback(
+    async (unitId: string) => {
+      try {
+        await API.confirmReferenceVideoUnit(projectName, episode, unitId);
+        await loadUnits(projectName, episode);
+        useAppStore.getState().pushToast(t("course_video_confirmed"), "success");
+      } catch (e) {
+        toastError(e);
+      }
+    },
+    [episode, loadUnits, projectName, t],
+  );
+
   // Reset tab to units on project/episode change (render-time derived-state pattern).
   // 初始值按 hasScript 走 GridImageToVideoCanvas 同款判定：step2 剧本未生成时（仅 segmented）
   // units 面板无脚本可读、请求会 404，应先落到 preproc 审阅 gate。
@@ -1263,6 +1324,7 @@ export function ReferenceVideoCanvas({
                 onAdd={onAdd}
                 dirtyMap={dirtyMap}
                 statusMap={statusMap}
+                showCourseTypes={isCourse}
               />
             ) : (
               <UnitRail
@@ -1497,6 +1559,19 @@ export function ReferenceVideoCanvas({
                               value={currentText}
                               onChange={handlePromptChange}
                             />
+                            {isCourse && (
+                              <CourseUnitFields
+                                unit={selected}
+                                sceneNames={courseSceneNames}
+                                characterNames={courseCharacterNames}
+                                actorNames={courseActorNames}
+                                lecturerNames={courseLecturerNames}
+                                propNames={coursePropNames}
+                                disabled={courseFieldsSaving || isUnitLocked(selected.unit_id)}
+                                onPatch={handleCoursePatch}
+                                onPatchBookends={handleCourseBookendsPatch}
+                              />
+                            )}
                           </div>
                         ) : activeEditorView === "storyboard" ? (
                           <div
@@ -1642,6 +1717,8 @@ export function ReferenceVideoCanvas({
                           onRestoringChange={handleRestoringChange}
                           checkBusy={isUnitLocked}
                           onRestored={handleUnitsRefresh}
+                          onConfirmVideo={isCourse ? handleConfirmVideo : undefined}
+                          videoConfirmed={selected.video_review_status === "confirmed"}
                         />
                       </div>
                     )}
@@ -1680,6 +1757,8 @@ export function ReferenceVideoCanvas({
                   onRestoringChange={handleRestoringChange}
                   checkBusy={isUnitLocked}
                   onRestored={handleUnitsRefresh}
+                  onConfirmVideo={isCourse ? handleConfirmVideo : undefined}
+                  videoConfirmed={selected?.video_review_status === "confirmed"}
                 />
               </div>
             )}
@@ -1708,6 +1787,7 @@ export function ReferenceVideoCanvas({
                   onAdd={onAdd}
                   dirtyMap={dirtyMap}
                   statusMap={statusMap}
+                  showCourseTypes={isCourse}
                 />
               </div>
             </>

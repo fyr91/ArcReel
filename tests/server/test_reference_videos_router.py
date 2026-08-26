@@ -33,7 +33,7 @@ def client(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> TestClient:
             {
                 "schema_version": 7,
                 "title": "T",
-                "content_mode": "narration",
+                "content_mode": "drama",
                 "generation_mode": "reference_video",
                 "style": "s",
                 "characters": {"张三": {"description": "x", "character_sheet": "characters/张三.png"}},
@@ -54,7 +54,7 @@ def client(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> TestClient:
             {
                 "episode": 1,
                 "title": "E1",
-                "content_mode": "narration",
+                "content_mode": "drama",
                 "generation_mode": "reference_video",
                 "summary": "x",
                 "novel": {"title": "t", "chapter": "c"},
@@ -239,18 +239,6 @@ def test_add_unit_rejects_non_positive_duration(client: TestClient, duration_sec
     assert resp.status_code == 422, resp.text
 
 
-@pytest.mark.unit
-def test_add_unit_atomically_rejects_mixed_speech(client: TestClient):
-    response = client.post(
-        "/api/v1/projects/demo/reference-videos/episodes/1/units",
-        json={"prompt": "镜头1：张三推门\n@[张三]：{快走。}\n{风吹过旷野。}", "duration_seconds": 3},
-    )
-
-    assert response.status_code == 409
-    assert response.json()["detail"]["problems"][0]["code"] == "mixed_speech"
-    assert client.get("/api/v1/projects/demo/reference-videos/episodes/1/units").json() == {"units": []}
-
-
 def _confirm_sheet_for_test(unit_id: str) -> None:
     # Most tests below exercise video admission rather than the mandatory
     # Storyboard Sheet review itself. Seed the newly required confirmed input
@@ -293,12 +281,16 @@ def _seed_unit(client: TestClient) -> str:
 
 
 def _derived_references(client: TestClient, unit: dict[str, Any]) -> list[tuple[str, str]]:
-    """执行期会用到的参考图引用：正文的唯一派生出口，不落盘。"""
+    """正文派生出的命名资产引用；排除路线自动附加的 Sheet / Keyframe。"""
     from lib.reference_video.request_projection import unit_reference_declarations
     from server.routers import reference_videos as router_mod
 
     project = router_mod.get_project_manager().load_project("demo")
-    return [(ref.type, ref.name) for ref in unit_reference_declarations(project, unit)]
+    return [
+        (ref.type, ref.name)
+        for ref in unit_reference_declarations(project, unit)
+        if ref.type not in {"storyboard_sheet", "keyframe"}
+    ]
 
 
 @pytest.mark.integration
@@ -332,11 +324,7 @@ def test_patch_unit_derives_non_character_references_before_speech_admission(cli
 @pytest.mark.integration
 @pytest.mark.parametrize(
     "case",
-    [
-        case
-        for case in SPEECH_CONTRACT_CASES
-        if case.generation_mode == "reference_video" and case.content_mode != "drama"
-    ],
+    [case for case in SPEECH_CONTRACT_CASES if case.generation_mode == "reference_video" and case.content_mode == "ad"],
     ids=lambda case: case.route_id,
 )
 def test_non_drama_reference_route_web_manual_edits_atomically_reject_mixed_speech_on_save(
@@ -398,28 +386,6 @@ def test_drama_reference_route_saves_dialogue_and_voiceover_as_one_speech_lane(
 
 
 @pytest.mark.integration
-def test_patch_allows_unchanged_legacy_mixed_prompt(client: TestClient):
-    uid = _seed_unit(client)
-    prompt = "镜头1：张三推门\n@[张三]：{快走。}\n{风吹过旷野。}"
-    from server.routers import reference_videos as router_mod
-
-    pm = router_mod.get_project_manager()
-    script = pm.load_script("demo", "episode_1.json")
-    script["video_units"][0]["text"] = "张三推门\n@[张三]：{快走。}\n{风吹过旷野。}"
-    script["video_units"][0]["needs_replan"] = True
-    pm.save_script("demo", script, "episode_1.json")
-
-    response = client.patch(
-        f"/api/v1/projects/demo/reference-videos/episodes/1/units/{uid}",
-        json={"prompt": prompt, "note": "保留历史媒体"},
-    )
-
-    assert response.status_code == 200
-    assert response.json()["unit"]["note"] == "保留历史媒体"
-    assert response.json()["unit"]["needs_replan"] is True
-
-
-@pytest.mark.integration
 def test_patch_unit_duration_only(client: TestClient):
     """只改时长：正文原样保留。"""
     uid = _seed_unit(client)
@@ -453,10 +419,7 @@ def test_add_nonblank_unit_derives_registered_references_from_text(client: TestC
     )
 
     assert response.status_code == 201, response.text
-    assert _derived_references(client, response.json()["unit"]) == [
-        ("keyframe", "E1U1K01"),
-        ("scene", "酒馆"),
-    ]
+    assert _derived_references(client, response.json()["unit"]) == [("scene", "酒馆")]
 
 
 @pytest.mark.integration

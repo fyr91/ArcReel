@@ -6,16 +6,14 @@ import { ShotSplitView } from "./ShotSplitView";
 import { EpisodeHeader } from "./EpisodeHeader";
 import { useCostStore } from "@/stores/cost-store";
 import { useActiveResourceIds } from "@/stores/tasks-store";
-import { getScriptItemId, sumItemDuration } from "@/utils/script-shape";
+import { sumItemDuration } from "@/utils/script-shape";
 import { ONBOARDING_ANCHORS } from "@/onboarding/anchors";
 import { useDemoWorkbench } from "@/onboarding/use-demo-workbench";
 import type { DurationOutOfRangeReason } from "@/hooks/useModelCapabilities";
 import type {
   EpisodeScript,
-  NarrationEpisodeScript,
   DramaEpisodeScript,
   AdEpisodeScript,
-  NarrationSegment,
   DramaScene,
   AdShot,
   ProjectData,
@@ -23,7 +21,7 @@ import type {
   ImageModelSelection,
 } from "@/types";
 
-type Segment = NarrationSegment | DramaScene | AdShot;
+type Segment = DramaScene | AdShot;
 
 interface TimelineCanvasProps {
   projectName: string;
@@ -89,7 +87,6 @@ export function TimelineCanvas(props: TimelineCanvasProps) {
     onGenerateStoryboard,
     onGenerateVideo,
     onGenerateNarration,
-    onGenerateEpisodeNarration,
     onRestoreStoryboard,
     onRestoreVideo,
     onSaveTitle,
@@ -97,11 +94,9 @@ export function TimelineCanvas(props: TimelineCanvasProps) {
   } = demoReadOnly ? { ...props, ...DEMO_READ_ONLY_PROPS } : props;
 
   const { t } = useTranslation("dashboard");
-  const contentMode = projectData?.content_mode ?? "narration";
-  // 分镜编辑子视图按剧本形状显式分派：narration（segments）/ drama（scenes）/ ad（shots）。
-  // 未知/脏 content_mode 沿用历史兜底落 drama 视图。
-  const editorContentMode: "narration" | "drama" | "ad" =
-    contentMode === "narration" ? "narration" : contentMode === "ad" ? "ad" : "drama";
+  const contentMode = projectData?.content_mode ?? "drama";
+  // timeline 只分派剧情场景和广告镜头；课程固定走 Reference Video Canvas。
+  const editorContentMode: "drama" | "ad" = contentMode === "ad" ? "ad" : "drama";
 
   const hasScript = Boolean(episodeScript);
   // ad 一键生成不走预处理中间文件，预处理 tab 对 ad 无意义，仅 timeline 单 tab
@@ -126,13 +121,13 @@ export function TimelineCanvas(props: TimelineCanvasProps) {
   }, [projectName, episodeScript?.episode, debouncedFetch]);
 
   // 解析 aspect ratio（仅支持 9:16 / 16:9 两档，3:4/1:1 也回退到 16:9）；
-  // 缺省回退：narration / ad 竖屏，drama 与未知/脏值横屏——与后端
+  // 缺省回退：ad 竖屏，drama 横屏——与后端
   // ScriptGenerator._resolve_aspect_ratio 同口径，避免预览与产物比例错位。
   const rawAspect =
     typeof projectData?.aspect_ratio === "string"
       ? projectData.aspect_ratio
       : projectData?.aspect_ratio?.storyboard ??
-        (contentMode === "narration" || contentMode === "ad" ? "9:16" : "16:9");
+        (contentMode === "ad" ? "9:16" : "16:9");
   const aspectRatio: "9:16" | "16:9" =
     rawAspect === "9:16" || rawAspect === "16:9" ? rawAspect : "16:9";
 
@@ -142,13 +137,11 @@ export function TimelineCanvas(props: TimelineCanvasProps) {
     () =>
       !episodeScript || !projectData
         ? []
-        : contentMode === "narration"
-          ? ((episodeScript as NarrationEpisodeScript).segments ?? [])
-          : contentMode === "ad"
-            ? ((episodeScript as AdEpisodeScript).shots ?? [])
-            : contentMode === "drama"
-              ? ((episodeScript as DramaEpisodeScript).scenes ?? [])
-              : [],
+        : contentMode === "ad"
+          ? ((episodeScript as AdEpisodeScript).shots ?? [])
+          : contentMode === "drama"
+            ? ((episodeScript as DramaEpisodeScript).scenes ?? [])
+            : [],
     [contentMode, episodeScript, projectData],
   );
 
@@ -168,17 +161,6 @@ export function TimelineCanvas(props: TimelineCanvasProps) {
     (segId: string) => ttsBusyIds.has(segId),
     [ttsBusyIds],
   );
-  // 批量旁白进行中：当前分集还有未完结的 tts 任务时禁用批量按钮，避免重复入队；
-  // 按本集 segment 范围判定，不影响其他分集的批量入口
-  const currentSegmentIds = useMemo(
-    () => new Set(segments.map((s) => getScriptItemId(s, editorContentMode))),
-    [segments, editorContentMode],
-  );
-  const narrationBatchBusy = useMemo(
-    () => [...currentSegmentIds].some((id) => ttsBusyIds.has(id)),
-    [ttsBusyIds, currentSegmentIds],
-  );
-
   if (!projectData || (!episodeScript && !hasDraft)) {
     return (
       <div
@@ -311,18 +293,6 @@ export function TimelineCanvas(props: TimelineCanvasProps) {
               <Sparkles className="h-3 w-3" />
               <span>{t("batch_generate_videos")}</span>
             </button>
-            {contentMode === "narration" && onGenerateEpisodeNarration && (
-              <button
-                type="button"
-                className="sv-navbtn inline-flex items-center gap-1.5"
-                disabled={narrationBatchBusy}
-                onClick={() => onGenerateEpisodeNarration(scriptFile)}
-                title={t("batch_generate_narration")}
-              >
-                <Sparkles className="h-3 w-3" />
-                <span>{t("batch_generate_narration")}</span>
-              </button>
-            )}
           </div>
         )}
       </div>

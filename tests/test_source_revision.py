@@ -79,7 +79,7 @@ def test_revision_rejects_source_that_is_not_valid_utf8(tmp_path: Path) -> None:
 
 
 @pytest.mark.integration
-def test_revision_changes_with_raw_bytes_path_and_source_semantics(tmp_path: Path) -> None:
+def test_revision_changes_with_raw_bytes_path_and_source_language(tmp_path: Path) -> None:
     source = tmp_path / "source"
     source.mkdir()
     original = source / "a.txt"
@@ -92,7 +92,7 @@ def test_revision_changes_with_raw_bytes_path_and_source_semantics(tmp_path: Pat
     changed_path = compute_source_revision(tmp_path, _project(), SourceScope(kind="all"))
     changed_semantics = compute_source_revision(
         tmp_path,
-        {"source_kind": "screenplay", "source_language": "zh"},
+        {"source_language": "en"},
         SourceScope(kind="all"),
     )
 

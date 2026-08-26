@@ -28,7 +28,7 @@ if TYPE_CHECKING:
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile
 from fastapi import Path as FastAPIPath
 from fastapi.responses import FileResponse, JSONResponse
-from pydantic import BaseModel, BeforeValidator, ConfigDict, Field
+from pydantic import BaseModel, BeforeValidator, ConfigDict, Field, model_validator
 from pydantic import ValidationError as PydanticValidationError
 from starlette.background import BackgroundTask
 
@@ -44,7 +44,7 @@ from lib.i18n import Translator
 from lib.json_io import domain_error_on_value_error
 from lib.profile_manifest import ContentMode
 from lib.project_change_hints import project_change_source
-from lib.project_manager import EmptySourceError, EpisodeScriptReboundError, SourceKind, get_project_manager
+from lib.project_manager import EmptySourceError, EpisodeScriptReboundError, get_project_manager
 from lib.release_defaults import (
     RELEASE_COMPLEX_TEXT_BACKEND,
     RELEASE_IMAGE_BACKEND,
@@ -189,12 +189,18 @@ def _validated_speech_rate(value: float, _t: Translator) -> float:
 
 
 class CreateProjectRequest(BaseModel):
+    @model_validator(mode="before")
+    @classmethod
+    def _reject_retired_dimensions(cls, data: object) -> object:
+        # 其他已知 legacy 字段仍沿用本接口原本的忽略策略；source_kind 明确退役且不兼容。
+        if isinstance(data, dict) and "source_kind" in data:
+            raise ValueError("source_kind has been retired; drama input is always a screenplay")
+        return data
+
     name: str | None = None
     title: str | None = None
     style: str | None = ""  # 保留但不再是用户入口
-    content_mode: ContentMode | None = "narration"
-    # 源文件性质（novel / screenplay），缺省 novel；创建即定、之后不可变。
-    source_kind: SourceKind | None = None
+    content_mode: ContentMode | None = "drama"
     aspect_ratio: str | None = "9:16"
     default_duration: int | None = None
     # 仅 content_mode=ad：目标总时长（秒）。UI 给四档（15/30/60/90，默认 60），
@@ -247,6 +253,13 @@ class EpisodePatch(BaseModel):
 
 
 class UpdateProjectRequest(BaseModel):
+    @model_validator(mode="before")
+    @classmethod
+    def _reject_retired_dimensions(cls, data: object) -> object:
+        if isinstance(data, dict) and "source_kind" in data:
+            raise ValueError("source_kind has been retired; drama input is always a screenplay")
+        return data
+
     title: str | None = None
     style: str | None = None
     # 自定义风格文本可由参考图解析或由用户直接填写；预设模板仍以 style 为单一真相源。
@@ -640,7 +653,7 @@ async def create_project(
 
             # 模式专属字段互斥：target_duration/brief 仅 ad 可用；
             # ad 不暴露 default_duration、不开放宫格分镜
-            content_mode = req.content_mode or "narration"
+            content_mode = req.content_mode or "drama"
             if content_mode == "ad":
                 if req.default_duration is not None:
                     raise HTTPException(status_code=400, detail=_t("ad_no_default_duration"))
@@ -651,6 +664,10 @@ async def create_project(
                     raise HTTPException(status_code=400, detail=_t("ad_only_field", field="target_duration"))
                 if req.brief is not None:
                     raise HTTPException(status_code=400, detail=_t("ad_only_field", field="brief"))
+            if content_mode == "course" and req.generation_mode != "reference_video":
+                raise HTTPException(status_code=400, detail="课程视频仅支持参考生视频生成方式")
+            if content_mode == "course" and req.grid_storyboard:
+                raise HTTPException(status_code=400, detail="课程视频不支持宫格分镜")
 
             # 与 update 路径对称：校验所有 backend 字段
             for field_name in _PROJECT_BACKEND_FIELDS:
@@ -667,7 +684,7 @@ async def create_project(
             )
 
             try:
-                manager.create_project(project_name, content_mode=req.content_mode or "narration")
+                manager.create_project(project_name, content_mode=req.content_mode or "drama")
             except FileExistsError:
                 raise HTTPException(status_code=400, detail=_t("project_exists", name=project_name))
             extras = {field: value for field in _PROJECT_BACKEND_FIELDS if (value := getattr(req, field))}
@@ -697,13 +714,12 @@ async def create_project(
                     extras=extras or None,
                     target_duration=req.target_duration,
                     brief=req.brief,
-                    source_kind=req.source_kind,
                 )
             return {"success": True, "name": project_name, "project": project}
 
         return await asyncio.to_thread(_sync)
     except ValueError as e:
-        # 项目名 / source_kind / duration / brief 等配置校验失败，str(e) 只进日志
+        # 项目名 / duration / brief 等配置校验失败，str(e) 只进日志
         logger.warning("创建项目参数错误: name=%s (%s)", req.name or req.title, e)
         raise BadRequestError("project_config_invalid") from e
     except (HTTPException, ApiError):

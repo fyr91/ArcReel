@@ -28,6 +28,7 @@ import type { Asset } from "@/types/asset";
 interface CharacterSavePayload {
   description: string;
   voiceStyle: string;
+  courseRole?: "actor" | "main_lecturer" | "guest_lecturer";
   referenceFile?: File | null;
   audioFile?: File | null;
 }
@@ -85,6 +86,8 @@ export function CharacterCard({
   );
   const [description, setDescription] = useState(character.description);
   const [voiceStyle, setVoiceStyle] = useState(character.voice_style ?? "");
+  const [courseRole, setCourseRole] = useState(character.course_role ?? "actor");
+  const isCourse = useProjectsStore((s) => s.currentProjectData?.content_mode === "course");
   const [imgError, setImgError] = useState(false);
   const [referenceFile, setReferenceFile] = useState<File | null>(null);
   const [referencePreview, setReferencePreview] = useState<string | null>(null);
@@ -130,7 +133,8 @@ export function CharacterCard({
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setDescription(character.description);
     setVoiceStyle(character.voice_style ?? "");
-  }, [character.description, character.voice_style]);
+    setCourseRole(character.course_role ?? "actor");
+  }, [character.course_role, character.description, character.voice_style]);
 
   useEffect(() => {
     // 角色立绘变化时重置图片加载错误标记
@@ -190,6 +194,7 @@ export function CharacterCard({
   const isDirty =
     description !== character.description ||
     voiceStyle !== (character.voice_style ?? "") ||
+    (isCourse && courseRole !== (character.course_role ?? "actor")) ||
     referenceFile !== null ||
     audioFile !== null;
 
@@ -273,6 +278,7 @@ export function CharacterCard({
       await onSave(name, {
         description,
         voiceStyle,
+        courseRole: isCourse ? courseRole : undefined,
         referenceFile,
         audioFile,
       });
@@ -599,6 +605,27 @@ export function CharacterCard({
         style={FIELD_STYLE}
         placeholder={t("character_desc_placeholder")}
       />
+
+      {isCourse && (
+        <label className="mt-3 block">
+          <CapsLabel>{t("course_role")}</CapsLabel>
+          <select
+            value={courseRole}
+            disabled={readOnly}
+            onChange={(event) =>
+              setCourseRole(
+                event.currentTarget.value as "actor" | "main_lecturer" | "guest_lecturer",
+              )
+            }
+            className="focus-ring mt-1.5 w-full rounded-lg px-3 py-2 text-[13px] outline-none disabled:opacity-60"
+            style={FIELD_STYLE}
+          >
+            <option value="actor">{t("course_role_actor")}</option>
+            <option value="main_lecturer">{t("course_role_main_lecturer")}</option>
+            <option value="guest_lecturer">{t("course_role_guest_lecturer")}</option>
+          </select>
+        </label>
+      )}
 
       <div className="mt-3">
         {/* 「声音」是描述输入 + 音频样本共用的分组标题，不单独绑定输入框；

@@ -30,7 +30,7 @@ def resolve_video_aspect_ratio(project: Mapping[str, object], resource_type: str
         return value
     if isinstance(value, Mapping) and resource_type in value:
         return cast(str, value[resource_type])
-    return "9:16" if project.get("content_mode", "narration") in {"narration", "ad"} else "16:9"
+    return "9:16" if project.get("content_mode", "drama") in {"narration", "ad"} else "16:9"
 
 
 def _build_video_visual_basis(

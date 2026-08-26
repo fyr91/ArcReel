@@ -29,7 +29,7 @@
 
 ### 工具调用
 
-- **业务入队 / 文本生成 / 能力查询**：统一走 `mcp__arcreel__*` 系列 SDK in-process MCP tool（角色/场景/道具/分镜/视频/宫格/图片编辑/集脚本/规范化剧本/旁白/解说片段拆分/参考生视频单元拆分/分集规划与重置/视频能力查询）。它们跑在 server 主进程，不受 sandbox 网络白名单约束，agent 直接以 tool 形式调用。
+- **业务入队 / 文本生成 / 能力查询**：统一走 `mcp__arcreel__*` 系列 SDK in-process MCP tool（角色/场景/道具/分镜/视频/宫格/图片编辑/集脚本/规范化剧本/参考生视频单元拆分/分集规划与重置/视频能力查询）。它们跑在 server 主进程，不受 sandbox 网络白名单约束，agent 直接以 tool 形式调用。
 - **图片编辑 vs 重新生成**：审核检查点用户只想改资产图/分镜图的局部（换色、去杂物、调光线等）时用 `edit_images`——保底图微调、不改 `description`/`image_prompt`；用户想推翻构图整体重来、或本来就要改 description/image_prompt 时仍用对应的 `generate_*` 工具重新生成。用户脱离生成流程直接说「把某某改一下」时也可直接调 `edit_images`，不依赖处于哪个工作流步骤。
 - **全局资产链接**：用户要求链接、解除链接，或为角色选择参考音频/TTS Voice ID 时，调用 `mcp__arcreel__manage_project_asset_link`；这些系统字段不能用 `patch_project` 修改。
 - **角色主图与参考图互转**：调用 `mcp__arcreel__move_character_main_to_reference` 在两个槽位间移动图片；主图转参考图使用 `direction=main_to_reference`（默认），参考图移回主图使用 `direction=reference_to_main`。操作与是否链接全局资产无关；主图转参考图后仍可反向恢复，也可调用 `generate_assets` 生成新的项目主图，新图进入版本链和已链接全局资产的候选，不覆盖全局主图。
@@ -91,7 +91,6 @@ agent session 的当前工作目录（cwd）已绑定到当前项目根，**所�
   │  职责：查服务端计划、按受控动作决策、用户确认、dispatch 子任务
   │
   ├─ dispatch → analyze-assets               全局角色/场景/道具提取
-  ├─ dispatch → split-narration-segments     旁白/解说片段拆分
   ├─ dispatch → normalize-drama-script       剧情演绎规范化剧本
   ├─ dispatch → split-reference-video-units  参考生视频 video_unit 拆分
   ├─ dispatch → create-episode-script        JSON 剧本生成（预加载 generate-script skill）
@@ -102,7 +101,7 @@ agent session 的当前工作目录（cwd）已绑定到当前项目根，**所�
 
 | 类型 | 用途 | 示例 |
 |------|------|------|
-| **子任务（聚焦任务）** | 需要大量上下文或推理分析 → 保护主 agent context | analyze-assets、split-narration-segments |
+| **子任务（聚焦任务）** | 需要大量上下文或推理分析 → 保护主 agent context | analyze-assets、split-reference-video-units |
 | **Skill（在子任务内调用）** | 确定性脚本执行 → API 调用、文件生成 | generate-script、generate-assets |
 | **主 Agent 直接操作** | 仅限轻量操作 | 读项目状态、简单文件操作、用户交互 |
 
@@ -189,7 +188,7 @@ projects/{项目名}/      # ← session cwd 已在此，下面均为 cwd 内的
 ### project.json 核心字段
 
 - `schema_version`：项目数据格式版本（当前 1）
-- `title`、`content_mode`（`narration`/`drama`）、`generation_mode`（`storyboard`/`reference_video`，创建后不可更改）、`grid_storyboard`（布尔，仅 `generation_mode="storyboard"` 下生效，由用户在设置页开关）、`style`、`style_description`
+- `title`、`content_mode`（`drama`/`course`/`ad`）、`generation_mode`（`storyboard`/`reference_video`，创建后不可更改）、`grid_storyboard`（布尔，仅 `generation_mode="storyboard"` 下生效，由用户在设置页开关）、`style`、`style_description`
 - `overview`：项目概述（synopsis、genre、theme、world_setting）
 - `episodes`：分集账本（单一真相源）：episode、title、script_file，以及账本字段 `source_range`（原文范围）/ `hook`（集尾钩子）/ `outline`（drama 分集大纲）/ `ledger_status`（planned/consumed/stale）；顶层 `planning_cursor` 标记下一批规划起点。`source/episode_N.txt` 是账本的派生物，由规划工具维护，不要手工编辑或重命名
 - `characters`：角色完整定义（description、voice_style、character_sheet）
