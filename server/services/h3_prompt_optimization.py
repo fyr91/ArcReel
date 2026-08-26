@@ -30,7 +30,11 @@ from lib.minimax_h3_prompt import (
     parse_h3_prompt,
     save_h3_prompt_artifact,
 )
-from lib.narration_delivery import POST_PRODUCTION, NarrationDelivery
+from lib.narration_delivery import (
+    POST_PRODUCTION,
+    NarrationDelivery,
+    narration_delivery_for_video_workflow,
+)
 from lib.project_manager import ProjectManager, get_project_manager
 from lib.reference_video.prompt_render import render_video_unit_prompt, resolve_reference_audio_paths
 from lib.reference_video.request_projection import (
@@ -39,6 +43,7 @@ from lib.reference_video.request_projection import (
     project_reference_unit_request,
 )
 from lib.reference_video.voice_settings import VoiceRenderSettings
+from lib.script_models import resolve_content_mode
 from lib.text_backends.base import ImageInput, TextGenerationRequest, TextGenerationResult, TextTaskType
 from lib.text_generator import TextGenerator
 from lib.video_style import UnifiedVideoStyle
@@ -73,7 +78,7 @@ class H3PromptContext:
     episode: int
     unit: dict[str, Any]
     projection: ReferenceUnitRequestProjection
-    narration_delivery: str
+    narration_delivery: NarrationDelivery | None
     aspect_ratio: str
     image_references: tuple[H3PromptReference, ...]
     image_paths: tuple[Path, ...]
@@ -147,7 +152,7 @@ def _basis_payload(
     project: dict[str, Any],
     unit: dict[str, Any],
     projection: ReferenceUnitRequestProjection,
-    narration_delivery: str,
+    narration_delivery: NarrationDelivery | None,
     aspect_ratio: str,
     images: Sequence[H3PromptReference],
     image_paths: Sequence[Path],
@@ -157,6 +162,16 @@ def _basis_payload(
     candidate = projection.provider_candidate
     if candidate is None or projection.request_duration is None:
         raise H3PromptOptimizationError("h3_prompt_projection_incomplete")
+    request: dict[str, Any] = {
+        "provider_id": candidate.provider_id,
+        "model_id": candidate.model_id,
+        "duration_seconds": projection.request_duration.seconds,
+        "resolution": candidate.resolution,
+        "aspect_ratio": aspect_ratio,
+        "generate_audio": candidate.requested_generate_audio,
+    }
+    if narration_delivery is not None:
+        request["narration_delivery"] = narration_delivery
     return {
         "schema": "minimax-h3-ref2va/v1",
         "unit": {
@@ -164,15 +179,7 @@ def _basis_payload(
             "text": unit.get("text"),
             "duration_seconds": unit.get("duration_seconds"),
         },
-        "request": {
-            "provider_id": candidate.provider_id,
-            "model_id": candidate.model_id,
-            "duration_seconds": projection.request_duration.seconds,
-            "resolution": candidate.resolution,
-            "aspect_ratio": aspect_ratio,
-            "narration_delivery": narration_delivery,
-            "generate_audio": candidate.requested_generate_audio,
-        },
+        "request": request,
         "project": {
             "style": project.get("style"),
             "style_description": project.get("style_description"),
@@ -314,7 +321,7 @@ class H3PromptOptimizationService:
         project: dict[str, Any],
         project_path: Path,
         unit: dict[str, Any],
-        narration_delivery: NarrationDelivery,
+        narration_delivery: NarrationDelivery | None,
         projection: ReferenceUnitRequestProjection,
         audio_map: Mapping[str, Path] | None = None,
     ) -> H3PromptContext:
@@ -421,7 +428,7 @@ class H3PromptOptimizationService:
         script: dict[str, Any],
         script_file: str,
         unit: dict[str, Any],
-        narration_delivery: NarrationDelivery,
+        narration_delivery: NarrationDelivery | None,
         confirmed_duration: int | None,
     ) -> H3PromptContext:
         from server.services.reference_storyboard_sheet_tasks import (
@@ -474,11 +481,14 @@ class H3PromptOptimizationService:
         episode: int,
         *,
         unit_ids: Sequence[str] | None,
-        narration_delivery: NarrationDelivery,
+        narration_delivery: NarrationDelivery | None,
         confirmed_request_durations: Mapping[str, int] | None,
         ensure_video_style: bool = False,
     ) -> tuple[Path, list[H3PromptContext]]:
         project, project_path, script, script_file = await asyncio.to_thread(self._load, project_name, episode)
+        narration_delivery = narration_delivery_for_video_workflow(
+            project.get("content_mode") or resolve_content_mode(script, project), narration_delivery
+        )
         if project.get("generation_mode") != "reference_video":
             units = _find_units(script, unit_ids)
             raise H3PromptOptimizationError(
@@ -513,7 +523,7 @@ class H3PromptOptimizationService:
         episode: int,
         *,
         unit_ids: Sequence[str] | None = None,
-        narration_delivery: NarrationDelivery = POST_PRODUCTION,
+        narration_delivery: NarrationDelivery | None = POST_PRODUCTION,
         confirmed_request_durations: Mapping[str, int] | None = None,
     ) -> list[H3PromptState]:
         try:
@@ -562,7 +572,7 @@ class H3PromptOptimizationService:
         episode: int,
         *,
         unit_ids: Sequence[str] | None = None,
-        narration_delivery: NarrationDelivery = POST_PRODUCTION,
+        narration_delivery: NarrationDelivery | None = POST_PRODUCTION,
         confirmed_request_durations: Mapping[str, int] | None = None,
     ) -> list[H3PromptArtifact]:
         project_path, contexts = await self._contexts(
@@ -582,7 +592,7 @@ class H3PromptOptimizationService:
         *,
         unit_id: str,
         rendered_prompt: str,
-        narration_delivery: NarrationDelivery = POST_PRODUCTION,
+        narration_delivery: NarrationDelivery | None = POST_PRODUCTION,
         confirmed_request_duration_seconds: int | None = None,
     ) -> H3PromptArtifact:
         """Validate and persist one user-edited prompt against its current request facts."""
@@ -712,7 +722,7 @@ class H3PromptOptimizationService:
         episode: int,
         *,
         unit_ids: Sequence[str] | None = None,
-        narration_delivery: NarrationDelivery = POST_PRODUCTION,
+        narration_delivery: NarrationDelivery | None = POST_PRODUCTION,
         confirmed_request_durations: Mapping[str, int] | None = None,
     ) -> list[H3PromptArtifact]:
         project_path, contexts = await self._contexts(

@@ -165,7 +165,7 @@ export function WorkflowPanel({ projectName, episode, onViewUnit, onRegenerate }
                   onConfirmDurations={confirmDurations}
                   busy={loading}
                   narration={
-                    step.id === "narration_delivery"
+                    step.id === "narration_delivery" && shown.narration_delivery
                       ? {
                           choice: shown.narration_delivery,
                           ttsUnavailable,

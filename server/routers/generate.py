@@ -38,6 +38,7 @@ from lib.narration_delivery import (
     NarrationDelivery,
     NarrationDeliveryRequestOptions,
     canonical_narration_text,
+    narration_delivery_for_video_workflow,
     video_request_cost_unavailable_problem,
     video_request_requires_exact_quote,
     video_request_reuses_current_visual,
@@ -45,7 +46,7 @@ from lib.narration_delivery import (
 from lib.project_manager import get_project_manager, is_reference_video_project
 from lib.reference_video.request_projection import ProjectionResolutionError
 from lib.script_editor import resolve_items
-from lib.script_models import get_generated_assets
+from lib.script_models import get_generated_assets, resolve_content_mode
 from lib.script_skeleton import resolve_script_kind
 from lib.speech_composition import SpeechMode, admit_script_unit
 from lib.storyboard_sequence import (
@@ -321,7 +322,9 @@ async def generate_video(
 
     delivery_projection: NarratedVideoDurationPreparation | None = None
     delivery_payload: dict[str, object] | None = None
-    if req.narration_delivery == USE_TTS:
+    content_mode = project.get("content_mode") or resolve_content_mode(script, project)
+    narration_delivery = narration_delivery_for_video_workflow(content_mode, req.narration_delivery)
+    if narration_delivery == USE_TTS:
         current_planned_duration = item.get("duration_seconds")
         if (
             not isinstance(current_planned_duration, int)
@@ -356,7 +359,7 @@ async def generate_video(
             )
 
     delivery_options = NarrationDeliveryRequestOptions(
-        narration_delivery=req.narration_delivery,
+        narration_delivery=narration_delivery,
         confirmed_request_duration_seconds=req.confirmed_request_duration_seconds,
     )
 
@@ -366,7 +369,7 @@ async def generate_video(
         "seed": req.seed,
         "narration_delivery_options": delivery_options.to_payload(),
     }
-    if req.narration_delivery != USE_TTS:
+    if narration_delivery != USE_TTS:
         extra_payload["duration_seconds"] = req.duration_seconds
     spec = TaskSpec.from_request(
         task_type="video",

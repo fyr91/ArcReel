@@ -8,7 +8,6 @@ import pytest
 from lib.batch_admission import BatchAdmission, UnitAdmissionTicket
 from lib.generation_queue_client import TaskSpec
 from lib.generation_result import GenerationSelectionMode
-from lib.narration_delivery import POST_PRODUCTION
 from lib.project_manager import ProjectManager
 from lib.project_schema import CURRENT_PROJECT_SCHEMA_VERSION
 from lib.workflow_plan import WorkflowPlanRequest, WorkflowStepState
@@ -30,7 +29,7 @@ def _status(*, state: str = "VIDEO", action: str = "generate_videos") -> Workflo
             "project_revision": "sha256-v1:project",
             "source_revision": "sha256-v1:source",
             "project": WorkflowProject(
-                content_mode="narration",
+                content_mode="drama",
                 generation_mode="storyboard",
                 grid_storyboard=False,
             ),
@@ -69,7 +68,7 @@ class _ProjectManager:
     def load_project_readonly(self, project_name: str) -> dict[str, Any]:
         assert project_name == "demo"
         return {
-            "content_mode": "narration",
+            "content_mode": "drama",
             "generation_mode": "storyboard",
             "schema_version": CURRENT_PROJECT_SCHEMA_VERSION,
         }
@@ -88,7 +87,7 @@ class _ReferenceProjectManager(_ProjectManager):
     def load_project_readonly(self, project_name: str) -> dict[str, Any]:
         assert project_name == "demo"
         return {
-            "content_mode": "narration",
+            "content_mode": "drama",
             "generation_mode": "reference_video",
             "schema_version": CURRENT_PROJECT_SCHEMA_VERSION,
         }
@@ -102,7 +101,7 @@ def _project_dir(tmp_path: Path) -> Path:
         "demo",
         "Demo",
         "",
-        "narration",
+        "drama",
         extras={"generation_mode": "storyboard", "grid_storyboard": False},
     )
     return pm.get_project_path("demo")
@@ -111,14 +110,15 @@ def _project_dir(tmp_path: Path) -> Path:
 def _script(*, mixed: bool = False) -> dict[str, Any]:
     return {
         "episode": 1,
-        "content_mode": "narration",
-        "segments": [
+        "content_mode": "drama",
+        "scenes": [
             {
-                "segment_id": "E1S01",
+                "scene_id": "E1S01",
                 "novel_text": "旁白文本",
                 "video_prompt": (
                     {"action": "人物交谈", "dialogue": [{"speaker": "角色A", "line": "台词"}]} if mixed else "镜头提示"
                 ),
+                "voiceover": ["旁白文本"] if mixed else [],
                 "duration_seconds": 5,
                 "generated_assets": {},
             }
@@ -129,7 +129,7 @@ def _script(*, mixed: bool = False) -> dict[str, Any]:
 def _reference_status() -> WorkflowStatus:
     status = _status()
     status.project = WorkflowProject(
-        content_mode="narration",
+        content_mode="drama",
         generation_mode="reference_video",
         grid_storyboard=False,
     )
@@ -144,7 +144,7 @@ def _reference_status() -> WorkflowStatus:
 def _reference_script() -> dict[str, Any]:
     return {
         "episode": 1,
-        "content_mode": "narration",
+        "content_mode": "drama",
         "video_units": [
             {
                 "unit_id": "E1U01",
@@ -178,6 +178,7 @@ async def test_reference_visual_gate_routes_distinct_tools_from_current_files(
         return []
 
     monkeypatch.setattr(workflow_planner, "get_active_tasks_for_resources", _no_active_tasks)
+    monkeypatch.setattr(video_batch_admission, "get_active_tasks_for_resources", _no_active_tasks)
     planner = workflow_planner.WorkflowPlanner(pm)  # type: ignore[arg-type]
 
     missing_sheet = await planner.get_plan("demo", WorkflowPlanRequest())
@@ -205,7 +206,9 @@ async def test_reference_visual_gate_routes_distinct_tools_from_current_files(
     (project_path / "keyframes/E1U01K01.png").write_bytes(b"keyframe")
     script["video_units"][0]["keyframes"][0]["image_path"] = "keyframes/E1U01K01.png"
     complete = await planner.get_plan("demo", WorkflowPlanRequest())
-    assert complete.next_action.type == "choose_narration_delivery"
+    complete_steps = {step.id: step for step in complete.steps}
+    assert "narration_delivery" not in complete_steps
+    assert complete.next_action.type != "choose_narration_delivery"
 
 
 async def test_planner_uses_shared_admission_and_never_reads_the_real_task_singleton(
@@ -233,7 +236,7 @@ async def test_planner_uses_shared_admission_and_never_reads_the_real_task_singl
     monkeypatch.setattr(workflow_planner, "get_active_tasks_for_resources", _active_tasks)
     monkeypatch.setattr(workflow_planner, "admit_storyboard_video_request", _admit)
 
-    request = WorkflowPlanRequest(narration_delivery=POST_PRODUCTION)
+    request = WorkflowPlanRequest()
     first = await workflow_planner.WorkflowPlanner(pm).get_plan("demo", request)  # type: ignore[arg-type]
     second = await workflow_planner.WorkflowPlanner(pm).get_plan("demo", request)  # type: ignore[arg-type]
 
@@ -278,7 +281,7 @@ async def test_active_task_and_provider_checkpoint_are_reported_as_separate_axes
     monkeypatch.setattr(workflow_planner, "admit_storyboard_video_request", _admit)
 
     plan = await workflow_planner.WorkflowPlanner(pm).get_plan(  # type: ignore[arg-type]
-        "demo", WorkflowPlanRequest(narration_delivery=POST_PRODUCTION)
+        "demo", WorkflowPlanRequest()
     )
 
     video = next(step for step in plan.steps if step.id == "video")
@@ -324,7 +327,7 @@ async def test_recovery_checkpoint_without_provider_job_remains_visible(
     monkeypatch.setattr(workflow_planner, "admit_storyboard_video_request", _admit)
 
     plan = await workflow_planner.WorkflowPlanner(pm).get_plan(  # type: ignore[arg-type]
-        "demo", WorkflowPlanRequest(narration_delivery=POST_PRODUCTION)
+        "demo", WorkflowPlanRequest()
     )
 
     checkpoint = next(step for step in plan.steps if step.id == "video").tasks[0].provider_checkpoint
@@ -409,7 +412,7 @@ async def test_planner_refuses_a_unit_whose_video_input_is_unusable(
 
     before = sorted(path.relative_to(tmp_path).as_posix() for path in tmp_path.rglob("*"))
     plan = await workflow_planner.WorkflowPlanner(pm).get_plan(  # type: ignore[arg-type]
-        "demo", WorkflowPlanRequest(narration_delivery=POST_PRODUCTION)
+        "demo", WorkflowPlanRequest()
     )
 
     # 走提交侧那条缝要读 Manifest 与分镜图，读到的一切仍不得在项目目录留下痕迹。
@@ -460,7 +463,7 @@ async def test_planner_hands_the_submitted_visual_prompt_to_the_admission(
     monkeypatch.setattr(video_batch_admission, "admit_storyboard_video_batch", _admit)
 
     await workflow_planner.WorkflowPlanner(pm).get_plan(  # type: ignore[arg-type]
-        "demo", WorkflowPlanRequest(narration_delivery=POST_PRODUCTION)
+        "demo", WorkflowPlanRequest()
     )
 
     assert [prompt for _id, _item, prompt in captured["items"]] == ["镜头提示"]
@@ -497,7 +500,7 @@ async def test_planner_reports_the_audio_switch_conflict_before_any_task_exists(
     monkeypatch.setattr(video_batch_admission, "assert_audio_switch_supported", _reject)
 
     plan = await workflow_planner.WorkflowPlanner(pm).get_plan(  # type: ignore[arg-type]
-        "demo", WorkflowPlanRequest(narration_delivery=POST_PRODUCTION)
+        "demo", WorkflowPlanRequest()
     )
 
     video = next(step for step in plan.steps if step.id == "video")

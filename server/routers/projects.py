@@ -800,7 +800,7 @@ async def get_workflow_status(
         raise BadRequestError("request_invalid") from exc
 
 
-@router.post("/projects/{name}/workflow-plan", response_model=WorkflowPlan)
+@router.post("/projects/{name}/workflow-plan", response_model=WorkflowPlan, response_model_exclude_none=True)
 async def get_workflow_plan(name: str, request: WorkflowPlanRequest):
     """Return the side-effect-free plan for one transient workflow request."""
 

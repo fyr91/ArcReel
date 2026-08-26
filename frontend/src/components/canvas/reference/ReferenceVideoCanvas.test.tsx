@@ -107,7 +107,7 @@ function runningTask(unitId: string) {
 
 const STUB_PROJECT: ProjectData = {
   title: "p",
-  content_mode: "narration",
+  content_mode: "drama",
   style: "",
   episodes: [],
   characters: {},
@@ -204,7 +204,7 @@ describe("ReferenceVideoCanvas", () => {
     expect(location.history.at(-1)).toBe("/app/projects/proj/settings");
   });
 
-  it("keeps request controls outside the tablist semantics", async () => {
+  it("omits narration delivery controls from drama video generation", async () => {
     vi.spyOn(API, "listReferenceVideoUnits").mockResolvedValue({
       units: [mkUnit("E1U1", "镜头推进。\n{夜色深沉。}")],
     });
@@ -214,10 +214,9 @@ describe("ReferenceVideoCanvas", () => {
     const tablist = screen.getByRole("tablist", {
       name: /Workspace main tabs|工作台主面板切换|Tab chính của workspace/,
     });
-    const delivery = screen.getByRole("group", { name: /Narration delivery|旁白交付/ });
     expect(within(tablist).getAllByRole("tab")).toHaveLength(2);
     expect(within(tablist).queryByRole("tab", { name: /H3/ })).toBeNull();
-    expect(tablist).not.toContainElement(delivery);
+    expect(screen.queryByRole("group", { name: /Narration delivery|旁白交付/ })).toBeNull();
   });
 
   it("hides narration delivery when every unit is dialogue-owned or silent", async () => {
@@ -332,7 +331,6 @@ describe("ReferenceVideoCanvas", () => {
     await waitFor(() =>
       expect(updateSpy).toHaveBeenCalledWith("proj", 1, "E1U1", {
         rendered_prompt: edited,
-        narration_delivery: "post_production",
       }),
     );
     await waitFor(() => expect(screen.getByRole("tabpanel")).toHaveTextContent("subject_definitions: Edited"));
@@ -923,7 +921,6 @@ describe("ReferenceVideoCanvas", () => {
     await waitFor(() => expect(batchSpy).toHaveBeenCalledTimes(1));
     expect(batchSpy).toHaveBeenCalledWith("proj", 1, {
       unit_ids: ["E1U1", "E1U2", "E1U3"],
-      narration_delivery: "post_production",
     });
   });
 
@@ -947,7 +944,6 @@ describe("ReferenceVideoCanvas", () => {
     await waitFor(() =>
       expect(batchSpy).toHaveBeenCalledWith("proj", 1, {
         unit_ids: ["E1U1", "E1U2"],
-        narration_delivery: "post_production",
       }),
     );
     // 不再逐个串行入队
@@ -961,6 +957,7 @@ describe("ReferenceVideoCanvas", () => {
   // 交付方式是本次请求的一部分，批量与单元入口读同一个画布选择：批量不带上它，
   // 整批会按服务端默认的「后期配音」准入，用户选的「使用当前 TTS」被静默丢弃。
   it("批量入口带上本次的旁白交付选择", async () => {
+    useProjectsStore.setState({ currentProjectData: { ...STUB_PROJECT, content_mode: "ad" } });
     vi.spyOn(API, "listReferenceVideoUnits").mockResolvedValue({
       units: [mkUnit("E1U1", "镜头推进。\n{夜色深沉。}")],
     });
@@ -981,6 +978,7 @@ describe("ReferenceVideoCanvas", () => {
   });
 
   it("批量入口未改选择时按后期配音提交", async () => {
+    useProjectsStore.setState({ currentProjectData: { ...STUB_PROJECT, content_mode: "ad" } });
     vi.spyOn(API, "listReferenceVideoUnits").mockResolvedValue({ units: [mkUnit("E1U1")] });
     const batchSpy = vi
       .spyOn(API, "generateReferenceVideoBatch")
@@ -1049,7 +1047,6 @@ describe("ReferenceVideoCanvas", () => {
     await waitFor(() => expect(batchSpy).toHaveBeenCalledTimes(1));
     expect(batchSpy).toHaveBeenCalledWith("proj", 1, {
       unit_ids: ["E1U2"],
-      narration_delivery: "post_production",
     });
   });
 
@@ -1129,6 +1126,7 @@ describe("ReferenceVideoCanvas", () => {
     });
 
     it("复用上游 TTS 时长选项完成预检、确认与入队", async () => {
+      useProjectsStore.setState({ currentProjectData: { ...STUB_PROJECT, content_mode: "ad" } });
       vi.spyOn(API, "listReferenceVideoUnits").mockResolvedValue({ units: [mkUnit("E1U1")] });
       const precheckSpy = vi.spyOn(API, "precheckReferenceVideoDuration").mockResolvedValue({
         needs_confirmation: true,
@@ -1334,7 +1332,6 @@ describe("ReferenceVideoCanvas", () => {
       await waitFor(() => expect(batchSpy).toHaveBeenCalledTimes(2));
       expect(batchSpy).toHaveBeenLastCalledWith("proj", 1, {
         unit_ids: ["E1U1", "E1U2", "E1U3"],
-        narration_delivery: "post_production",
         confirmed_request_durations: { E1U1: 8, E1U2: 8, E1U3: 4 },
       });
       await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
@@ -1390,7 +1387,6 @@ describe("ReferenceVideoCanvas", () => {
       await waitFor(() => expect(batchSpy).toHaveBeenCalledTimes(2));
       expect(batchSpy).toHaveBeenLastCalledWith("proj", 1, {
         unit_ids: ["E1U2"],
-        narration_delivery: "post_production",
         confirmed_request_durations: { E1U2: 4 },
       });
     });

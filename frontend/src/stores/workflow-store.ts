@@ -1,5 +1,6 @@
 import { create } from "zustand";
 import { API } from "@/api";
+import { useProjectsStore } from "@/stores/projects-store";
 import type { NarrationDelivery, WorkflowPlan } from "@/types/workflow";
 
 /**
@@ -84,11 +85,17 @@ export const useWorkflowStore = create<WorkflowState>((set, get) => {
       const signal = ownScope.signal;
       const key = planKey(curProject, curEpisode);
       try {
+        const projectState = useProjectsStore.getState();
+        const usesNarrationDelivery =
+          projectState.currentProjectName === curProject
+          && projectState.currentProjectData?.content_mode === "ad";
         const plan = await API.getWorkflowPlan(
           curProject,
           {
             episode: curEpisode,
-            narration_delivery: get().narrationDelivery,
+            ...(!usesNarrationDelivery || get().narrationDelivery == null
+              ? {}
+              : { narration_delivery: get().narrationDelivery }),
             confirmed_request_durations: get().confirmedDurations,
           },
           { signal },

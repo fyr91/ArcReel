@@ -33,7 +33,7 @@ from lib.generation_queue import (
     without_reference_video_execution_identity,
 )
 from lib.minimax_h3_prompt import is_minimax_h3_model
-from lib.narration_delivery import USE_TTS
+from lib.narration_delivery import POST_PRODUCTION, USE_TTS, narration_delivery_for_video_workflow
 from lib.path_safety import safe_join
 from lib.reference_video.artifact_selection import CurrentReferenceAssets
 from lib.reference_video.execution_checkpoint import (
@@ -444,6 +444,13 @@ async def execute_reference_video_task(
     execution_capability = reference_video_bucket(with_references=bool(hydration.available))
     execution_payload = without_reference_video_execution_identity(payload)
     request_options = ReferenceRequestOptions.from_payload(payload, legacy_duration_confirmed=True)
+    request_options = replace(
+        request_options,
+        narration_delivery=narration_delivery_for_video_workflow(
+            project.get("content_mode") or script.get("content_mode"),
+            request_options.narration_delivery,
+        ),
+    )
     ctx = await resolve_generation_context(
         project_name,
         execution_payload,
@@ -757,7 +764,9 @@ async def execute_reference_video_task(
         )
         current_narration = options.narration_preparation
         narration_facts = NarrationExecutionFacts(
-            delivery=options.narration_delivery,
+            # Checkpoint v1 requires this legacy field. The neutral value is
+            # metadata only when drama/course generation has no delivery choice.
+            delivery=options.narration_delivery or POST_PRODUCTION,
             tts_status=(current_narration.tts_status.value if current_narration is not None else "not_applicable"),
             artifact_path=(current_narration.artifact_path if current_narration is not None else ""),
             basis_digest=(current_narration.basis_digest if current_narration is not None else None),

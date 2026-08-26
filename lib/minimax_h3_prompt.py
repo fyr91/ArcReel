@@ -109,7 +109,7 @@ class H3PromptArtifact(BaseModel):
     request_duration_seconds: int = Field(gt=0)
     resolution: str | None = None
     aspect_ratio: str
-    narration_delivery: str
+    narration_delivery: str | None = None
     reference_images: list[H3PromptReference] = Field(default_factory=list)
     reference_audio: list[H3PromptReference] = Field(default_factory=list)
     optimized_at: str

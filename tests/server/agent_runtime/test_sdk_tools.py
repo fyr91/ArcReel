@@ -57,6 +57,7 @@ from server.agent_runtime.sdk_tools.enqueue_videos import (
 )
 from server.agent_runtime.sdk_tools.h3_prompt_optimization import (
     confirm_h3_video_prompts_tool,
+    optimize_h3_video_prompts_tool,
     update_h3_video_prompt_tool,
 )
 from server.agent_runtime.sdk_tools.text_generation import (
@@ -560,6 +561,31 @@ def test_confirm_h3_video_prompts_is_registered_and_migration_guarded() -> None:
 
 
 @pytest.mark.unit
+def test_drama_h3_tools_do_not_expose_narration_delivery(fake_ctx: ToolContext) -> None:
+    for tool_obj in (
+        optimize_h3_video_prompts_tool(fake_ctx),
+        confirm_h3_video_prompts_tool(fake_ctx),
+        update_h3_video_prompt_tool(fake_ctx),
+    ):
+        assert "narration_delivery" not in tool_obj.input_schema["properties"]  # type: ignore[index]
+
+
+@pytest.mark.unit
+def test_ad_h3_tools_retain_narration_delivery(fake_ctx: ToolContext) -> None:
+    fake_ctx.pm.project_payload["content_mode"] = "ad"  # type: ignore[attr-defined]
+
+    for tool_obj in (
+        optimize_h3_video_prompts_tool(fake_ctx),
+        confirm_h3_video_prompts_tool(fake_ctx),
+        update_h3_video_prompt_tool(fake_ctx),
+    ):
+        assert tool_obj.input_schema["properties"]["narration_delivery"]["enum"] == [  # type: ignore[index]
+            "post_production",
+            "use_tts",
+        ]
+
+
+@pytest.mark.unit
 async def test_confirm_h3_video_prompts_uses_the_shared_batch_operation(
     fake_ctx: ToolContext,
     monkeypatch: pytest.MonkeyPatch,
@@ -592,7 +618,6 @@ async def test_confirm_h3_video_prompts_uses_the_shared_batch_operation(
         {
             "episode": 1,
             "unit_ids": ["E1U01", "E1U02"],
-            "narration_delivery": "post_production",
         },
     )
 
@@ -602,7 +627,7 @@ async def test_confirm_h3_video_prompts_uses_the_shared_batch_operation(
         "project_name": fake_ctx.project_name,
         "episode": 1,
         "unit_ids": ["E1U01", "E1U02"],
-        "narration_delivery": "post_production",
+        "narration_delivery": None,
         "confirmed_request_durations": {},
     }
 
@@ -638,7 +663,6 @@ async def test_update_h3_video_prompt_uses_the_shared_operation(
             "episode": 1,
             "unit_id": "E1U01",
             "rendered_prompt": "edited",
-            "narration_delivery": "use_tts",
         },
     )
 
@@ -649,7 +673,7 @@ async def test_update_h3_video_prompt_uses_the_shared_operation(
         "episode": 1,
         "unit_id": "E1U01",
         "rendered_prompt": "edited",
-        "narration_delivery": "use_tts",
+        "narration_delivery": None,
         "confirmed_request_duration_seconds": None,
     }
 
@@ -3631,8 +3655,7 @@ async def test_generate_video_episode_reference_returns_structured_projection_bl
 
 
 @pytest.mark.unit
-def test_every_video_agent_tool_exposes_narration_delivery(fake_ctx: ToolContext) -> None:
-    """整批与单条走同一准入，交付方式由请求显式选择，批量入口不得省略该选项。"""
+def test_drama_video_agent_tools_do_not_expose_narration_delivery(fake_ctx: ToolContext) -> None:
 
     tools = (
         generate_video_episode_tool(fake_ctx),
@@ -3646,8 +3669,22 @@ def test_every_video_agent_tool_exposes_narration_delivery(fake_ctx: ToolContext
         assert isinstance(schema, dict)
         properties = schema.get("properties")
         assert isinstance(properties, dict)
-        assert properties["narration_delivery"]["enum"] == ["post_production", "use_tts"]
+        assert "narration_delivery" not in properties
         assert "confirmed_request_duration_seconds" in properties
+
+
+@pytest.mark.unit
+def test_ad_video_agent_tools_expose_narration_delivery(fake_ctx: ToolContext) -> None:
+    fake_ctx.pm.project_payload["content_mode"] = "ad"  # type: ignore[attr-defined]
+
+    for tool_obj in (
+        generate_video_episode_tool(fake_ctx),
+        generate_video_all_tool(fake_ctx),
+        generate_video_selected_tool(fake_ctx),
+        generate_video_scene_tool(fake_ctx),
+    ):
+        properties = tool_obj.input_schema["properties"]  # type: ignore[index]
+        assert properties["narration_delivery"]["enum"] == ["post_production", "use_tts"]
 
 
 @pytest.mark.integration
@@ -3807,7 +3844,9 @@ def test_every_video_agent_tool_exposes_per_unit_confirmations(fake_ctx: ToolCon
 def test_a_declared_narration_delivery_reaches_the_request_projection(delivery: str) -> None:
     from server.agent_runtime.sdk_tools.enqueue_videos import _reference_request_options
 
-    assert _reference_request_options({"narration_delivery": delivery}).narration_delivery == delivery
+    assert (
+        _reference_request_options({"narration_delivery": delivery}, content_mode="ad").narration_delivery == delivery
+    )
 
 
 @pytest.mark.unit
@@ -3827,11 +3866,13 @@ def test_an_undeclared_or_unknown_narration_delivery_is_refused(args: dict[str, 
     from server.agent_runtime.sdk_tools.enqueue_videos import _reference_request_options
 
     with pytest.raises(ValueError, match="narration_delivery 必填"):
-        _reference_request_options(args)
+        _reference_request_options(args, content_mode="ad")
 
 
 @pytest.mark.unit
-def test_every_video_agent_tool_requires_narration_delivery(fake_ctx: ToolContext) -> None:
+def test_ad_video_agent_tools_require_narration_delivery(fake_ctx: ToolContext) -> None:
+    fake_ctx.pm.project_payload["content_mode"] = "ad"  # type: ignore[attr-defined]
+
     for tool_obj in (
         generate_video_episode_tool(fake_ctx),
         generate_video_all_tool(fake_ctx),
@@ -3849,6 +3890,8 @@ async def test_no_video_tool_enqueues_without_a_declared_narration_delivery(
     delivery_args: dict[str, Any],
 ) -> None:
     from server.agent_runtime.sdk_tools import enqueue_videos as mod
+
+    fake_ctx.pm.project_payload["content_mode"] = "ad"  # type: ignore[attr-defined]
 
     async def _never_enqueue(*_args, **_kwargs):
         raise AssertionError("交付方式未声明时不得入队")
@@ -3878,7 +3921,8 @@ async def test_generate_video_episode_reference_honors_requested_narration_deliv
     from server.agent_runtime.sdk_tools import enqueue_videos as mod
 
     _use_reference_route(fake_ctx)
-    fake_ctx.pm.script_payload = _reference_video_script()  # type: ignore[attr-defined]
+    fake_ctx.pm.project_payload["content_mode"] = "ad"  # type: ignore[attr-defined]
+    fake_ctx.pm.script_payload = _reference_video_script(content_mode="ad")  # type: ignore[attr-defined]
 
     enqueued: list[Any] = []
 
@@ -3943,7 +3987,8 @@ def test_reference_request_options_rejects_invalid_confirmed_duration(invalid_co
             {
                 "narration_delivery": "use_tts",
                 "confirmed_request_duration_seconds": invalid_confirmation,
-            }
+            },
+            content_mode="ad",
         )
 
 

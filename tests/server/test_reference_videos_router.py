@@ -524,7 +524,7 @@ def test_generate_unit_enqueues_task(client: TestClient, monkeypatch: pytest.Mon
     assert enqueued[0]["resource_id"] == uid
     # 当前文本只作结构守卫，任务只保定位与请求选项；worker 执行前重读最新剧本。
     assert "prompt" not in enqueued[0]["payload"]
-    assert enqueued[0]["payload"]["reference_request_options"] == {"narration_delivery": "post_production"}
+    assert enqueued[0]["payload"]["reference_request_options"] == {}
 
 
 @pytest.mark.integration
@@ -559,13 +559,13 @@ def test_generate_unit_requires_and_persists_explicit_duration_confirmation(
     assert payload == {
         "script_file": "scripts/episode_1.json",
         "reference_request_options": {
-            "narration_delivery": "post_production",
             "confirmed_request_duration_seconds": 4,
         },
     }
 
 
 @pytest.mark.integration
+@pytest.mark.skip(reason="Drama/Course video generation no longer consumes TTS delivery; ad is covered separately")
 def test_generate_unit_use_tts_returns_the_current_cross_tier_quote_before_enqueue(
     client: TestClient,
     monkeypatch: pytest.MonkeyPatch,
@@ -861,6 +861,7 @@ def test_precheck_rounds_up_and_needs_confirmation(client: TestClient, monkeypat
 
 
 @pytest.mark.integration
+@pytest.mark.skip(reason="Drama/Course video generation no longer consumes TTS delivery; ad is covered separately")
 @pytest.mark.parametrize(
     ("current_visual_tier", "reusable_visual_tier", "needs_confirmation", "expected_amount"),
     [(8, 8, False, 0.0), (8, None, False, 0.8), (4, None, True, 0.8)],
@@ -921,6 +922,7 @@ def test_precheck_prices_the_latest_tts_tier_against_the_selected_visual(
 
 
 @pytest.mark.integration
+@pytest.mark.skip(reason="Drama/Course video generation no longer consumes TTS delivery; ad is covered separately")
 def test_precheck_blocks_cross_tier_tts_when_exact_cost_is_unavailable(
     client: TestClient,
     monkeypatch: pytest.MonkeyPatch,
@@ -953,6 +955,7 @@ def test_precheck_blocks_cross_tier_tts_when_exact_cost_is_unavailable(
 
 
 @pytest.mark.integration
+@pytest.mark.skip(reason="Drama/Course video generation no longer consumes TTS delivery; ad is covered separately")
 def test_precheck_use_tts_while_regenerating_returns_canonical_problem(
     client: TestClient,
     monkeypatch: pytest.MonkeyPatch,
@@ -1002,6 +1005,7 @@ def test_precheck_use_tts_while_regenerating_returns_canonical_problem(
 
 
 @pytest.mark.integration
+@pytest.mark.skip(reason="Drama/Course video generation no longer consumes TTS delivery; ad is covered separately")
 def test_precheck_uses_actual_tts_duration_as_floor(client: TestClient, monkeypatch: pytest.MonkeyPatch):
     created = client.post(
         "/api/v1/projects/demo/reference-videos/episodes/1/units",
@@ -1465,7 +1469,7 @@ def test_generate_batch_creates_the_whole_task_set_in_one_admission(
     # 请求只落定位与本次选项：执行内容由 worker 起跑时重读最新剧本。
     assert enqueued[0]["payload"] == {
         "script_file": "scripts/episode_1.json",
-        "reference_request_options": {"narration_delivery": "post_production"},
+        "reference_request_options": {},
     }
     assert enqueued[0]["source"] == "webui"
 
@@ -1614,7 +1618,6 @@ def test_generate_batch_aggregates_the_confirmation_by_tier_then_enqueues_on_con
     # 确认只对本次请求有效，不冻结执行内容。
     options = cast(dict[str, Any], enqueued[0]["payload"])["reference_request_options"]
     assert options == {
-        "narration_delivery": "post_production",
         "confirmed_request_duration_seconds": 4,
     }
 
@@ -1703,6 +1706,7 @@ def test_generate_batch_post_production_does_not_consult_tts(
 
 
 @pytest.mark.integration
+@pytest.mark.skip(reason="Drama/Course video generation no longer consumes TTS delivery; ad is covered separately")
 def test_generate_batch_use_tts_resolves_every_target_against_current_tts(
     client: TestClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -2010,15 +2014,22 @@ def test_generate_batch_reports_a_duplicated_unit_id(client: TestClient, monkeyp
 
 
 @pytest.mark.integration
-def test_generate_batch_requires_an_explicit_narration_delivery(client: TestClient) -> None:
-    """不声明旁白交付方式的批量请求直接拒收：默认成后期配音等于替调用方做了这个选择。"""
+def test_generate_batch_does_not_require_narration_delivery(
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Drama/Course 的批量视频请求不再携带旁白交付契约。"""
 
     _seed_unit(client)
+    enqueued = _patch_batch_admission(monkeypatch, durations=[3, 6, 9])
 
     resp = client.post(BATCH_ENDPOINT, json={})
 
-    assert resp.status_code == 422, resp.text
-    assert any(item["loc"][-1] == "narration_delivery" for item in resp.json()["detail"])
+    assert resp.status_code == 200, resp.text
+    assert resp.json()["decision"] == "admitted"
+    assert "narration_delivery" not in resp.json()
+    options = cast(dict[str, Any], enqueued[0]["payload"])["reference_request_options"]
+    assert options == {}
 
 
 @pytest.mark.integration

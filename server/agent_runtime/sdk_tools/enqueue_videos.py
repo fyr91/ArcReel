@@ -45,6 +45,7 @@ from lib.generation_result import (
     record_batch_outcomes,
     select_generation_targets,
 )
+from lib.narration_delivery import video_workflow_uses_narration_delivery
 from lib.project_manager import ProjectManager, is_reference_video_project
 from lib.reference_video.request_projection import (
     POST_PRODUCTION,
@@ -270,13 +271,28 @@ def _sole_speech_admission(result: GenerationBatchResult) -> dict[str, Any]:
     return {}
 
 
-def _reference_request_options(args: dict[str, Any]) -> ReferenceRequestOptions:
-    """把工具入参折成一次请求的投影选项；交付方式缺省或非法一律拒绝，不入队任何任务。
+def _reference_request_options(args: dict[str, Any], *, content_mode: str) -> ReferenceRequestOptions:
+    """按内容模式把工具入参折成一次请求的投影选项。
 
-    交付方式决定整批走哪一套准入判据与哪一份时长基准（TTS 实测 vs 剧本计划），
-    替调用方挑一个默认值会让一批视频按它没声明过的交付方式准入并计费。
-    storyboard 与 reference 两条路线都经这里取交付方式，判定只有这一处。
+    Drama/Course 不接受交付参数；ad 仍要求显式选择。storyboard 与
+    reference 两条路线都经这里取选项，判定只有这一处。
     """
+
+    if not video_workflow_uses_narration_delivery(content_mode):
+        if "narration_delivery" in args:
+            raise ValueError(f"{content_mode} 视频工作流已移除 narration_delivery 参数")
+        raw_confirmed = args.get("confirmed_request_duration_seconds")
+        confirmed = None
+        if raw_confirmed is not None:
+            if not isinstance(raw_confirmed, int) or isinstance(raw_confirmed, bool) or raw_confirmed <= 0:
+                raise ValueError(
+                    f"confirmed_request_duration_seconds 必须是大于 0 的整数秒档位，收到 {raw_confirmed!r}"
+                )
+            confirmed = raw_confirmed
+        return ReferenceRequestOptions(
+            narration_delivery=None,
+            confirmed_request_duration_seconds=confirmed,
+        )
 
     delivery = args.get("narration_delivery")
     if delivery not in (POST_PRODUCTION, USE_TTS):
@@ -494,7 +510,7 @@ def _resolve_reference_route(ctx: ToolContext, script: dict[str, Any]) -> str | 
         SkeletonRouteMismatchError: 剧本骨架与项目路线失配，生成被拒。
     """
     project = ctx.pm.load_project(ctx.project_name)
-    content_mode = resolve_content_mode(script, project)
+    content_mode = project.get("content_mode") or resolve_content_mode(script, project)
     ensure_route_skeleton(script, content_mode, project.get("generation_mode"))
     if not is_reference_video_project(project):
         return None
@@ -1215,10 +1231,12 @@ def _video_request_context(
     """
 
     _reject_retired_params(args)
-    request_options = _reference_request_options(args)
-    confirmed_request_durations = _confirmed_request_durations(args)
     project_dir = ctx.project_path
     script = ctx.pm.load_script(ctx.project_name, script_filename)
+    project = ctx.pm.load_project(ctx.project_name)
+    content_mode = project.get("content_mode") or resolve_content_mode(script, project)
+    request_options = _reference_request_options(args, content_mode=content_mode)
+    confirmed_request_durations = _confirmed_request_durations(args)
     return _VideoRequestContext(
         script_filename=script_filename,
         request_options=request_options,
@@ -1227,6 +1245,26 @@ def _video_request_context(
         script=script,
         reference_route=_resolve_reference_route(ctx, script),
     )
+
+
+def _tool_schema_for_context(ctx: ToolContext, schema: dict[str, Any]) -> dict[str, Any]:
+    """Hide the retired delivery parameter for Drama/Course project tools."""
+
+    try:
+        project = ctx.pm.load_project(ctx.project_name)
+    except FileNotFoundError:
+        # MCP discovery may happen before a project is materialized. Runtime
+        # validation still resolves the actual mode before task admission.
+        return schema
+    if video_workflow_uses_narration_delivery(project.get("content_mode")):
+        return schema
+    properties = dict(schema["properties"])
+    properties.pop("narration_delivery", None)
+    return {
+        **schema,
+        "properties": properties,
+        "required": [name for name in schema.get("required", []) if name != "narration_delivery"],
+    }
 
 
 @dataclass(frozen=True)
@@ -1457,7 +1495,7 @@ def generate_video_episode_tool(ctx: ToolContext):
         "generate_video_episode",
         "为剧本对应的整集生成所有场景视频。resume=true 时从 checkpoint 续传。"
         "reference_video 模式会自动按 video_units 处理。",
-        _EPISODE_TOOL_SCHEMA,
+        _tool_schema_for_context(ctx, _EPISODE_TOOL_SCHEMA),
     )
     async def _handler(args: dict[str, Any]) -> dict[str, Any]:
         log: list[str] = []
@@ -1573,7 +1611,7 @@ def generate_video_scene_tool(ctx: ToolContext):
     @tool(
         "generate_video_scene",
         "生成单个分镜/片段的视频。reference_video 项目把 unit_id 填进 scene_id 即对该 unit 重新生成（覆盖已有成片）。",
-        _SCENE_TOOL_SCHEMA,
+        _tool_schema_for_context(ctx, _SCENE_TOOL_SCHEMA),
     )
     async def _handler(args: dict[str, Any]) -> dict[str, Any]:
         log: list[str] = []
@@ -1653,7 +1691,7 @@ def generate_video_all_tool(ctx: ToolContext):
     @tool(
         "generate_video_all",
         "为剧本批量生成所有缺视频的场景/片段（独立模式，不拼接）。reference_video 模式等同 episode 模式。",
-        _ALL_TOOL_SCHEMA,
+        _tool_schema_for_context(ctx, _ALL_TOOL_SCHEMA),
     )
     async def _handler(args: dict[str, Any]) -> dict[str, Any]:
         log: list[str] = []
@@ -1743,7 +1781,7 @@ def generate_video_selected_tool(ctx: ToolContext):
         "生成指定多个场景的视频。storyboard 项目用按 scene_ids 哈希的独立 checkpoint，支持 resume 续传。"
         "reference_video 项目传 unit_id 列表即对这些 unit 重新生成（覆盖已有成片），"
         "不落批次进度 checkpoint、忽略此处 resume 参数；已入队任务的 provider 提交恢复由队列独立处理。",
-        _SELECTED_TOOL_SCHEMA,
+        _tool_schema_for_context(ctx, _SELECTED_TOOL_SCHEMA),
     )
     async def _handler(args: dict[str, Any]) -> dict[str, Any]:
         log: list[str] = []

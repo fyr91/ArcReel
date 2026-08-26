@@ -10,7 +10,7 @@ import logging
 import math
 import uuid
 from collections.abc import Awaitable, Callable, Mapping, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Any, Protocol
 
@@ -72,12 +72,14 @@ from lib.generation_queue import (
 )
 from lib.image_reference_snapshot import FrozenImageReferences, freeze_image_references
 from lib.narration_delivery import (
+    POST_PRODUCTION,
     USE_TTS,
     NarratedVideoDurationBlockedError,
     NarrationDeliveryRequestOptions,
     TtsSynthesisSettings,
     build_narration_audio_basis,
     canonical_narration_text,
+    narration_delivery_for_video_workflow,
     prepare_current_narrated_video_duration,
     prepare_narrated_video_duration,
     register_narration_audio_transactionally,
@@ -2439,6 +2441,13 @@ async def execute_video_task(
         raise ValueError("current script unit is missing video_prompt")
     requested_visual_prompt = copy.deepcopy(prompt)
     delivery_options = NarrationDeliveryRequestOptions.from_payload(payload)
+    delivery_options = replace(
+        delivery_options,
+        narration_delivery=narration_delivery_for_video_workflow(
+            project.get("content_mode") or content_mode,
+            delivery_options.narration_delivery,
+        ),
+    )
     # lane 归桶按项目路线求值，与提交入口（``generate_video``）同源：入口挡掉参考路线后
     # 到达这里的项目恒为 i2v，但桶不在两处各硬编码一次，避免路线口径分叉。
     execution_payload = without_video_execution_identity(payload) if task_id is not None else payload
@@ -2761,7 +2770,10 @@ async def execute_video_task(
             )
             narration = delivery_projection.narration if delivery_projection is not None else None
             narration_facts = NarrationExecutionFacts(
-                delivery=delivery_options.narration_delivery,
+                # Checkpoint v1 requires this legacy field. Drama/course no longer
+                # have a delivery choice, so record the neutral no-TTS shape only
+                # for checkpoint compatibility; it does not drive the request.
+                delivery=delivery_options.narration_delivery or POST_PRODUCTION,
                 tts_status=narration.tts_status.value if narration is not None else "not_applicable",
                 artifact_path=narration.artifact_path if narration is not None else "",
                 basis_digest=narration.basis_digest if narration is not None else None,

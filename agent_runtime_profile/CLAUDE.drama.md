@@ -150,7 +150,7 @@ agent session 的当前工作目录（cwd）已绑定到当前项目根，**所�
 - 分集规划的常驻偏好（如按章节对齐切分）不持久化，须经 `plan_episodes` 的 `instructions` 在**每一批
   调用上重复带上**；每集目标体量等全局性偏好经 `patch_project` 显式写入 `episode_target_units`
 - 预处理中间文件被修改 / 重拆后必须重新生成剧本 JSON，剧本不会自动跟随中间文件更新
-- `reference_video` 的固定视觉流程是：拆分预处理只确认 Text；正式 Video Unit 文稿从 Text 生成，并从文稿提取 Keyframes；Storyboard 与 Keyframe 图片随后并行生成、分别审核。文稿或图片描述变化只提示用户可选重生，不撤销现有图片、不形成 Gate；旁白交付选择在两种生成模式下都要逐次做
+- `reference_video` 的固定视觉流程是：拆分预处理只确认 Text；正式 Video Unit 文稿从 Text 生成，并从文稿提取 Keyframes；Storyboard 与 Keyframe 图片随后并行生成、分别审核。文稿或图片描述变化只提示用户可选重生，不撤销现有图片、不形成 Gate；对白与画外音直接随提示词进入视频模型，不存在旁白交付选择
 - 批量旁白配音由用户显式要求触发，不由 `next_action` 驱动
 
 工作流支持**灵活入口**：计划自动定位到第一个未完成的动作，支持中断后恢复。

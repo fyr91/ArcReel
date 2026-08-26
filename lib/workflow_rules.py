@@ -56,7 +56,6 @@ _EPISODIC_STEPS = frozenset(
         "final_script",
         "asset_sheets",
         "script_structure",
-        "narration_delivery",
         "video",
         "export",
     }
@@ -119,6 +118,7 @@ def _build_rule(content_mode: str, generation_mode: str) -> WorkflowRule:
         steps=tuple(
             WorkflowStepRule(id=step_id, checkpoint=checkpoint, applicable=step_id in applicable)
             for step_id, checkpoint in _ordered_step_checkpoints(content_mode)
+            if step_id != "narration_delivery" or content_mode == "ad"
         ),
     )
 

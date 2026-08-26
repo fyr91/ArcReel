@@ -38,24 +38,45 @@ from lib.speech_composition import (
 POST_PRODUCTION = "post_production"
 USE_TTS = "use_tts"
 NarrationDelivery = Literal["post_production", "use_tts"]
+VIDEO_NARRATION_DECOUPLED_CONTENT_MODES = frozenset({"drama", "course"})
+
+
+def video_workflow_uses_narration_delivery(content_mode: object) -> bool:
+    """Return whether video generation exposes the legacy TTS delivery choice.
+
+    Drama and course speech is part of the provider video prompt and is rendered by
+    the video model. Standalone TTS and presentation/export variants remain
+    available, but they do not participate in those content modes' video requests.
+    """
+
+    return content_mode not in VIDEO_NARRATION_DECOUPLED_CONTENT_MODES
+
+
+def narration_delivery_for_video_workflow(
+    content_mode: object,
+    delivery: NarrationDelivery | None,
+) -> NarrationDelivery | None:
+    return delivery if video_workflow_uses_narration_delivery(content_mode) else None
 
 
 @dataclass(frozen=True, slots=True)
 class NarrationDeliveryRequestOptions:
     """Durable request facts; current TTS evidence is deliberately excluded."""
 
-    narration_delivery: NarrationDelivery = POST_PRODUCTION
+    narration_delivery: NarrationDelivery | None = POST_PRODUCTION
     confirmed_request_duration_seconds: int | None = None
 
     def __post_init__(self) -> None:
-        if self.narration_delivery not in (POST_PRODUCTION, USE_TTS):
+        if self.narration_delivery not in (None, POST_PRODUCTION, USE_TTS):
             raise ValueError(f"unsupported narration delivery: {self.narration_delivery!r}")
         confirmed = self.confirmed_request_duration_seconds
         if confirmed is not None and (not isinstance(confirmed, int) or isinstance(confirmed, bool) or confirmed <= 0):
             raise ValueError("confirmed_request_duration_seconds must be a positive integer or null")
 
     def to_payload(self) -> dict[str, object]:
-        payload: dict[str, object] = {"narration_delivery": self.narration_delivery}
+        payload: dict[str, object] = {}
+        if self.narration_delivery is not None:
+            payload["narration_delivery"] = self.narration_delivery
         if self.confirmed_request_duration_seconds is not None:
             payload["confirmed_request_duration_seconds"] = self.confirmed_request_duration_seconds
         return payload

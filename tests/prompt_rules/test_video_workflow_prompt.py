@@ -34,6 +34,7 @@ REFERENCES = PROFILE / ".claude" / "references"
 WORKFLOW_PLAN_REFERENCE = REFERENCES / "workflow-plan.md"
 GENERATION_RESULTS_REFERENCE = REFERENCES / "generation-results.md"
 VIDEO_SKILL = PROFILE / ".claude" / "skills" / "generate-video" / "SKILL.md"
+AD_WORKFLOW_SKILL = SKILL_DIR / "SKILL.ad.md"
 NARRATION_AUDIO_SKILL = PROFILE / ".claude" / "skills" / "generate-narration-audio" / "SKILL.md"
 
 WORKFLOW_VARIANTS = ("SKILL.course.md", "SKILL.drama.md", "SKILL.ad.md")
@@ -107,12 +108,27 @@ def test_plan_reference_documents_every_target_field() -> None:
 # ------------------------------------------------------------------- 旁白交付
 
 
-@pytest.mark.parametrize("path", (WORKFLOW_PLAN_REFERENCE, VIDEO_SKILL))
+@pytest.mark.parametrize("path", (WORKFLOW_PLAN_REFERENCE,))
 def test_delivery_options_are_both_named_where_the_choice_is_made(path: Path) -> None:
     content = _reference(path)
 
     assert POST_PRODUCTION in content
     assert USE_TTS in content
+
+
+def test_ad_workflow_retains_the_delivery_choice() -> None:
+    content = _reference(AD_WORKFLOW_SKILL)
+
+    assert WorkflowActionType.CHOOSE_NARRATION_DELIVERY.value in content
+    assert "narration_delivery" in content
+
+
+@pytest.mark.parametrize("path", (VIDEO_SKILL, SKILL_DIR / "SKILL.drama.md", SKILL_DIR / "SKILL.course.md"))
+def test_drama_and_course_video_prompts_do_not_offer_delivery_options(path: Path) -> None:
+    content = _reference(path)
+
+    assert POST_PRODUCTION not in content
+    assert USE_TTS not in content
 
 
 def test_plan_reference_covers_every_tts_problem_code_and_its_action() -> None:

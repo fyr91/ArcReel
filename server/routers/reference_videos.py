@@ -38,9 +38,11 @@ from lib.narration_delivery import (
     POST_PRODUCTION,
     USE_TTS,
     NarrationDelivery,
+    narration_delivery_for_video_workflow,
     video_request_cost_unavailable_problem,
     video_request_requires_exact_quote,
     video_request_reuses_current_visual,
+    video_workflow_uses_narration_delivery,
 )
 from lib.path_safety import PathTraversalError, safe_join
 from lib.project_change_hints import project_change_source
@@ -151,9 +153,9 @@ class GenerateUnitRequest(BaseModel):
     narration_delivery: NarrationDelivery = POST_PRODUCTION
     confirmed_request_duration_seconds: int | None = Field(default=None, gt=0)
 
-    def projection_options(self) -> ReferenceRequestOptions:
+    def projection_options(self, content_mode: object = None) -> ReferenceRequestOptions:
         return ReferenceRequestOptions(
-            narration_delivery=self.narration_delivery,
+            narration_delivery=narration_delivery_for_video_workflow(content_mode, self.narration_delivery),
             confirmed_request_duration_seconds=self.confirmed_request_duration_seconds,
         )
 
@@ -166,13 +168,14 @@ class GenerateUnitsBatchRequest(BaseModel):
     """
 
     unit_ids: list[str] | None = None
-    # 交付方式必填：默认成后期配音会让一次没声明的请求跳过 use_tts 的 fresh / 可测校验，
-    # 整批按另一种交付方式准入，而调用方并不知道自己选过。
-    narration_delivery: NarrationDelivery
+    # drama/course 视频生成不再携带旁白交付契约；ad 仍在路由层要求显式选择。
+    narration_delivery: NarrationDelivery | None = None
     confirmed_request_durations: dict[str, PositiveInt] = Field(default_factory=dict)
 
-    def projection_options(self) -> ReferenceRequestOptions:
-        return ReferenceRequestOptions(narration_delivery=self.narration_delivery)
+    def projection_options(self, content_mode: object = None) -> ReferenceRequestOptions:
+        return ReferenceRequestOptions(
+            narration_delivery=narration_delivery_for_video_workflow(content_mode, self.narration_delivery)
+        )
 
 
 class H3PromptOperationRequest(BaseModel):
@@ -1023,6 +1026,8 @@ async def precheck_unit_duration(
     无法解析时返回结构化 blocker，不制造无约束申请。
     """
     project, script, script_file = _load_episode_script(project_name, episode, _t)
+    content_mode = project.get("content_mode") or script.get("content_mode")
+    narration_delivery = narration_delivery_for_video_workflow(content_mode, narration_delivery)
     unit = _find_unit(script, unit_id, _t)
     _require_unit_ready(unit, content_mode=script.get("content_mode") or project.get("content_mode"))
     tts_in_progress = (
@@ -1143,7 +1148,14 @@ async def _run_h3_prompt_operation(
             status_code=422,
             detail={"code": "h3_prompt_output_invalid", "message": str(exc)},
         ) from exc
-    return [result.model_dump(mode="json") for result in results]
+    payloads = [result.model_dump(mode="json") for result in results]
+    for payload in payloads:
+        artifact = payload.get("artifact") if isinstance(payload, dict) else None
+        if isinstance(artifact, dict) and artifact.get("narration_delivery") is None:
+            artifact.pop("narration_delivery", None)
+        if isinstance(payload, dict) and payload.get("narration_delivery") is None:
+            payload.pop("narration_delivery", None)
+    return payloads
 
 
 @router.post("/episodes/{episode}/h3-prompts/status")
@@ -1196,7 +1208,10 @@ async def update_h3_prompt(
             status_code=422,
             detail={"code": "h3_prompt_output_invalid", "message": str(exc)},
         ) from exc
-    return {"artifact": artifact.model_dump(mode="json")}
+    payload = artifact.model_dump(mode="json")
+    if payload.get("narration_delivery") is None:
+        payload.pop("narration_delivery", None)
+    return {"artifact": payload}
 
 
 @router.post(
@@ -1216,7 +1231,8 @@ async def generate_unit(
     _require_course_generation_phase(project, script, unit)
     _require_unit_ready(unit, content_mode=script.get("content_mode") or project.get("content_mode"))
     guard_prompt = str(unit.get("text") or "")
-    request_options = (req or GenerateUnitRequest()).projection_options()
+    content_mode = project.get("content_mode") or script.get("content_mode")
+    request_options = (req or GenerateUnitRequest()).projection_options(content_mode)
     tts_in_progress = (
         await tts_task_in_progress(
             project_name=project_name,
@@ -1346,6 +1362,9 @@ async def generate_units_batch(
 
     project, script, script_file = _load_episode_script(project_name, episode, _t)
     body = req
+    content_mode = project.get("content_mode") or script.get("content_mode")
+    if video_workflow_uses_narration_delivery(content_mode) and body.narration_delivery is None:
+        raise HTTPException(status_code=422, detail="narration_delivery is required for this content mode")
     try:
         requested_ids = normalize_requested_ids(body.unit_ids, field="unit_ids")
     except ValueError as exc:
@@ -1405,7 +1424,7 @@ async def generate_units_batch(
         script_file=script_file,
         episode=artifact_episode,
         units=targets,
-        request_options=body.projection_options(),
+        request_options=body.projection_options(content_mode),
         operation="generate_reference_videos_batch",
         selection=(
             GenerationSelectionMode.EXPLICIT if requested_ids is not None else GenerationSelectionMode.MISSING_ONLY
@@ -1442,7 +1461,7 @@ async def generate_units_batch(
         # 确认过的档位按 unit 记进请求事实：它是本次请求的一部分，而不是全批共用的一个值。
         # 复用准入用的那份推导，两处各算一遍才是口径分叉的来源。
         options = request_options_for_unit(
-            body.projection_options(),
+            body.projection_options(content_mode),
             spec.resource_id,
             body.confirmed_request_durations,
         )

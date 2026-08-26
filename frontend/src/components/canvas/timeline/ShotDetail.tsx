@@ -490,12 +490,12 @@ export function ShotDetail({
   } | null>(null);
 
   const requestVideo = async (
-    delivery: "post_production" | "use_tts",
+    delivery?: "post_production" | "use_tts",
     confirmedRequestDuration?: number,
   ) => {
     if (!onGenerateVideo) return;
     const requestOptions: ReferenceGenerationRequestOptions = {
-      narration_delivery: delivery,
+      ...(isAd && delivery ? { narration_delivery: delivery } : {}),
       ...(confirmedRequestDuration == null
         ? {}
         : { confirmed_request_duration_seconds: confirmedRequestDuration }),
@@ -506,6 +506,7 @@ export function ShotDetail({
     } catch (error) {
       if (
         error instanceof NarratedVideoDurationError
+        && delivery !== undefined
         && error.admission.request_duration !== null
         && error.admission.problems.some(
           ({ blocking, code }) => blocking && code === "reference_duration_confirmation_required",
@@ -987,7 +988,7 @@ export function ShotDetail({
         generateDisabledHint={dirty ? dirtyHint : undefined}
       />
       <div className="flex flex-col">
-        {hasNarrationText && onGenerateVideo && (
+        {isAd && hasNarrationText && onGenerateVideo && (
           <div className="mb-2 flex justify-end">
             <NarrationDeliveryChoice
               value={narrationDelivery}
@@ -1024,8 +1025,8 @@ export function ShotDetail({
           generating={generatingVideo}
           generateDisabled={!hasStoryboard || dirty || saving}
           generateDisabledHint={dirty ? dirtyHint : undefined}
-          estimatedCost={narrationDelivery === "use_tts" ? undefined : vidEstimate ?? undefined}
-          onGenerate={onGenerateVideo ? () => void requestVideo(narrationDelivery) : undefined}
+          estimatedCost={isAd && narrationDelivery === "use_tts" ? undefined : vidEstimate ?? undefined}
+          onGenerate={onGenerateVideo ? () => void requestVideo(isAd ? narrationDelivery : undefined) : undefined}
           onRestore={onRestoreVideo}
           onUpload={
             scriptFile && !refsReadOnly ? (file) => handleUpload("video", file) : undefined

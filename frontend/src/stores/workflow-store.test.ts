@@ -1,10 +1,12 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { API } from "@/api";
+import { useProjectsStore } from "@/stores/projects-store";
 import { useWorkflowStore } from "./workflow-store";
 import { makePlan } from "@/test/factories";
 
 beforeEach(() => {
   useWorkflowStore.getState().resetTarget();
+  useProjectsStore.setState({ currentProjectName: null, currentProjectData: null });
 });
 
 describe("workflow-store", () => {
@@ -235,6 +237,10 @@ describe("workflow-store", () => {
   });
 
   it("求解带上本次请求的交付选择与已确认档位", async () => {
+    useProjectsStore.setState({
+      currentProjectName: "proj",
+      currentProjectData: { content_mode: "ad" } as never,
+    });
     const spy = vi.spyOn(API, "getWorkflowPlan").mockResolvedValue(makePlan());
     const store = useWorkflowStore.getState();
     store.setNarrationDelivery("post_production");
@@ -245,5 +251,18 @@ describe("workflow-store", () => {
       { episode: 1, narration_delivery: "post_production", confirmed_request_durations: { E1U1: 8 } },
       expect.anything(),
     );
+  });
+
+  it("drama 求解不发送会话中残留的旁白交付选择", async () => {
+    useProjectsStore.setState({
+      currentProjectName: "proj",
+      currentProjectData: { content_mode: "drama" } as never,
+    });
+    const spy = vi.spyOn(API, "getWorkflowPlan").mockResolvedValue(makePlan());
+    useWorkflowStore.getState().setNarrationDelivery("use_tts");
+
+    await useWorkflowStore.getState().refreshPlan("proj", 1);
+
+    expect(spy.mock.calls[0]?.[1]).not.toHaveProperty("narration_delivery");
   });
 });
