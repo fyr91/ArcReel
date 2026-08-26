@@ -56,7 +56,7 @@ _LABEL_ZH: dict[str, str] = {
     "product": "商品",
     "storyboard": "分镜图",
     "reference_keyframe": "关键分镜",
-    "reference_storyboard_sheet": "Video Unit Storyboard Sheet",
+    "reference_storyboard_sheet": "故事板",
 }
 
 
