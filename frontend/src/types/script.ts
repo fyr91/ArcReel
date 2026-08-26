@@ -243,6 +243,11 @@ export interface DramaScene {
    * 存量 drama 走后端读时迁移，前端读到时此字段可能缺省。
    */
   utterances?: Utterance[];
+  video_dependency?: {
+    source_unit_id: string;
+    relation: "continuation";
+    audio_policy: "none" | "continue";
+  } | null;
   transition_to_next: TransitionType;
   note?: string;
   /**

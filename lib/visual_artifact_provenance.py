@@ -310,6 +310,7 @@ def build_storyboard_video_artifact_visual_basis(
     storyboard_image: Path,
     end_frame_image: Path | None,
     aspect_ratio: str,
+    video_dependency: Mapping[str, object] | None = None,
 ) -> ArtifactBasis:
     """Describe the visual component of one storyboard-driven video.
 
@@ -336,15 +337,18 @@ def build_storyboard_video_artifact_visual_basis(
     frame_evidence: list[dict[str, object]] = [{"role": "storyboard", "sha256": visual_file_digest(storyboard_image)}]
     if end_frame_image is not None:
         frame_evidence.append({"role": "end_frame", "sha256": visual_file_digest(end_frame_image)})
+    inputs: dict[str, object] = {
+        "resource_id": _require_non_empty("resource_id", resource_id),
+        "visual_prompt": projected_prompt,
+        "canvas": {"aspect_ratio": _require_non_empty("aspect_ratio", aspect_ratio)},
+        "frames": frame_evidence,
+    }
+    if video_dependency is not None:
+        inputs["video_dependency"] = dict(video_dependency)
     return ArtifactBasis.build(
         "artifact-visual/video-storyboard",
         kind_version=1,
-        inputs={
-            "resource_id": _require_non_empty("resource_id", resource_id),
-            "visual_prompt": projected_prompt,
-            "canvas": {"aspect_ratio": _require_non_empty("aspect_ratio", aspect_ratio)},
-            "frames": frame_evidence,
-        },
+        inputs=inputs,
     )
 
 
@@ -354,6 +358,7 @@ def build_reference_video_artifact_visual_basis(
     request_assets: Sequence[ResolvedReferenceAsset],
     style: str | None,
     aspect_ratio: str,
+    video_dependency: Mapping[str, object] | None = None,
 ) -> ArtifactBasis:
     """Describe one canonical ``video_unit`` and the images actually sent for it.
 
@@ -381,16 +386,19 @@ def build_reference_video_artifact_visual_basis(
                 kind=asset.kind,
             )
         )
+    inputs: dict[str, object] = {
+        "unit_id": unit_id,
+        "visual_lines": visual_lines,
+        "style": normalize_style(style),
+        "canvas": {"aspect_ratio": _require_non_empty("aspect_ratio", aspect_ratio)},
+        "request_references": _reference_evidence(references),
+    }
+    if video_dependency is not None:
+        inputs["video_dependency"] = dict(video_dependency)
     return ArtifactBasis.build(
         "artifact-visual/video-reference",
         kind_version=1,
-        inputs={
-            "unit_id": unit_id,
-            "visual_lines": visual_lines,
-            "style": normalize_style(style),
-            "canvas": {"aspect_ratio": _require_non_empty("aspect_ratio", aspect_ratio)},
-            "request_references": _reference_evidence(references),
-        },
+        inputs=inputs,
     )
 
 

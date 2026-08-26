@@ -59,6 +59,7 @@ from lib.speech_composition import (
 )
 from lib.storyboard_sequence import get_storyboard_items
 from lib.version_manager import VersionManager
+from lib.video_dependency import dependency_source_unit_id
 from server.agent_runtime.sdk_tools._context import (
     ToolContext,
     generation_result_response,
@@ -710,6 +711,14 @@ def _build_reference_specs(
             continue
         specs.append(spec)
         order_map[unit_id] = idx
+    target_ids = {spec.resource_id for spec in specs}
+    units_by_id = {str(unit.get("unit_id") or ""): unit for unit in units if isinstance(unit, dict)}
+    for spec in specs:
+        source_id = dependency_source_unit_id(units_by_id[spec.resource_id])
+        if source_id in target_ids:
+            spec.dependency_resource_id = source_id
+            spec.dependency_group = f"video-dependency-{script_filename}"
+            spec.dependency_index = order_map[spec.resource_id]
     return specs, order_map, refused
 
 

@@ -77,6 +77,12 @@ export interface ReferenceStoryboardSheet {
   generation_input_changed?: boolean;
 }
 
+export interface VideoDependency {
+  source_unit_id: string;
+  relation: "continuation";
+  audio_policy: "none" | "continue";
+}
+
 export interface ReferenceVideoUnit {
   /** Format: "E{episode}U{index}" */
   unit_id: string;
@@ -91,7 +97,7 @@ export interface ReferenceVideoUnit {
   characters?: string[];
   props?: string[];
   presenters?: string[];
-  depends_on_unit_id?: string | null;
+  video_dependency?: VideoDependency | null;
   video_review_status?: "pending_review" | "confirmed";
   confirmed_video_version?: number | null;
   generated_assets: UnitGeneratedAssets;
@@ -313,7 +319,7 @@ export interface ReferenceStep1Unit {
   characters?: string[];
   props?: string[];
   presenters?: string[];
-  depends_on_unit_id?: string | null;
+  video_dependency?: VideoDependency | null;
 }
 
 export interface ReferenceStep1Draft {
@@ -334,7 +340,7 @@ export interface ReferenceStep1FlatUnit {
   characters?: string[];
   props?: string[];
   presenters?: string[];
-  depends_on_unit_id?: string | null;
+  continues_previous?: boolean;
 }
 
 export interface ReferenceStep1FlatDraft {

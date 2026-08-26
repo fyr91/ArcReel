@@ -108,8 +108,8 @@ def test_course_add_unit_reuses_crud_and_inserts_before_closing(course_client: T
 
     units = course_client.get("/api/v1/projects/course-demo/reference-videos/episodes/1/units").json()["units"]
     assert [unit["unit_type"] for unit in units] == ["opening", "story", "explanation", "story", "closing"]
-    assert units[2]["depends_on_unit_id"] == "E1U02"
-    assert units[3]["depends_on_unit_id"] is None
+    assert units[2]["video_dependency"]["source_unit_id"] == "E1U02"
+    assert units[3]["video_dependency"] is None
 
 
 @pytest.mark.integration

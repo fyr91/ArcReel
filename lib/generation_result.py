@@ -176,11 +176,14 @@ _TASK_FAILURE_ACTIONS: dict[str, GenerationAction] = {
     "video_reference_images_unsupported": GenerationAction.CONFIGURE_PROVIDER,
     "video_reference_images_with_frames_unsupported": GenerationAction.CONFIGURE_PROVIDER,
     "video_reference_audio_unsupported": GenerationAction.CONFIGURE_PROVIDER,
+    "video_guided_continuation_unsupported": GenerationAction.CONFIGURE_PROVIDER,
+    "video_guided_continuation_mode_unsupported": GenerationAction.CONFIGURE_PROVIDER,
     # 请求本身不合法（超限、缺配套字段、档位不匹配）：改请求。
     "ref_payload_floor_exceeded": GenerationAction.FIX_INPUT,
     "video_duration_invalid": GenerationAction.FIX_INPUT,
     "video_duration_not_supported": GenerationAction.FIX_INPUT,
     "video_end_image_requires_start_image": GenerationAction.FIX_INPUT,
+    "video_guided_continuation_end_frame_unsupported": GenerationAction.FIX_INPUT,
     "video_prompt_too_long": GenerationAction.FIX_INPUT,
     "video_output_profile_unsupported": GenerationAction.FIX_INPUT,
     "video_resolution_duration_unsupported": GenerationAction.FIX_INPUT,
@@ -198,6 +201,7 @@ _TASK_FAILURE_ACTIONS: dict[str, GenerationAction] = {
     "video_reference_images_required": GenerationAction.GENERATE_DEPENDENCY,
     "video_reference_images_unreadable": GenerationAction.GENERATE_DEPENDENCY,
     "video_reference_audio_unreadable": GenerationAction.GENERATE_DEPENDENCY,
+    "video_guided_source_unavailable": GenerationAction.GENERATE_DEPENDENCY,
     # 进程重启 / 恢复失败：任务本身没有内在缺陷，重试即可。
     "dispatch_provider_requeue_failed": GenerationAction.RETRY,
     "restart_lost_image": GenerationAction.RETRY,

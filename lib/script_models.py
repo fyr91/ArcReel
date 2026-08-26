@@ -505,6 +505,10 @@ class DramaScene(BaseModel):
     # 逐字原文摘录（追溯锚，类比说书 novel_text，但纯作追溯、不被朗读、不出音、best-effort）。
     # 由 step1（内容抽取）填入，step2（视觉）透传不改；存量数据缺失时默认空串（不更坏守卫放行）。
     source_text: str = Field(default="", description="逐字原文摘录（追溯锚，不朗读、不出音，best-effort）")
+    video_dependency: SkipJsonSchema["VideoDependency | None"] = Field(
+        default=None,
+        description="当前场景视频衔接所依赖的直接前置场景；由最终场景顺序机械派生",
+    )
     # 见 NarrationSegment.transition_to_next 说明
     transition_to_next: SkipJsonSchema[TransitionType] = Field(default="cut", description="转场类型")
     # 见 NarrationSegment 同名字段说明。
@@ -532,6 +536,13 @@ class DramaEpisodeScript(BaseModel):
     hook: SkipJsonSchema[str | None] = Field(default=None, description="集尾钩子（来自分集账本）")
     next_episode_teaser: SkipJsonSchema[str | None] = Field(default=None, description="下集预告语（来自分集账本）")
     scenes: list[DramaScene] = Field(description="场景列表")
+
+    @model_validator(mode="after")
+    def _validate_video_dependencies(self) -> "DramaEpisodeScript":
+        from lib.video_dependency import validate_video_dependencies
+
+        validate_video_dependencies([scene.model_dump(mode="python") for scene in self.scenes])
+        return self
 
 
 # ============ 剧集动画两段式：step1 内容 / step2 视觉（见 ADR 0041） ============
@@ -855,6 +866,21 @@ class ReferenceVideoUnit(BaseModel):
 
     model_config = _STRICT_CONFIG
 
+    @model_validator(mode="before")
+    @classmethod
+    def _migrate_legacy_dependency(cls, data: object) -> object:
+        if not isinstance(data, dict) or "depends_on_unit_id" not in data:
+            return data
+        migrated = dict(data)
+        source = migrated.pop("depends_on_unit_id", None)
+        if "video_dependency" not in migrated:
+            migrated["video_dependency"] = (
+                {"source_unit_id": source, "relation": "continuation", "audio_policy": "none"}
+                if isinstance(source, str) and source
+                else None
+            )
+        return migrated
+
     unit_id: str = Field(description="格式 E{集}U{序号}")
     unit_type: SkipJsonSchema[CourseUnitType] = Field(default="story", description="课程视频单元类型")
     text: str = Field(description="单元正文，可包含 @[商品]/@[角色]/@[场景]/@[道具] 引用；迁移问题壳可为空")
@@ -867,9 +893,9 @@ class ReferenceVideoUnit(BaseModel):
     characters: SkipJsonSchema[list[str]] = Field(default_factory=list, description="本单元使用的演员角色")
     props: SkipJsonSchema[list[str]] = Field(default_factory=list, description="本单元使用的道具资产")
     presenters: SkipJsonSchema[list[str]] = Field(default_factory=list, description="本单元出镜讲师")
-    depends_on_unit_id: SkipJsonSchema[str | None] = Field(
+    video_dependency: SkipJsonSchema["VideoDependency | None"] = Field(
         default=None,
-        description="explanation 首帧所依赖的直接前置视频单元；由单元顺序机械派生",
+        description="当前视频衔接所依赖的直接前置视频单元；由最终单元顺序机械派生",
     )
     video_review_status: SkipJsonSchema[Literal["pending_review", "confirmed"]] = Field(
         default="pending_review",
@@ -938,6 +964,10 @@ class ReferenceVideoScript(BaseModel):
     @model_validator(mode="after")
     def _validate_course_structure(self) -> "ReferenceVideoScript":
         if self.content_mode != "course":
+            if self.content_mode == "drama":
+                from lib.video_dependency import validate_video_dependencies
+
+                validate_video_dependencies([unit.model_dump(mode="python") for unit in self.video_units])
             return self
         if len(self.video_units) < 3:
             raise ValueError("课程视频至少包含引子、故事演绎和总结三个单元")
@@ -961,18 +991,18 @@ class ReferenceVideoScript(BaseModel):
             if unit.unit_type == "story":
                 story_seen = True
                 last_chain_unit = unit.unit_id
-                if unit.depends_on_unit_id is not None:
-                    raise ValueError(f"story 单元 {unit.unit_id} 不应声明 depends_on_unit_id")
+                if unit.video_dependency is not None:
+                    raise ValueError(f"story 单元 {unit.unit_id} 不应声明 video_dependency")
             elif unit.unit_type == "explanation":
                 if not story_seen or last_chain_unit is None:
                     raise ValueError(f"explanation 单元 {unit.unit_id} 前必须存在 story")
-                if unit.depends_on_unit_id != last_chain_unit:
+                if unit.video_dependency is None or unit.video_dependency.source_unit_id != last_chain_unit:
                     raise ValueError(f"explanation 单元 {unit.unit_id} 必须直接依赖 {last_chain_unit}")
                 if not unit.presenters:
                     raise ValueError(f"explanation 单元 {unit.unit_id} 至少需要一位讲师")
                 last_chain_unit = unit.unit_id
-            elif unit.depends_on_unit_id is not None:
-                raise ValueError(f"{unit.unit_type} 单元 {unit.unit_id} 不应声明 depends_on_unit_id")
+            elif unit.video_dependency is not None:
+                raise ValueError(f"{unit.unit_type} 单元 {unit.unit_id} 不应声明 video_dependency")
         return self
 
 
@@ -989,6 +1019,16 @@ def resolve_content_mode(script: dict[str, Any], project: dict[str, Any]) -> str
 # 两段式职责切分（与 narration / drama 同机制，见 ADR 0041）：step1（video_unit 拆分）产出
 # 内容层（unit 边界 + 正文与时长），step2（generate-script）以此为唯一基底生成
 # ReferenceVideoScript 的视觉编排（景别 / 构图 / 运镜扩写）。
+
+
+class VideoDependency(BaseModel):
+    """Provider-neutral direct dependency between two persisted video units."""
+
+    model_config = _STRICT_CONFIG
+
+    source_unit_id: str = Field(min_length=1, description="直接前置视频单元的稳定 ID")
+    relation: Literal["continuation"] = Field(default="continuation", description="依赖关系类型")
+    audio_policy: Literal["none", "continue"] = Field(default="none", description="是否衔接前段音频")
 
 
 class ReferenceStep1Unit(BaseModel):
@@ -1012,9 +1052,16 @@ class ReferenceStep1Unit(BaseModel):
         source, so it is intentionally discarded when legacy drafts are read.
         """
 
-        if isinstance(data, dict) and "keyframe_plan" in data:
+        if isinstance(data, dict) and ("keyframe_plan" in data or "depends_on_unit_id" in data):
             data = dict(data)
             data.pop("keyframe_plan", None)
+            source = data.pop("depends_on_unit_id", None)
+            if "video_dependency" not in data:
+                data["video_dependency"] = (
+                    {"source_unit_id": source, "relation": "continuation", "audio_policy": "none"}
+                    if isinstance(source, str) and source
+                    else None
+                )
         return data
 
     unit_id: str = Field(min_length=1, description="格式 E{集}U{序号}")
@@ -1032,7 +1079,9 @@ class ReferenceStep1Unit(BaseModel):
     characters: list[str] = Field(default_factory=list, description="本单元使用的演员")
     props: list[str] = Field(default_factory=list, description="本单元使用的道具")
     presenters: list[str] = Field(default_factory=list, description="本单元出镜讲师")
-    depends_on_unit_id: str | None = Field(default=None, description="直接前置依赖，由程序重算")
+    video_dependency: SkipJsonSchema[VideoDependency | None] = Field(
+        default=None, description="直接前置依赖，由程序按最终顺序重算"
+    )
 
 
 class ReferenceStep1Draft(BaseModel):
@@ -1082,6 +1131,10 @@ class ReferenceStep1FlatUnit(BaseModel):
     characters: list[str] = Field(default_factory=list, description="本单元使用的演员")
     props: list[str] = Field(default_factory=list, description="本单元使用的道具")
     presenters: list[str] = Field(default_factory=list, description="本单元出镜讲师")
+    continues_previous: bool = Field(
+        default=False,
+        description="剧情模式下，本单元是否在时空、动作和镜头上直接延续上一单元",
+    )
 
 
 class ReferenceStep2Keyframe(BaseModel):

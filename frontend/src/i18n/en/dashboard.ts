@@ -544,6 +544,8 @@ export default {
   'image_too_large_hint': 'Image "{{name}}" exceeds 5MB and was skipped',
   'collapse_panel': 'Collapse agent panel',
   'thinking': 'Running',
+  'agent_sending_message': 'Sending to Agent',
+  'agent_received_processing': 'Agent received it and is processing',
   'start_chat_hint': 'Type a message below to start chatting',
   'quick_skill_hint': 'Type / to quickly invoke skills',
   'enlarge_image': 'Click to enlarge image',

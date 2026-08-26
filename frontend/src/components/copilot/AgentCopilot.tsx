@@ -19,6 +19,7 @@ import { PendingQuestionWizard } from "./PendingQuestionWizard";
 import { SlashCommandMenu } from "./SlashCommandMenu";
 import type { SlashCommandMenuHandle } from "./SlashCommandMenu";
 import { TodoListPanel } from "./TodoListPanel";
+import { ChatMessage } from "./chat/ChatMessage";
 import { MessageRow } from "./chat/MessageRow";
 import { AgentFailureCard } from "./chat/AgentFailureCard";
 import { canEditUserTurn, composeAllTurns } from "./chat/utils";
@@ -166,6 +167,35 @@ function formatTime(isoStr: string | undefined, t: TFunction): string {
   return formatShortDateTime(isoStr) ?? t("new_session");
 }
 
+function AgentSendFeedback({ accepted }: { accepted: boolean }) {
+  const { t } = useTranslation("dashboard");
+  return (
+    <div
+      role="status"
+      aria-live="polite"
+      aria-atomic="true"
+      className="flex items-center gap-1 px-1 text-[11.5px]"
+      style={{ color: "var(--color-text-3)" }}
+    >
+      <span className="motion-safe:animate-pulse">
+        {t(accepted ? "agent_received_processing" : "agent_sending_message")}
+      </span>
+      <span aria-hidden="true" className="flex items-center gap-0.5">
+        {[0, 1, 2].map((index) => (
+          <span
+            key={index}
+            className="h-1 w-1 rounded-full motion-safe:animate-bounce"
+            style={{
+              background: "currentColor",
+              animationDelay: `${index * 120}ms`,
+            }}
+          />
+        ))}
+      </span>
+    </div>
+  );
+}
+
 // ---------------------------------------------------------------------------
 // AgentCopilot — 主面板
 // ---------------------------------------------------------------------------
@@ -176,7 +206,7 @@ export function AgentCopilot() {
   const {
     turns, draftTurn, messagesLoading, editingTurnUuid, setEditingTurnUuid,
     sending, sessionStatus, pendingQuestion, answeringQuestion, error, startupFailure, startupFailureOrigin,
-    handoffGuide, currentSessionId, subagents,
+    handoffGuide, currentSessionId, subagents, pendingUserTurn, awaitingAgentResponse,
   } = useAssistantStore();
 
   const { currentProjectName } = useProjectsStore();
@@ -224,6 +254,7 @@ export function AgentCopilot() {
   const [isDragOver, setIsDragOver] = useState(false);
   const [lightboxSrc, setLightboxSrc] = useState<string | null>(null);
   const allTurns = composeAllTurns(turns, draftTurn);
+  const showSendFeedback = Boolean(pendingUserTurn) || awaitingAgentResponse;
   const handoffTurn: Turn | null = handoffGuide?.projectName === currentProjectName
     ? {
         type: "assistant",
@@ -481,7 +512,7 @@ export function AgentCopilot() {
     if (scrollRef.current) {
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
     }
-  }, [allTurns.length, handoffTurn?.uuid]);
+  }, [allTurns.length, awaitingAgentResponse, handoffTurn?.uuid, pendingUserTurn?.uuid]);
 
   return (
     <div
@@ -568,7 +599,7 @@ export function AgentCopilot() {
 
       {/* Messages */}
       <div ref={scrollRef} className="flex-1 min-w-0 space-y-3 overflow-y-auto overflow-x-hidden px-3 py-3">
-        {allTurns.length === 0 && !handoffTurn && !messagesLoading && !startupFailure && (
+        {allTurns.length === 0 && !handoffTurn && !pendingUserTurn && !messagesLoading && !startupFailure && (
           <div className="flex h-full flex-col items-center justify-center text-center">
             <div
               className="mb-3 grid h-12 w-12 place-items-center rounded-2xl"
@@ -616,6 +647,8 @@ export function AgentCopilot() {
           />
         ))}
         {handoffTurn && <MessageRow key={handoffTurn.uuid} turn={handoffTurn} />}
+        {pendingUserTurn && <ChatMessage message={pendingUserTurn} />}
+        {showSendFeedback && <AgentSendFeedback accepted={!sending} />}
         {startupFailure && (
           // 改写失败时原始输入留在仍开着的编辑器里，重试由它的「重新发送」发起：
           // 卡片这里给重试只会重放主输入框的无关内容（为空时更是毫无反应）

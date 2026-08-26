@@ -707,10 +707,14 @@ class _VideoSubmissionCheckpoint:
                     raise ValueError("reference audio target_index must address a staged reference image")
         else:
             roles = tuple(item.role for item in self.media)
-            if roles.count("start_image") != 1 or roles.count("end_image") > 1:
-                raise ValueError("storyboard checkpoint requires one start image and at most one end image")
-            if any(role not in ("start_image", "end_image") for role in roles):
-                raise ValueError("storyboard checkpoint contains reference media")
+            if self.capability == "r2v":
+                if roles != ("reference_image",):
+                    raise ValueError("guided storyboard checkpoint requires exactly one reference image")
+            else:
+                if roles.count("start_image") != 1 or roles.count("end_image") > 1:
+                    raise ValueError("storyboard checkpoint requires one start image and at most one end image")
+                if any(role not in ("start_image", "end_image") for role in roles):
+                    raise ValueError("storyboard checkpoint contains reference media")
             if self.reference_audio_targets is not None:
                 raise ValueError("storyboard checkpoint cannot have reference_audio_targets")
         _require_digest(self.request_digest, "request_digest")

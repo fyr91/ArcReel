@@ -30,6 +30,7 @@ from lib.content_digest import sha256_file_with_size
 from lib.narration_delivery import TtsSynthesisSettings, build_narration_audio_basis
 from lib.path_safety import safe_join
 from lib.project_manager import ProjectManager, resolve_episode_script_binding
+from lib.providers import PROVIDER_CROCO
 from lib.reference_video.duration_slots import resolve_duration_slot
 from lib.reference_video.prompt_render import resolve_reference_audio_paths
 from lib.reference_video.request_projection import (
@@ -50,6 +51,7 @@ from lib.speech_composition import SpeechPreparation, admit_script_unit
 from lib.storyboard_sequence import resolve_storyboard_video_inputs
 from lib.version_manager import VersionManager
 from lib.video_artifact_facts import VideoArtifactCurrencyFacts
+from lib.video_dependency import dependency_source_unit_id
 from lib.video_visual_provenance import resolve_video_aspect_ratio
 from lib.visual_artifact_provenance import (
     build_reference_video_artifact_visual_basis,
@@ -57,6 +59,48 @@ from lib.visual_artifact_provenance import (
 )
 
 AudioManifestEntryResolver = Callable[[ArtifactKey], ArtifactManifestEntry | None]
+
+
+def _current_video_dependency_evidence(
+    item: Mapping[str, Any],
+    *,
+    resource_type: str,
+    versions: VersionManager,
+) -> dict[str, object] | None:
+    source_id = dependency_source_unit_id(item)
+    if source_id is None:
+        return None
+    dependency = item.get("video_dependency")
+    if not isinstance(dependency, Mapping):
+        return None
+    info = versions.get_versions(resource_type, source_id)
+    current_version = info.get("current_version")
+    selected = next(
+        (
+            record
+            for record in info.get("versions") or []
+            if isinstance(record, Mapping) and record.get("version") == current_version
+        ),
+        None,
+    )
+    execution_task_id = selected.get("execution_task_id") if isinstance(selected, Mapping) else None
+    if (
+        type(current_version) is not int
+        or current_version <= 0
+        or not isinstance(execution_task_id, str)
+        or not execution_task_id
+        or selected.get("execution_provider_id") != PROVIDER_CROCO
+    ):
+        return None
+    return {
+        "source_unit_id": source_id,
+        "relation": dependency.get("relation", "continuation"),
+        "audio_policy": dependency.get("audio_policy", "none"),
+        "source_version": current_version,
+        "source_execution_task_id": execution_task_id,
+        "guide_frames": 22,
+        "source_media": "original_video",
+    }
 
 
 def build_current_audio_artifact_basis(
@@ -158,6 +202,7 @@ def build_current_video_artifact_basis(
             storyboard_image=storyboard,
             end_frame_image=end_frame,
             aspect_ratio=resolve_video_aspect_ratio(project),
+            video_dependency=_current_video_dependency_evidence(item, resource_type=resource_type, versions=versions),
         )
     elif resource_type == "reference_videos":
         limit = artifact_currency.reference_image_limit
@@ -171,6 +216,7 @@ def build_current_video_artifact_basis(
             request_assets=clamp_reference_assets(hydration.available, limit),
             style=project.get("style") if isinstance(project.get("style"), str) else None,
             aspect_ratio=resolve_video_aspect_ratio(project),
+            video_dependency=_current_video_dependency_evidence(item, resource_type=resource_type, versions=versions),
         )
     else:
         return None

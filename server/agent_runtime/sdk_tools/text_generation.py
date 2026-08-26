@@ -83,6 +83,7 @@ from lib.speech_rate import project_speech_rate_override
 from lib.text_backends.base import DEFAULT_MAX_OUTPUT_TOKENS, TextGenerationRequest, TextTaskType
 from lib.text_generator import TextGenerator
 from lib.text_utils import strip_json_code_fences
+from lib.video_dependency import derive_drama_video_dependencies
 from server.agent_runtime.sdk_tools._context import (
     MAX_INSTRUCTIONS_LEN,
     ToolContext,
@@ -880,6 +881,10 @@ def _build_reference_units_from_flat(
         validate_course_assets(project)
         validate_opening_closing(units)
         return units
+    if project.get("content_mode") == "drama":
+        for unit, flat in zip(units, flat_units, strict=True):
+            unit["continues_previous"] = bool(flat.get("continues_previous"))
+        return derive_drama_video_dependencies(units)
     return units
 
 

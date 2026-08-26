@@ -628,6 +628,10 @@ class VideoCapabilities:
     用户的比例意图仍完整作用于分镜图生成——首帧图本就按该比例生成，"跟随首帧"与用户所选比例
     等价；改写只影响视频请求实际下发的值，不改调用方持有的原始 ``aspect_ratio``（记账、版本
     元数据沿用后者）。
+
+    ``guided_continuation`` 表示后端能以一个已完成的供应商原始视频任务作为续接引导。它与
+    ``last_frame`` 不同：传的是供应商 job 身份而非本地抽帧；来源任务、归档状态与原始产物校验
+    由具体 backend 执行。
     """
 
     first_frame: bool = True
@@ -639,6 +643,27 @@ class VideoCapabilities:
     reference_audio_per_image: bool = False
     max_prompt_chars: int | None = None
     first_frame_ratio_adaptive_only: bool = False
+    guided_continuation: bool = False
+
+
+@dataclass(frozen=True, slots=True)
+class VideoContinuationGuide:
+    """Provider-neutral request facts for continuing one completed source video."""
+
+    source_job_id: str
+    guide_frames: int = 22
+    include_guide_audio: bool = False
+    source_media: str = "original_video"
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.source_job_id, str) or not self.source_job_id.strip():
+            raise ValueError("continuation guide source_job_id must not be empty")
+        if self.guide_frames not in {5, 22, 39}:
+            raise ValueError("continuation guide_frames must be one of 5, 22, 39")
+        if type(self.include_guide_audio) is not bool:
+            raise ValueError("continuation include_guide_audio must be a boolean")
+        if self.source_media != "original_video":
+            raise ValueError("continuation source_media must be original_video")
 
 
 @dataclass
@@ -663,6 +688,7 @@ class VideoGenerationRequest:
     # 未经编排层填充的调用方（如手写测试）——参考音频与参考图各自独立派生顺序，位置对齐
     # 不构成契约，编排层（reference_video 渲染管线）必须显式提供。
     reference_audio_targets: list[int] | None = None
+    continuation_guide: VideoContinuationGuide | None = None
     generate_audio: bool = True
 
     # 项目上下文（用于构建文件服务 URL 等）
