@@ -310,19 +310,20 @@ describe("AgentCopilot", () => {
     expect(screen.getByRole("button", { name: /^下一步/ })).toBeInTheDocument();
   });
 
-  it("does not offer continuation while a project generation task is active", async () => {
+  it("offers the authoritative next step while an unrelated project task is active", async () => {
     useAssistantStore.setState({
       currentSessionId: "session-1",
       sessionStatus: "completed",
     });
     useTasksStore.getState().setTasks([
-      makeTask({ project_name: "demo", status: "running" }),
+      makeTask({ project_name: "demo", task_type: "voice_sample", status: "running" }),
     ]);
 
     render(<AgentCopilot />);
 
     await waitFor(() => expect(API.getWorkflowPlan).toHaveBeenCalled());
-    expect(screen.queryByRole("button", { name: /^下一步/ })).not.toBeInTheDocument();
+    expect(await screen.findByText("下一步：生成缺失的资产图")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /^下一步/ })).toBeInTheDocument();
   });
 
   it("does not offer continuation when the workflow is waiting or finished", async () => {

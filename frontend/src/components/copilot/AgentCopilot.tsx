@@ -7,7 +7,6 @@ import { ImageLightbox } from "@/components/ui/ImageLightbox";
 import { useAssistantStore } from "@/stores/assistant-store";
 import { useProjectsStore } from "@/stores/projects-store";
 import { useAppStore } from "@/stores/app-store";
-import { isOccupyingStatus, useTasksStore } from "@/stores/tasks-store";
 import { useWorkflowStore } from "@/stores/workflow-store";
 import { useAssistantSession } from "@/hooks/useAssistantSession";
 import { useCurrentEpisode } from "@/hooks/useCurrentEpisode";
@@ -188,13 +187,6 @@ export function AgentCopilot() {
   const workflowPlanKey = useWorkflowStore((s) => s.planKey);
   const workflowPlanLoading = useWorkflowStore((s) => s.loading);
   const workflowPlanError = useWorkflowStore((s) => s.error);
-  const hasActiveProjectTasks = useTasksStore((s) =>
-    currentProjectName
-      ? s.tasks.some(
-          (task) => task.project_name === currentProjectName && isOccupyingStatus(task.status),
-        )
-      : false,
-  );
   const { sendMessage, rewriteMessage, answerQuestion, interrupt, createNewSession, switchSession, deleteSession } =
     useAssistantSession(currentProjectName);
 
@@ -264,7 +256,6 @@ export function AgentCopilot() {
       && !workflowPlanLoading
       && !workflowPlanError
       && !hasActiveSubagents
-      && !hasActiveProjectTasks
       && !messagesLoading
       && !startupFailure
       && !error
