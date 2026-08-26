@@ -34,7 +34,7 @@ from starlette.background import BackgroundTask
 
 logger = logging.getLogger(__name__)
 
-from lib.api_errors import ApiError, BadRequestError, NotFoundError, UnprocessableError
+from lib.api_errors import ApiError, BadRequestError, NotFoundError, ServiceUnavailableError, UnprocessableError
 from lib.asset_fingerprints import compute_asset_fingerprints
 from lib.asset_types import asset_name_comparison_key
 from lib.config.registry import default_model_for_provider
@@ -76,6 +76,12 @@ from server.services.project_archive import (
     ProjectArchiveValidationError,
 )
 from server.services.project_cover import resolve_project_cover
+from server.services.project_path_links import (
+    InvalidProjectPathError,
+    LocalFileManagerUnavailableError,
+    ProjectPathLinkService,
+    ProjectPathNotFoundError,
+)
 from server.services.reference_keyframe_mentions import (
     EpisodeReferenceScriptNotFoundError,
     normalize_episode_keyframe_mentions,
@@ -138,6 +144,10 @@ def get_script_batch_editor(manager: Any | None = None) -> ScriptBatchEditor:
 
 def get_video_style_service() -> VideoStyleService:
     return VideoStyleService(get_project_manager())
+
+
+def get_project_path_link_service() -> ProjectPathLinkService:
+    return ProjectPathLinkService(get_project_manager())
 
 
 # 项目级模型字段：创建时逐一校验并写入 project.json，PATCH 时另加 audio_backend。
@@ -855,6 +865,33 @@ async def get_project(
     except Exception:
         logger.exception("请求处理失败")
         raise HTTPException(status_code=500, detail=_t("internal_server_error"))
+
+
+class RevealProjectPathRequest(BaseModel):
+    path: str = "."
+
+
+@router.post("/projects/{name}/reveal-path")
+async def reveal_project_path(name: str, request: RevealProjectPathRequest):
+    """Reveal a validated project-local file or directory on the server host."""
+
+    try:
+        location = await asyncio.to_thread(get_project_path_link_service().reveal, name, request.path)
+        return {
+            "success": True,
+            "relative_path": location.relative_path,
+            "kind": location.kind,
+        }
+    except FileNotFoundError as exc:
+        raise NotFoundError("project_not_found", name=name) from exc
+    except ValueError as exc:
+        raise BadRequestError("invalid_project_name", name=name) from exc
+    except InvalidProjectPathError as exc:
+        raise BadRequestError("project_path_invalid") from exc
+    except ProjectPathNotFoundError as exc:
+        raise NotFoundError("project_path_not_found") from exc
+    except LocalFileManagerUnavailableError as exc:
+        raise ServiceUnavailableError("local_file_manager_unavailable") from exc
 
 
 @router.put("/projects/{name}/video-style")

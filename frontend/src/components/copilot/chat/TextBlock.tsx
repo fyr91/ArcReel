@@ -6,12 +6,13 @@ import { StreamMarkdown } from "../StreamMarkdown";
 
 interface TextBlockProps {
   text?: string;
+  projectName?: string;
 }
 
-export function TextBlock({ text }: TextBlockProps) {
+export function TextBlock({ text, projectName }: TextBlockProps) {
   if (!text) {
     return null;
   }
 
-  return <StreamMarkdown content={text} />;
+  return <StreamMarkdown content={text} projectName={projectName} />;
 }

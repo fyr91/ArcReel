@@ -68,6 +68,7 @@ from server.agent_runtime.sdk_tools.patch_script import (
 )
 from server.agent_runtime.sdk_tools.project_asset_links import manage_project_asset_link_tool
 from server.agent_runtime.sdk_tools.project_character_images import move_character_main_to_reference_tool
+from server.agent_runtime.sdk_tools.project_path_links import get_project_path_link_tool
 from server.agent_runtime.sdk_tools.reference_keyframe_mentions import (
     normalize_reference_keyframe_mentions_tool,
 )
@@ -109,6 +110,7 @@ ARCREEL_MCP_TOOL_IDS: tuple[str, ...] = (
     "complete_asset_inventory",
     "complete_step1_rebuild",
     "get_workflow_plan",
+    "get_project_path_link",
     "list_pending_assets",
     "generate_assets",
     "generate_character_voice_references",
@@ -239,6 +241,7 @@ def build_arcreel_mcp_server(
         complete_asset_inventory_tool(ctx),
         complete_step1_rebuild_tool(ctx),
         get_workflow_plan_tool(ctx),
+        get_project_path_link_tool(ctx),
         list_pending_assets_tool(ctx),
         generate_assets_tool(ctx),
         generate_character_voice_references_tool(ctx),

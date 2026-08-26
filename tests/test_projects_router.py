@@ -461,6 +461,49 @@ def _client(monkeypatch, fake_pm, fake_summaries=None):
 
 class TestProjectsRouter:
     @pytest.mark.unit
+    def test_reveal_project_path_delegates_to_shared_service(self, monkeypatch, tmp_path):
+        fake_pm = _FakePM(tmp_path)
+        calls: list[tuple[str, str]] = []
+
+        class _Service:
+            def reveal(self, name, relative_path):
+                calls.append((name, relative_path))
+                return type("Location", (), {"relative_path": "videos/clip.mp4", "kind": "file"})()
+
+        monkeypatch.setattr(projects, "get_project_path_link_service", _Service)
+        response = _client(monkeypatch, fake_pm).post(
+            "/api/v1/projects/ready/reveal-path",
+            json={"path": "videos/clip.mp4"},
+        )
+
+        assert response.status_code == 200
+        assert response.json() == {
+            "success": True,
+            "relative_path": "videos/clip.mp4",
+            "kind": "file",
+        }
+        assert calls == [("ready", "videos/clip.mp4")]
+
+    @pytest.mark.unit
+    def test_reveal_project_path_maps_invalid_path(self, monkeypatch, tmp_path):
+        from server.services.project_path_links import InvalidProjectPathError
+
+        fake_pm = _FakePM(tmp_path)
+
+        class _Service:
+            def reveal(self, _name, relative_path):
+                raise InvalidProjectPathError(relative_path)
+
+        monkeypatch.setattr(projects, "get_project_path_link_service", _Service)
+        response = _client(monkeypatch, fake_pm).post(
+            "/api/v1/projects/ready/reveal-path",
+            json={"path": "../outside"},
+        )
+
+        assert response.status_code == 400
+        assert response.json()["detail"] == zh_errors.MESSAGES["project_path_invalid"]
+
+    @pytest.mark.unit
     def test_video_style_web_paths_delegate_to_shared_service(self, monkeypatch, tmp_path):
         fake_pm = _FakePM(tmp_path)
         calls: list[tuple[str, object]] = []

@@ -633,6 +633,7 @@ export function AgentCopilot() {
           <MessageRow
             key={turn.uuid || `turn-${i}`}
             turn={turn}
+            projectName={currentProjectName ?? undefined}
             streaming={turn === draftTurn}
             editable={canEditUserTurn(turn, {
               sessionStatus,
@@ -646,8 +647,16 @@ export function AgentCopilot() {
             onSubmitEdit={handleSubmitEdit}
           />
         ))}
-        {handoffTurn && <MessageRow key={handoffTurn.uuid} turn={handoffTurn} />}
-        {pendingUserTurn && <ChatMessage message={pendingUserTurn} />}
+        {handoffTurn && (
+          <MessageRow
+            key={handoffTurn.uuid}
+            turn={handoffTurn}
+            projectName={currentProjectName ?? undefined}
+          />
+        )}
+        {pendingUserTurn && (
+          <ChatMessage message={pendingUserTurn} projectName={currentProjectName ?? undefined} />
+        )}
         {showSendFeedback && <AgentSendFeedback accepted={!sending} />}
         {startupFailure && (
           // 改写失败时原始输入留在仍开着的编辑器里，重试由它的「重新发送」发起：

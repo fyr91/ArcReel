@@ -17,6 +17,7 @@ import { getRoleLabel, TERMINAL_SESSION_STATUSES } from "./utils";
 
 interface SubagentCardProps {
   block: ContentBlock;
+  projectName?: string;
 }
 
 type CardStatus = "running" | "completed" | "failed" | "stopped" | "stalled";
@@ -52,7 +53,7 @@ function deriveDescription(block: ContentBlock): string {
   return fromInput || fromTask || fromPrompt;
 }
 
-export function SubagentCard({ block }: SubagentCardProps) {
+export function SubagentCard({ block, projectName }: SubagentCardProps) {
   const { t } = useTranslation("dashboard");
   const [isExpanded, setIsExpanded] = useState(false);
   const detailsId = useId();
@@ -191,7 +192,7 @@ export function SubagentCard({ block }: SubagentCardProps) {
           {subTurns.length > 0 ? (
             <div className="mt-2 ml-1 pl-2.5" style={{ borderLeft: "2px solid var(--color-accent-soft)" }}>
               {subTurns.map((turn, turnIndex) => (
-                <SubTimelineTurn key={turn.uuid || `sub-turn-${turnIndex}`} turn={turn} />
+                <SubTimelineTurn key={turn.uuid || `sub-turn-${turnIndex}`} turn={turn} projectName={projectName} />
               ))}
             </div>
           ) : (
@@ -208,7 +209,7 @@ export function SubagentCard({ block }: SubagentCardProps) {
   );
 }
 
-function SubTimelineTurn({ turn }: Readonly<{ turn: Turn }>) {
+function SubTimelineTurn({ turn, projectName }: Readonly<{ turn: Turn; projectName?: string }>) {
   const { t } = useTranslation("dashboard");
   const blocks = Array.isArray(turn.content) ? turn.content : [];
   if (blocks.length === 0) return null;
@@ -222,7 +223,12 @@ function SubTimelineTurn({ turn }: Readonly<{ turn: Turn }>) {
       </div>
       <div className="min-w-0 overflow-hidden text-[12px] leading-[1.55]" style={{ color: "var(--color-text-2)" }}>
         {blocks.map((subBlock, index) => (
-          <ContentBlockRenderer key={subBlock.id ?? index} block={subBlock} index={index} />
+          <ContentBlockRenderer
+            key={subBlock.id ?? index}
+            block={subBlock}
+            index={index}
+            projectName={projectName}
+          />
         ))}
       </div>
     </div>

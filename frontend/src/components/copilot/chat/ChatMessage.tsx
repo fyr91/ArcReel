@@ -20,11 +20,12 @@ import {
 
 interface ChatMessageProps {
   message: Turn;
+  projectName?: string;
   /** 该 turn 是流式草稿（draft）——末尾块处于生成中。 */
   streaming?: boolean;
 }
 
-export function ChatMessage({ message, streaming }: ChatMessageProps) {
+export function ChatMessage({ message, projectName, streaming }: ChatMessageProps) {
   // hook 必须在下面各处早退之前调用。
   const { t } = useTranslation("dashboard");
 
@@ -89,6 +90,7 @@ export function ChatMessage({ message, streaming }: ChatMessageProps) {
             key={block.id ?? index}
             block={block}
             index={index}
+            projectName={projectName}
             streaming={Boolean(streaming) && index === blocks.length - 1}
           />
         ))}

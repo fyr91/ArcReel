@@ -29,11 +29,12 @@ import { AgentFailureCard } from "./AgentFailureCard";
 interface ContentBlockRendererProps {
   block: ContentBlock;
   index: number;
+  projectName?: string;
   /** 该块正在流式生成（draft turn 的末尾块）。 */
   streaming?: boolean;
 }
 
-export function ContentBlockRenderer({ block, index, streaming }: ContentBlockRendererProps) {
+export function ContentBlockRenderer({ block, index, projectName, streaming }: ContentBlockRendererProps) {
   if (!block || typeof block !== "object") {
     return null;
   }
@@ -45,12 +46,12 @@ export function ContentBlockRenderer({ block, index, streaming }: ContentBlockRe
 
   switch (blockType) {
     case "text":
-      return <TextBlock key={block.id ?? `block-${index}`} text={block.text} />;
+      return <TextBlock key={block.id ?? `block-${index}`} text={block.text} projectName={projectName} />;
 
     case "tool_use":
       // subagent 锚点（Agent/Task tool_use 或挂有子时间线）→ 单一折叠卡片
       if (block.name === "Agent" || block.name === "Task" || block.sub_turns) {
-        return <SubagentCard key={block.id ?? `block-${index}`} block={block} />;
+        return <SubagentCard key={block.id ?? `block-${index}`} block={block} projectName={projectName} />;
       }
       if (block.name === "Skill") {
         return (
@@ -124,7 +125,7 @@ export function ContentBlockRenderer({ block, index, streaming }: ContentBlockRe
       const fallback = block.text
         || (typeof block.content === "string" ? block.content : null)
         || JSON.stringify(block);
-      return <TextBlock key={block.id ?? `block-${index}`} text={fallback} />;
+      return <TextBlock key={block.id ?? `block-${index}`} text={fallback} projectName={projectName} />;
     }
   }
 }

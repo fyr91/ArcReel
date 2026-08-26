@@ -33,6 +33,7 @@ const AMBER = "oklch(0.80 0.12 80)";
 
 interface MessageRowProps {
   turn: Turn;
+  projectName?: string;
   /** 该 turn 是流式草稿——末尾块处于生成中，不给操作行。 */
   streaming?: boolean;
   /** 此刻是否给出改写入口（判据见 utils.canEditUserTurn）。 */
@@ -49,6 +50,7 @@ interface MessageRowProps {
 
 export function MessageRow({
   turn,
+  projectName,
   streaming,
   editable = false,
   editing = false,
@@ -83,14 +85,14 @@ export function MessageRow({
   const showActions = !streaming && (Boolean(text.trim()) || images.length > 0)
     && (turn.type === "user" || turn.type === "assistant");
   if (!showActions) {
-    return <ChatMessage message={turn} streaming={streaming} />;
+    return <ChatMessage message={turn} projectName={projectName} streaming={streaming} />;
   }
 
   const isUser = turn.type === "user";
 
   return (
     <div className="group">
-      <ChatMessage message={turn} />
+      <ChatMessage message={turn} projectName={projectName} />
       <div
         className={`flex h-7 items-center gap-0.5 opacity-0 transition-opacity duration-150 group-hover:opacity-100 group-focus-within:opacity-100 ${
           isUser ? "justify-end pr-0.5" : "pl-0.5"

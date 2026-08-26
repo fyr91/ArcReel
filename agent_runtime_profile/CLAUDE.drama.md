@@ -49,6 +49,7 @@ agent session 的当前工作目录（cwd）已绑定到当前项目根，**所�
   - ✅ `source/episode_1.txt`、`drafts/episode_1/step1_normalized_script.json`、`scripts/episode_1.json`
   - ❌ `projects/{项目名}/source/episode_1.txt`（双前缀，占位符替换或拼接出错就会落到 projects 根）
 - **严禁**在工具参数中出现 `projects/{...}/` 前缀；该前缀仅用于文档说明项目目录结构，**不可直接作为参数传给任何工具**
+- **向用户提供本地位置**：用户要求定位、打开、查找或发出某个项目文件/文件夹时，调用 `mcp__arcreel__get_project_path_link`，使用项目相对路径，并把工具返回的 `markdown_link` 原样放进答复。不要输出服务器绝对路径，不要自行拼接链接，也不要用 Bash 执行 `open` / `explorer`；链接由用户点击后再打开本地文件管理器。
 - skill 脚本内部已加 cwd 校验，cwd 漂离当前项目目录时会直接拒绝执行
 - **关于 agent.md / SKILL.md 中的相对形式**：子任务指引（如「读取 `project.json`」、「读取 `source/episode_{N}.txt`」）里出现的相对路径是**项目内位置说明**，并非可直接传给工具的 `file_path` 值。调用 Read/Edit/Write/Glob/Grep 时仍按本节规则用 session cwd 拼成绝对路径再传参
 

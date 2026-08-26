@@ -414,6 +414,11 @@ export interface AgentProfileStatus {
   customized_files: string[];
 }
 
+export interface RevealProjectPathResponse extends SuccessResponse {
+  relative_path: string;
+  kind: "file" | "directory";
+}
+
 /** 旁白/解说片段 PATCH 入参（drama 模式片段走 {@link API.updateScene}）。 */
 export interface SegmentUpdatePayload {
   script_file: string;
@@ -992,6 +997,16 @@ class API {
     asset_fingerprints?: Record<string, number>;
   }> {
     return this.request(`/projects/${encodeURIComponent(name)}`, { signal: options.signal });
+  }
+
+  static async revealProjectPath(
+    name: string,
+    path: string,
+  ): Promise<RevealProjectPathResponse> {
+    return this.request(`/projects/${encodeURIComponent(name)}/reveal-path`, {
+      method: "POST",
+      body: JSON.stringify({ path }),
+    });
   }
 
   static async updateProject(
