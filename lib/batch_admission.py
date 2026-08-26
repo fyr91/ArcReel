@@ -112,7 +112,7 @@ class BatchAdmission:
 
     operation: str
     selection: GenerationSelectionMode
-    narration_delivery: str
+    narration_delivery: str | None
     tickets: tuple[UnitAdmissionTicket, ...]
 
     @property
@@ -244,16 +244,18 @@ class BatchAdmission:
             if withheld is not None:
                 payload["problems"] = [withheld.model_dump(mode="json")]
             units.append(payload)
-        return {
+        payload: dict[str, object] = {
             "decision": self.decision.value,
             "operation": self.operation,
             "selection": self.selection.value,
-            "narration_delivery": self.narration_delivery,
             "units": units,
             "confirmation": {"tiers": [tier.to_payload() for tier in self.confirmation_tiers()]}
             if self.decision is BatchAdmissionDecision.CONFIRMATION_REQUIRED
             else None,
         }
+        if self.narration_delivery is not None:
+            payload["narration_delivery"] = self.narration_delivery
+        return payload
 
 
 def _withheld_problem(holding_unit_ids: Sequence[str]) -> GenerationProblem:

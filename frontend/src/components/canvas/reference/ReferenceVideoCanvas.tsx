@@ -177,15 +177,18 @@ export function ReferenceVideoCanvas({
 }: ReferenceVideoCanvasProps) {
   const { t } = useTranslation("dashboard");
   const [, navigate] = useLocation();
+  const project = useProjectsStore((s) => s.currentProjectData);
+  const usesNarrationDelivery = project?.content_mode === "ad";
   const [narrationDelivery, setNarrationDelivery] = useState<"post_production" | "use_tts">(
     requestOptions?.narration_delivery ?? "post_production",
   );
   const effectiveRequestOptions = useMemo<ReferenceRequestOptions>(
-    () =>
-      requestOptions || narrationDelivery !== "post_production"
+    () => usesNarrationDelivery
+      ? (requestOptions || narrationDelivery !== "post_production"
         ? { ...requestOptions, narration_delivery: narrationDelivery }
-        : {},
-    [narrationDelivery, requestOptions],
+        : {})
+      : {},
+    [narrationDelivery, requestOptions, usesNarrationDelivery],
   );
 
   const loadUnits = useReferenceVideoStore((s) => s.loadUnits);
@@ -203,7 +206,6 @@ export function ReferenceVideoCanvas({
   const selectedUnitId = useReferenceVideoStore((s) => s.selectedUnitId);
   const error = useReferenceVideoStore((s) => s.error);
   const loading = useReferenceVideoStore((s) => s.loading);
-  const project = useProjectsStore((s) => s.currentProjectData);
   const isCourse = project?.content_mode === "course";
   const courseSceneNames = Object.keys(project?.scenes ?? {});
   const coursePropNames = Object.keys(project?.props ?? {});
@@ -608,9 +610,7 @@ export function ReferenceVideoCanvas({
       try {
         const admission = await enqueueReferenceVideoBatch(projectName, episode, {
           unit_ids: unitIds,
-          // 旁白交付方式随请求走，与单元入口同一个选择：不带上它，整批会按服务端
-          // 默认的「后期配音」准入，用户在画布上选的「使用当前 TTS」被静默丢弃。
-          narration_delivery: narrationDelivery,
+          ...(usesNarrationDelivery ? { narration_delivery: narrationDelivery } : {}),
           ...(confirmedDurations ? { confirmed_request_durations: confirmedDurations } : {}),
         });
         setBatchAdmission(admission.decision === "admitted" ? null : admission);
@@ -619,7 +619,7 @@ export function ReferenceVideoCanvas({
         toastError(e, (msg) => t("reference_batch_request_failed", { error: msg }));
       }
     },
-    [projectName, episode, narrationDelivery, t],
+    [projectName, episode, narrationDelivery, t, usesNarrationDelivery],
   );
 
   const handleBatchGenerate = useCallback(async () => {
@@ -791,7 +791,7 @@ export function ReferenceVideoCanvas({
     try {
       const response = await API.getH3PromptStates(projectName, episode, {
         unit_ids: [selectedH3UnitId],
-        narration_delivery: narrationDelivery,
+        ...(usesNarrationDelivery ? { narration_delivery: narrationDelivery } : {}),
       });
       if (sequence !== h3RequestSequence.current) return;
       setH3PromptState(response.states[0] ?? null);
@@ -802,7 +802,7 @@ export function ReferenceVideoCanvas({
     } finally {
       if (sequence === h3RequestSequence.current) setH3PromptLoading(false);
     }
-  }, [episode, narrationDelivery, projectName, selectedH3UnitId]);
+  }, [episode, narrationDelivery, projectName, selectedH3UnitId, usesNarrationDelivery]);
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect -- fetch lifecycle synchronizes the selected unit with its durable H3 artifact
@@ -858,7 +858,7 @@ export function ReferenceVideoCanvas({
     try {
       const response = await API.updateH3Prompt(projectName, episode, selectedH3UnitId, {
         rendered_prompt: flushed,
-        narration_delivery: narrationDelivery,
+        ...(usesNarrationDelivery ? { narration_delivery: narrationDelivery } : {}),
       });
       if (sequence !== h3RequestSequence.current) return;
       setH3PromptState({
@@ -884,6 +884,7 @@ export function ReferenceVideoCanvas({
     episode,
     h3PromptDirty,
     narrationDelivery,
+    usesNarrationDelivery,
     projectName,
     selectedH3UnitId,
   ]);
@@ -1159,7 +1160,8 @@ export function ReferenceVideoCanvas({
     selected ? s._segmentIndex.get(selected.unit_id) : undefined,
   );
   const estimatedCost = segCost?.estimate.video;
-  const displayedEstimatedCost = narrationDelivery === "use_tts" ? undefined : estimatedCost;
+  const displayedEstimatedCost =
+    usesNarrationDelivery && narrationDelivery === "use_tts" ? undefined : estimatedCost;
   const actualCost = segCost?.actual.video;
   const narrationEstimatedCost = segCost?.estimate.audio;
   const selectedNarrationText = unitNarrationText(selected);
@@ -1246,7 +1248,7 @@ export function ReferenceVideoCanvas({
         <span className="flex-1" />
         {tab === "units" && (
           <>
-            {hasNarration && (
+            {usesNarrationDelivery && hasNarration && (
               <NarrationDeliveryChoice
                 value={narrationDelivery}
                 onChange={setNarrationDelivery}

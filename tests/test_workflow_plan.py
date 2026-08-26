@@ -30,7 +30,7 @@ pytestmark = pytest.mark.unit
 
 
 def _status(
-    content_mode: str = "narration",
+    content_mode: str = "drama",
     generation_mode: str = "storyboard",
     *,
     state: str = "VIDEO",
@@ -82,12 +82,11 @@ def _step(plan, step_id: str):
     return next(step for step in plan.steps if step.id == step_id)
 
 
-def test_rules_exhaust_the_six_content_and_generation_mode_combinations() -> None:
+def test_rules_exhaust_the_supported_content_and_generation_mode_combinations() -> None:
     assert set(WORKFLOW_RULES) == {
-        ("narration", "storyboard"),
-        ("narration", "reference_video"),
         ("drama", "storyboard"),
         ("drama", "reference_video"),
+        ("course", "reference_video"),
         ("ad", "storyboard"),
         ("ad", "reference_video"),
     }
@@ -103,8 +102,7 @@ def test_rules_exhaust_the_six_content_and_generation_mode_combinations() -> Non
         assert step_ids.index("script_structure") < step_ids.index("storyboard")
         assert step_ids.index("storyboard") < step_ids.index("video_unit_storyboard_sheet")
         assert step_ids.index("video_unit_storyboard_sheet") < step_ids.index("reference_keyframes")
-        assert step_ids.index("reference_keyframes") < step_ids.index("narration_delivery")
-        assert step_ids.index("narration_delivery") < step_ids.index("video_prompt_optimization")
+        assert step_ids.index("reference_keyframes") < step_ids.index("video_prompt_optimization")
         assert step_ids.index("video_prompt_optimization") < step_ids.index("video")
         storyboard = next(step for step in rule.steps if step.id == "storyboard")
         assert storyboard.applicable is (generation_mode == "storyboard")
@@ -112,12 +110,15 @@ def test_rules_exhaust_the_six_content_and_generation_mode_combinations() -> Non
         assert sheet.applicable is (generation_mode == "reference_video")
         keyframes = next(step for step in rule.steps if step.id == "reference_keyframes")
         assert keyframes.applicable is (generation_mode == "reference_video")
-        assert next(step for step in rule.steps if step.id == "narration_delivery").applicable is True
+        if content_mode == "ad":
+            assert next(step for step in rule.steps if step.id == "narration_delivery").applicable is True
+        else:
+            assert "narration_delivery" not in step_ids
         prompt_step = next(step for step in rule.steps if step.id == "video_prompt_optimization")
         assert prompt_step.applicable is (generation_mode == "reference_video")
 
 
-@pytest.mark.parametrize("content_mode", ["narration", "drama"])
+@pytest.mark.parametrize("content_mode", ["drama"])
 def test_episodic_plan_keeps_asset_sheets_ready_before_episode_planning(content_mode: str) -> None:
     status = _status(
         content_mode=content_mode,
@@ -136,7 +137,7 @@ def test_episodic_plan_keeps_asset_sheets_ready_before_episode_planning(content_
     assert plan.next_action.requested_ids == ["阿离"]
 
 
-@pytest.mark.parametrize("content_mode,generation_mode", sorted(WORKFLOW_RULES))
+@pytest.mark.parametrize("content_mode,generation_mode", [("ad", "storyboard"), ("ad", "reference_video")])
 @pytest.mark.parametrize("narration_delivery", [POST_PRODUCTION, USE_TTS])
 def test_every_route_keeps_each_transient_narration_delivery_choice(
     content_mode: str,
@@ -164,8 +165,20 @@ def test_every_route_keeps_each_transient_narration_delivery_choice(
     assert _step(plan, "video").state is WorkflowStepState.READY
 
 
-def test_reference_route_retains_its_delivery_choice() -> None:
-    plan = build_workflow_plan(_status(generation_mode="reference_video"))
+@pytest.mark.parametrize(
+    ("content_mode", "generation_mode"),
+    [("drama", "storyboard"), ("drama", "reference_video"), ("course", "reference_video")],
+)
+def test_drama_and_course_routes_skip_delivery_choice(content_mode: str, generation_mode: str) -> None:
+    plan = build_workflow_plan(_status(content_mode=content_mode, generation_mode=generation_mode))
+
+    assert plan.narration_delivery is None
+    assert all(step.id != "narration_delivery" for step in plan.steps)
+    assert plan.next_action.type == "generate_videos"
+
+
+def test_ad_reference_route_retains_its_delivery_choice() -> None:
+    plan = build_workflow_plan(_status(content_mode="ad", generation_mode="reference_video"))
 
     assert _step(plan, "storyboard").state is WorkflowStepState.SKIPPED
     assert _step(plan, "narration_delivery").state is WorkflowStepState.READY
@@ -216,7 +229,7 @@ def test_reference_visual_gate_uses_distinct_sheet_and_keyframe_actions(
     assert _step(plan, "video").state is WorkflowStepState.PENDING
 
 
-def test_completed_reference_visual_gate_continues_to_delivery_choice() -> None:
+def test_completed_reference_visual_gate_continues_to_video_generation() -> None:
     gate = ReferenceVisualGateObservation(
         confirmed_sheet_unit_ids=["E1U01"],
         generated_keyframe_ids=["E1U01K01"],
@@ -229,11 +242,11 @@ def test_completed_reference_visual_gate_continues_to_delivery_choice() -> None:
 
     assert _step(plan, "video_unit_storyboard_sheet").state is WorkflowStepState.COMPLETED
     assert _step(plan, "reference_keyframes").state is WorkflowStepState.COMPLETED
-    assert plan.next_action.type == "choose_narration_delivery"
+    assert plan.next_action.type == "generate_videos"
 
 
 def test_post_production_keeps_video_executable_when_tts_is_missing() -> None:
-    status = _status()
+    status = _status(content_mode="ad")
     admission = BatchAdmission(
         operation="generate_videos",
         selection=GenerationSelectionMode.MISSING_ONLY,
@@ -255,7 +268,7 @@ def test_post_production_keeps_video_executable_when_tts_is_missing() -> None:
 
 
 def _status_with_blocked_audio() -> WorkflowStatus:
-    status = _status()
+    status = _status(content_mode="ad")
     artifacts = dict(status.artifacts)
     artifacts["audio"] = {"state": "blocked", "current_ids": [], "stale_ids": [], "missing_ids": ["E1S01"]}
     return status.model_copy(update={"artifacts": artifacts})
@@ -290,7 +303,7 @@ def test_use_tts_preserves_structured_admission_blockers() -> None:
     )
 
     plan = build_workflow_plan(
-        _status(),
+        _status(content_mode="ad"),
         narration_delivery=USE_TTS,
         admission=admission.to_payload(),
     )
@@ -336,7 +349,7 @@ def test_multiple_admission_repairs_preserve_the_first_structured_action() -> No
     )
 
     plan = build_workflow_plan(
-        _status(requested_ids=["E1S01", "E1S02"]),
+        _status(content_mode="ad", requested_ids=["E1S01", "E1S02"]),
         narration_delivery=USE_TTS,
         admission=admission.to_payload(),
     )

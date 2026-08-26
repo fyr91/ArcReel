@@ -120,7 +120,7 @@ class WorkflowPlan(BaseModel):
 
     schema_version: Literal[1] = 1
     status: WorkflowStatus
-    narration_delivery: WorkflowNarrationDelivery
+    narration_delivery: WorkflowNarrationDelivery | None = None
     steps: list[WorkflowPlanStep]
     blockers: list[WorkflowBlocker]
     problems: list[GenerationProblem]
@@ -273,7 +273,11 @@ def build_workflow_plan(
             ),
         )
         if step_rule.id == "narration_delivery":
-            step.required = status.state == "VIDEO" and status.next_action.type is WorkflowActionType.GENERATE_VIDEOS
+            step.required = (
+                step_rule.applicable
+                and status.state == "VIDEO"
+                and status.next_action.type is WorkflowActionType.GENERATE_VIDEOS
+            )
         if step.artifacts.get("state") == "blocked" and step.state is not WorkflowStepState.SKIPPED:
             step.state = WorkflowStepState.BLOCKED
         steps.append(step)
@@ -293,9 +297,10 @@ def build_workflow_plan(
             "video_prompt_optimization",
             "video",
         ):
-            if by_id[media_step].state is not WorkflowStepState.SKIPPED:
-                by_id[media_step].state = WorkflowStepState.PENDING
-                by_id[media_step].action = None
+            step = by_id.get(media_step)
+            if step is not None and step.state is not WorkflowStepState.SKIPPED:
+                step.state = WorkflowStepState.PENDING
+                step.action = None
 
     sheet_step = by_id["video_unit_storyboard_sheet"]
     keyframe_step = by_id["reference_keyframes"]
@@ -342,9 +347,18 @@ def build_workflow_plan(
         elif sheet_step.action is not None:
             gate_action = sheet_step.action
 
-    delivery_step = by_id["narration_delivery"]
-    delivery_index = next(index for index, item in enumerate(rules) if item.id == "narration_delivery")
-    if not structure_problems and current_index >= delivery_index:
+    delivery_step = by_id.get("narration_delivery")
+    delivery_index = next(
+        (index for index, item in enumerate(rules) if item.id == "narration_delivery"),
+        None,
+    )
+    if (
+        delivery_step is not None
+        and delivery_step.required
+        and delivery_index is not None
+        and not structure_problems
+        and current_index >= delivery_index
+    ):
         # 音轨产物 blocked 只对本次选择 TTS 的请求成立：后期配音路径不消费 TTS 产物，
         # 交付选择尚未作出时两条路径都还开放，两种情况都不该被音轨阻断吞掉。
         tts_blocked = narration_delivery == USE_TTS and delivery_step.state is WorkflowStepState.BLOCKED
@@ -357,7 +371,9 @@ def build_workflow_plan(
         step_id = _TASK_STEP.get(observation.task_type)
         if step_id is None:
             continue
-        step = by_id[step_id]
+        step = by_id.get(step_id)
+        if step is None:
+            continue
         step.tasks.append(observation)
         if observation.status in {"queued", "running", "cancelling"}:
             step.state = WorkflowStepState.ACTIVE
@@ -387,8 +403,9 @@ def build_workflow_plan(
             video_step.action = None
     elif gate_action is not None:
         next_action = gate_action
-        delivery_step.state = WorkflowStepState.PENDING
-        delivery_step.action = None
+        if delivery_step is not None:
+            delivery_step.state = WorkflowStepState.PENDING
+            delivery_step.action = None
         by_id["video_prompt_optimization"].state = WorkflowStepState.PENDING
         by_id["video_prompt_optimization"].action = None
         video_step.state = WorkflowStepState.PENDING
@@ -396,6 +413,8 @@ def build_workflow_plan(
     elif (
         status.state == "VIDEO"
         and status.next_action.type is WorkflowActionType.GENERATE_VIDEOS
+        and delivery_step is not None
+        and delivery_step.required
         and narration_delivery is None
     ):
         next_action = WorkflowNextAction(
@@ -415,7 +434,11 @@ def build_workflow_plan(
 
     return WorkflowPlan(
         status=status,
-        narration_delivery=WorkflowNarrationDelivery(selected=narration_delivery),
+        narration_delivery=(
+            WorkflowNarrationDelivery(selected=narration_delivery)
+            if delivery_step is not None and delivery_step.required
+            else None
+        ),
         steps=steps,
         blockers=list(status.blockers),
         problems=[*structure_problems, *admission_problems],

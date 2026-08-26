@@ -7,6 +7,7 @@ from typing import Any
 
 from claude_agent_sdk import tool
 
+from lib.narration_delivery import video_workflow_uses_narration_delivery
 from lib.workflow_plan import WorkflowPlanRequest
 from lib.workflow_state import WorkflowRequestError
 from server.agent_runtime.sdk_tools._context import ToolContext, tool_error
@@ -21,23 +22,30 @@ def _error(code: str, detail: str) -> dict[str, Any]:
 
 
 def get_workflow_plan_tool(ctx: ToolContext):
+    properties: dict[str, Any] = {
+        "episode": {"type": "integer", "minimum": 1},
+        "confirmed_request_durations": {
+            "type": "object",
+            "additionalProperties": {"type": "integer", "minimum": 1},
+        },
+    }
+    try:
+        project = ctx.pm.load_project(ctx.project_name)
+    except FileNotFoundError:
+        project = None
+    if project is None or video_workflow_uses_narration_delivery(project.get("content_mode")):
+        properties["narration_delivery"] = {
+            "type": "string",
+            "enum": ["post_production", "use_tts"],
+            "description": "本次视频请求的旁白交付选择；不写入项目 workflow。",
+        }
+
     @tool(
         "get_workflow_plan",
         "读取只读的完整工作流计划。返回有序步骤、阻断原因、活动任务、视频准入与唯一下一动作。",
         {
             "type": "object",
-            "properties": {
-                "episode": {"type": "integer", "minimum": 1},
-                "narration_delivery": {
-                    "type": "string",
-                    "enum": ["post_production", "use_tts"],
-                    "description": "本次视频请求的旁白交付选择；不写入项目 workflow。",
-                },
-                "confirmed_request_durations": {
-                    "type": "object",
-                    "additionalProperties": {"type": "integer", "minimum": 1},
-                },
-            },
+            "properties": properties,
         },
     )
     async def _handler(args: dict[str, Any]) -> dict[str, Any]:
@@ -47,7 +55,7 @@ def get_workflow_plan_tool(ctx: ToolContext):
             return _error("invalid_request", str(exc))
         try:
             plan = await workflow_planner.get_workflow_planner(ctx.pm).get_plan(ctx.project_name, request)
-            return {"content": [{"type": "text", "text": plan.model_dump_json()}]}
+            return {"content": [{"type": "text", "text": plan.model_dump_json(exclude_none=True)}]}
         except WorkflowRequestError as exc:
             return _error("invalid_request", str(exc))
         except Exception as exc:  # noqa: BLE001

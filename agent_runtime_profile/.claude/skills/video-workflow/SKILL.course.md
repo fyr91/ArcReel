@@ -21,6 +21,10 @@ description: 编排课程视频项目的单文档单集工作流；用户说继�
 9. 基础视频全部确认后生成 `explanation`。第一条 explanation 使用前一 story 尾帧，连续 explanation 使用前一 explanation 尾帧；程序在右下角合成讲师方形框作为实际首帧。
 10. 全部视频生成并确认后，沿用现有 HyperFrames 自动剪辑入口，按 unit 顺序拼接和导出。
 
+课程文稿中的讲解、对白与画外音直接进入 H3/视频 provider prompt，由视频模型原生音轨生成。
+工作流不出现 `choose_narration_delivery`，调用 `get_workflow_plan` 或 `generate_video_*` 时都不要传
+`narration_delivery`。独立 TTS 与 HyperFrames 后期仍可单独使用，但不参与视频准入和时长求解。
+
 ## 结构约束
 
 - 仅一个 opening 和一个 closing，至少一个 story。

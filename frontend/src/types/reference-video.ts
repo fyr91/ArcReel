@@ -138,7 +138,7 @@ export interface H3PromptArtifact {
   request_duration_seconds: number;
   resolution: string | null;
   aspect_ratio: string;
-  narration_delivery: string;
+  narration_delivery?: string | null;
   reference_images: H3PromptReference[];
   reference_audio: H3PromptReference[];
   optimized_at: string;
@@ -274,8 +274,8 @@ export interface ReferenceBatchAdmission extends WorkflowAdmission {
 /** 批量端点请求体：省略 unit_ids 表示「缺失即生成」，空数组会被后端拒绝。 */
 export interface ReferenceBatchGenerateRequest {
   unit_ids?: string[];
-  /** 必填：不声明就等于让这次批量绕过旁白交付方式的选择。 */
-  narration_delivery: "post_production" | "use_tts";
+  /** 仅 ad 视频生成保留；drama/course 不发送旁白交付契约。 */
+  narration_delivery?: "post_production" | "use_tts";
   /** 用户已确认的申请档位，按 unit 给 */
   confirmed_request_durations?: Record<string, number>;
 }

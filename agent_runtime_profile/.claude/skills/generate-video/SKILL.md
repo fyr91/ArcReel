@@ -11,8 +11,7 @@ description: 为剧本场景或自包含 video unit 生成视频。当用户要�
 
 | 生成模式 × 创作类型 | 应有骨架 | 分派 | 输出目录 |
 |---|---|---|---|
-| `reference_video` × narration / drama / ad | `video_units[]` | `task_type="reference_video"` → `execute_reference_video_task` | `reference_videos/{unit_id}.mp4` |
-| `storyboard` × narration | `segments[]` | `task_type="video"` → `execute_video_task` | `videos/scene_{segment_id}.mp4` |
+| `reference_video` × drama / course / ad | `video_units[]` | `task_type="reference_video"` → `execute_reference_video_task` | `reference_videos/{unit_id}.mp4` |
 | `storyboard` × drama | `scenes[]` | 同上 | `videos/scene_{scene_id}.mp4` |
 | `storyboard` × ad | `shots[]` | 同上 | `videos/scene_{shot_id}.mp4` |
 
@@ -36,15 +35,14 @@ description: 为剧本场景或自包含 video unit 生成视频。当用户要�
 
 | 操作 | 工具 |
 |------|------|
-| 整集生成（默认操作） | `mcp__arcreel__generate_video_episode({"script": "episode_1.json", "narration_delivery": chosen_narration_delivery})` |
-| 断点续传 | `mcp__arcreel__generate_video_episode({"script": "episode_1.json", "narration_delivery": chosen_narration_delivery, "resume": true})` |
-| 单场景 | `mcp__arcreel__generate_video_scene({"script": "episode_1.json", "scene_id": "E1S01", "narration_delivery": chosen_narration_delivery})` |
-| 批量自选 | `mcp__arcreel__generate_video_selected({"script": "episode_1.json", "scene_ids": ["E1S01", "E1S05", "E1S10"], "narration_delivery": chosen_narration_delivery})` |
-| 自选 + 续传 | `mcp__arcreel__generate_video_selected({"script": "episode_1.json", "scene_ids": [...], "narration_delivery": chosen_narration_delivery, "resume": true})` |
-| 全部待处理（独立模式） | `mcp__arcreel__generate_video_all({"script": "episode_1.json", "narration_delivery": chosen_narration_delivery})` |
+| 整集生成（默认操作） | `mcp__arcreel__generate_video_episode({"script": "episode_1.json"})` |
+| 断点续传 | `mcp__arcreel__generate_video_episode({"script": "episode_1.json", "resume": true})` |
+| 单场景 | `mcp__arcreel__generate_video_scene({"script": "episode_1.json", "scene_id": "E1S01"})` |
+| 批量自选 | `mcp__arcreel__generate_video_selected({"script": "episode_1.json", "scene_ids": ["E1S01", "E1S05", "E1S10"]})` |
+| 自选 + 续传 | `mcp__arcreel__generate_video_selected({"script": "episode_1.json", "scene_ids": [...], "resume": true})` |
+| 全部待处理（独立模式） | `mcp__arcreel__generate_video_all({"script": "episode_1.json"})` |
 
-每次调用都必须带 `narration_delivery`（见「旁白交付」）：省略或写错值一律返回工具错误、不入队任何任务。
-上表的 `chosen_narration_delivery` 是占位符，调用前换成本次已向用户确认的那个值，不要照抄一个具体值。
+上表适用于 `drama` 与 `course`：不要传 `narration_delivery`。`ad` 仍按广告工作流要求显式携带该参数。
 
 把 `scene_id` / `scene_ids` 在分镜图生视频解释为分镜 ID，在参考生视频解释为 `unit_id`。集号由剧本元数据或文件名解析。
 
@@ -53,7 +51,7 @@ description: 为剧本场景或自包含 video unit 生成视频。当用户要�
 MiniMax H3 优化前会读取项目唯一的 Unified Video Style；缺失时生成链路自动分析并保存，已有配置不重复分析。用户明确提出无 BGM、ASMR、镜头语言或节奏要求时，先调用 `mcp__arcreel__update_video_style` 更新同一份项目配置，再生成视频。
 
 参考生视频且当前模型为 MiniMax H3 时，生成 worker 会在提交付费视频前自动检查六段式提示词产物：
-产物缺失或依据已变时，使用同一次请求的 unit、旁白交付、确认时长、参考图、音频与模型事实自动优化并落盘；
+产物缺失或依据已变时，使用同一次请求的 unit、确认时长、参考图、音频与模型事实自动优化并落盘；
 产物仍为 current 时直接复用。此步骤不设人工确认门禁，非 H3 模型不经过此步骤。用户只想预览或单独刷新
 提示词时，Agent 仍可调用 `mcp__arcreel__optimize_h3_video_prompts`，但正常视频生成无需预先手动调用。
 用户要求修改某个已生成且仍为 current 的 H3 提示词时，调用
@@ -68,8 +66,8 @@ MiniMax H3 优化前会读取项目唯一的 Unified Video Style；缺失时生�
 
 | 操作 | 工具 |
 |------|------|
-| 重新生成单个 unit | `mcp__arcreel__generate_video_scene({"script": "episode_1.json", "scene_id": "E1U2", "narration_delivery": chosen_narration_delivery})` |
-| 重新生成多个 unit | `mcp__arcreel__generate_video_selected({"script": "episode_1.json", "scene_ids": ["E1U2", "E1U3"], "narration_delivery": chosen_narration_delivery})` |
+| 重新生成单个 unit | `mcp__arcreel__generate_video_scene({"script": "episode_1.json", "scene_id": "E1U2"})` |
+| 重新生成多个 unit | `mcp__arcreel__generate_video_selected({"script": "episode_1.json", "scene_ids": ["E1U2", "E1U3"]})` |
 
 一次调用完成入队、等待与结果回报：
 
@@ -80,24 +78,11 @@ MiniMax H3 优化前会读取项目唯一的 Unified Video Style；缺失时生�
 - 结果按 `requested / succeeded / failed / blocked` 逐 ID 返回，
   结构与问题码见 `.claude/references/generation-results.md`。
 
-### 旁白交付
+### 声音与后期解耦
 
-叙述旁白有两条交付路线，**每次请求逐次选择、从不持久化**，经 `narration_delivery` 传入，该参数在四个视频工具上均为必填：
-
-| 取值 | 含义 |
-|---|---|
-| `post_production` | 后期配音：视频照常生成，旁白留到剪映等后期工具里补 |
-| `use_tts` | 使用当前 TTS：按 fresh 旁白音频的实际媒体时长参与时长求解 |
-
-对每次叙述旁白视频请求都要**显式向用户说明并选择**，不要默默沿用上一次，也不要在没问过用户时
-直接填 `post_production` 凑够必填项。未配置 TTS 时用户通常选后期配音——那不是工作流缺口，视频照常成片，**不要为了让视频继续而建议用户去配置 TTS 供应商**。
-选 `use_tts` 时先显式生成并让用户试听旁白（`generate-narration-audio`），再按预检返回的
-`problems[].action` 处理——**action 是权威，不要按 `code` 自己推**：`tts_missing` 先生成、
-`tts_stale` / `tts_duration_unavailable` 先重新合成（旧音频保留）、`tts_generating` 与
-`tts_conflicts_with_active_narrated_video` 等待在跑的任务后重查（不要重复提交）、
-`tts_not_applicable` 改选后期配音、`tts_state_unavailable` 报为独立缺口而不是当作缺失去重生。
-
-`generation_mode == "reference_video"` **只跳过传统 Storyboard 图片**，不跳过已在拆分与剧本阶段生成的 Keyframes，也不跳过 audio：旁白交付选择在两种生成模式下都要做。
+`drama` 与 `course` 的对白、画外音和解说直接写进 H3/视频 provider prompt，由视频模型的原生音轨生成；
+视频请求不接受 `narration_delivery`，也不读取 TTS 音频来决定准入、时长或费用。独立 TTS、剪映、
+HyperFrames 等后期能力仍可由用户另行触发，但不属于视频生成主流程。`ad` 保留原有交付选择契约。
 
 ### 批量准入与档位确认
 
@@ -107,11 +92,10 @@ MiniMax H3 优化前会读取项目唯一的 Unified Video Style；缺失时生�
 按 unit 的引用状态选择生效档位，把编排时长投影到能容纳内容的申请档位。申请档位不同于当前视觉时长时
 预检返回 `reference_duration_confirmation_required`，逐档位向用户说明涉及的 unit、编排秒数、申请秒数
 与变长/变短；确认后经 `confirmed_request_durations`（按 unit_id 记档位）让**原目标集合仍作为一批重发**。
-重发要连同本次请求已选的 `narration_delivery` 一起带上——该参数不持久化，省略会让重发直接失败，
-不会退回后期配音把用户选的「使用当前 TTS」悄悄换掉：
+`drama/course` 重发只带档位确认，不带旁白交付参数：
 
 ```text
-mcp__arcreel__generate_video_episode({"script": "episode_1.json", "narration_delivery": "use_tts",
+mcp__arcreel__generate_video_episode({"script": "episode_1.json",
                                       "confirmed_request_durations": {"E1U1": 8}})
 ```
 
@@ -135,7 +119,7 @@ stale 产物照常可预览、可导出、可参与成片，服务端会复用�
 
 1. 加载项目和剧本，确认骨架与生成模式一致。
 2. 在分镜图生视频确认分镜图可用；在参考生视频确认 unit 正文非空、编排时长合法。
-3. 与用户确定本次旁白交付方式，调用相应 MCP 工具，处理准入拒绝与档位确认。
+3. 调用相应 MCP 工具，处理准入拒绝与档位确认；`drama/course` 不询问旁白交付方式。
 4. 展示结果，按用户选择点名重做不满意的分镜或 unit。
 5. 以工具写回的 `generated_assets.video_clip` 作为成片归属。
 
@@ -145,7 +129,7 @@ stale 产物照常可预览、可导出、可参与成片，服务端会复用�
 
 - 分镜图生视频读取 `image_prompt`、`video_prompt` 与分镜图。
 - 参考生视频读取 unit 正文（`text`）与编排时长。
-- 旁白/解说的分镜图生视频不把 `novel_text` 放入视频 Prompt；旁白由独立音频流程处理。
+- `drama/course` 的对白、画外音和解说随正式提示词直接进入视频 provider。
 - 自动应用音频开关、角色发声归属与负面 Prompt 规则。
 
 ## 生成前检查

@@ -14,7 +14,11 @@ from lib.generation_result import (
     migration_problem,
     provider_checkpoint_from_task,
 )
-from lib.narration_delivery import USE_TTS
+from lib.narration_delivery import (
+    USE_TTS,
+    narration_delivery_for_video_workflow,
+    video_workflow_uses_narration_delivery,
+)
 from lib.path_safety import PathTraversalError, safe_join
 from lib.project_manager import ProjectManager, get_project_manager
 from lib.project_migration_failure import (
@@ -76,13 +80,17 @@ class WorkflowPlanner:
             project_name,
             request.episode,
         )
+        narration_delivery = narration_delivery_for_video_workflow(
+            status.project.content_mode,
+            request.narration_delivery,
+        )
         blocked = next((b for b in status.blockers if b.code == MIGRATION_FAILURE_CODE), None)
         if blocked is not None:
             # The migration verdict is the whole plan: nothing downstream can be
             # planned off inputs the migration itself refused.
             return build_workflow_plan(
                 status,
-                narration_delivery=request.narration_delivery,
+                narration_delivery=narration_delivery,
                 structure_problems=[await self._migration_problem(project_name, blocked)],
                 script_revision=None,
                 task_observations=[],
@@ -96,7 +104,10 @@ class WorkflowPlanner:
         if (
             facts is not None
             and not structure_problems
-            and request.narration_delivery is not None
+            and (
+                not video_workflow_uses_narration_delivery(status.project.content_mode)
+                or narration_delivery is not None
+            )
             and status.state == "VIDEO"
             and status.next_action.type == "generate_videos"
             and (reference_visual_gate is None or reference_visual_gate.keyframes_complete)
@@ -104,7 +115,7 @@ class WorkflowPlanner:
             admission = await self._video_admission(project_name, status, facts, request)
         return build_workflow_plan(
             status,
-            narration_delivery=request.narration_delivery,
+            narration_delivery=narration_delivery,
             structure_problems=structure_problems,
             script_revision=facts.revision if facts is not None else None,
             task_observations=tasks,
@@ -254,7 +265,11 @@ class WorkflowPlanner:
                 task_targets.append(("reference_keyframe", keyframe_ids))
         elif not status.project.grid_storyboard:
             task_targets.append(("storyboard", unit_ids))
-        if request.narration_delivery == USE_TTS:
+        narration_delivery = narration_delivery_for_video_workflow(
+            status.project.content_mode,
+            request.narration_delivery,
+        )
+        if narration_delivery == USE_TTS:
             task_targets.append(("tts", unit_ids))
 
         rows: list[dict[str, Any]] = []
@@ -293,7 +308,12 @@ class WorkflowPlanner:
         facts: _ScriptFacts,
         request: WorkflowPlanRequest,
     ) -> dict[str, Any]:
-        options = ReferenceRequestOptions(narration_delivery=request.narration_delivery or "post_production")
+        options = ReferenceRequestOptions(
+            narration_delivery=narration_delivery_for_video_workflow(
+                status.project.content_mode,
+                request.narration_delivery,
+            )
+        )
         if status.project.generation_mode == "reference_video":
             screened, malformed = screen_script_entries(facts.script.get("video_units"), requested_ids=None)
             targets, selection, _states = resolve_reference_batch_targets(

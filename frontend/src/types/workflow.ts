@@ -198,7 +198,7 @@ export interface WorkflowAdmission {
   decision: BatchAdmissionDecision;
   operation: string;
   selection: "explicit" | "missing_only";
-  narration_delivery: NarrationDelivery;
+  narration_delivery?: NarrationDelivery | null;
   units: BatchAdmissionUnit[];
   confirmation?: { tiers: BatchAdmissionTier[] } | null;
 }
@@ -255,7 +255,7 @@ export interface WorkflowNarrationDeliveryChoice {
 export interface WorkflowPlan {
   schema_version: 1;
   status: WorkflowStatus;
-  narration_delivery: WorkflowNarrationDeliveryChoice;
+  narration_delivery?: WorkflowNarrationDeliveryChoice | null;
   steps: WorkflowPlanStep[];
   blockers: WorkflowBlocker[];
   problems: GenerationProblem[];

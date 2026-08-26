@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { act, render, screen, fireEvent, waitFor, within } from "@testing-library/react";
 import { API } from "@/api";
+import { useProjectsStore } from "@/stores/projects-store";
 import { useTasksStore } from "@/stores/tasks-store";
 import { useWorkflowStore } from "@/stores/workflow-store";
 import { WorkflowPanel } from "./WorkflowPanel";
@@ -22,6 +23,10 @@ async function renderExpanded(plan: WorkflowPlan, props: Partial<React.Component
 
 beforeEach(() => {
   useWorkflowStore.getState().resetTarget();
+  useProjectsStore.setState({
+    currentProjectName: "proj",
+    currentProjectData: { content_mode: "ad" } as never,
+  });
 });
 
 describe("WorkflowPanel 状态语言", () => {
