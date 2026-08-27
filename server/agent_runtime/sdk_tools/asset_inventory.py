@@ -120,6 +120,11 @@ def complete_asset_inventory_tool(ctx: ToolContext):
                     "required": ["kind"],
                 },
                 "expected_source_revision": {"type": "string"},
+                "episode": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "description": "课程项目必填；清单只归属于这一集。",
+                },
                 "entries": {
                     "type": "object",
                     "description": "本次新增资产：{characters/scenes/props: {名称: {description, voice_style?}}}",
@@ -144,6 +149,7 @@ def complete_asset_inventory_tool(ctx: ToolContext):
                 expected,
                 entries,
                 linked_character_image_paths,
+                args.get("episode"),
             )
             character_entries = entries.get("characters") if isinstance(entries, Mapping) else None
             character_names = (

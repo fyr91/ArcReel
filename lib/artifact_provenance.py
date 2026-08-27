@@ -8,14 +8,14 @@ existing structured artifact.
 from __future__ import annotations
 
 from collections.abc import Mapping
-from typing import Literal
+from typing import Literal, cast
 
 from lib.artifact_manifest import ArtifactBasis
 from lib.episode_ledger import episode_outline_context
 from lib.speech_rate import project_speech_rate_override, speech_rate_units_per_second
 from lib.text_metrics import reading_unit_noun
 
-_STRUCTURED_CONTENT_MODES = frozenset({"narration", "drama"})
+_STRUCTURED_CONTENT_MODES = frozenset({"narration", "drama", "course"})
 _GENERATION_MODES = frozenset({"storyboard", "reference_video"})
 _DEFAULT_SOURCE_LANGUAGE = "中文"
 _AD_OVERVIEW_FIELDS = ("synopsis", "genre", "theme")
@@ -106,7 +106,7 @@ def project_step1_prompt_inputs(
             f"{expected_variant} step1 is unavailable for "
             f"content_mode={content_mode!r}, generation_mode={generation_mode!r}"
         )
-    overview = _mapping_or_empty(project.get("overview"))
+    overview = episode_overview(project, episode)
     source_language = project.get("source_language") or _DEFAULT_SOURCE_LANGUAGE
     if not isinstance(source_language, str):
         raise ValueError(f"source_language must be a non-empty string or null, got {source_language!r}")
@@ -121,7 +121,12 @@ def project_step1_prompt_inputs(
     }
 
     if variant in {"reference_video", "drama"}:
-        episode_outline, next_episode_outline = episode_outline_context(project, episode)
+        if content_mode == "course":
+            # Course uploads are independent documents; adjacent ledger outlines are not
+            # continuity context and must never cross the episode boundary.
+            episode_outline, next_episode_outline = None, None
+        else:
+            episode_outline, next_episode_outline = episode_outline_context(project, episode)
         inputs.update(
             {
                 "episode_outline": episode_outline,
@@ -212,7 +217,12 @@ def _step1_prompt_variant(content_mode: str, generation_mode: str) -> Step1Promp
     return "narration"
 
 
-def build_episode_script_basis(step1_content: object, *, project: Mapping[str, object]) -> ArtifactBasis:
+def build_episode_script_basis(
+    step1_content: object,
+    *,
+    project: Mapping[str, object],
+    episode: int = 1,
+) -> ArtifactBasis:
     """Describe every durable prompt input consumed by an episode script."""
 
     content_mode, generation_mode = _content_axes(project)
@@ -223,12 +233,15 @@ def build_episode_script_basis(step1_content: object, *, project: Mapping[str, o
             "content_mode": content_mode,
             "generation_mode": generation_mode,
             "step1_content": step1_content,
-            "prompt_context": project_episode_script_prompt_inputs(project),
+            "prompt_context": project_episode_script_prompt_inputs(project, episode),
         },
     )
 
 
-def project_episode_script_prompt_inputs(project: Mapping[str, object]) -> dict[str, object]:
+def project_episode_script_prompt_inputs(
+    project: Mapping[str, object],
+    episode: int = 1,
+) -> dict[str, object]:
     """Project the persisted project fields rendered into non-ad step2 prompts.
 
     Provider/model capabilities and one-shot user instructions are execution
@@ -238,7 +251,9 @@ def project_episode_script_prompt_inputs(project: Mapping[str, object]) -> dict[
     """
 
     content_mode, generation_mode = _content_axes(project)
-    overview = _mapping_or_empty(project.get("overview"))
+    if type(episode) is not int or episode < 1:
+        raise ValueError("episode must be a positive integer")
+    overview = episode_overview(project, episode)
     aspect_ratio = project.get("aspect_ratio")
     if not isinstance(aspect_ratio, str):
         aspect_ratio = "9:16" if content_mode == "narration" else "16:9"
@@ -256,6 +271,25 @@ def project_episode_script_prompt_inputs(project: Mapping[str, object]) -> dict[
         "scenes": _project_step2_assets(project.get("scenes"), generation_mode=generation_mode),
         "props": _project_step2_assets(project.get("props"), generation_mode=generation_mode),
     }
+
+
+def episode_overview(project: Mapping[str, object], episode: int) -> dict[str, object]:
+    """Return the story context owned by one episode.
+
+    Course uploads are independent documents, so falling back to the project overview would
+    silently leak episode 1 into later prompts. Other content modes retain the historical
+    project-level overview contract.
+    """
+
+    if project.get("content_mode") != "course":
+        return dict(_mapping_or_empty(project.get("overview")))
+    episodes = project.get("episodes")
+    if not isinstance(episodes, list):
+        return {}
+    for entry in episodes:
+        if isinstance(entry, Mapping) and entry.get("episode") == episode:
+            return dict(_mapping_or_empty(entry.get("overview")))
+    return {}
 
 
 def build_ad_episode_script_basis(episode: int, *, project: Mapping[str, object]) -> ArtifactBasis:
@@ -317,8 +351,8 @@ def project_ad_episode_script_inputs(
     return inputs
 
 
-def _mapping_or_empty(value: object) -> Mapping[object, object]:
-    return value if isinstance(value, Mapping) else {}
+def _mapping_or_empty(value: object) -> Mapping[str, object]:
+    return cast(Mapping[str, object], value) if isinstance(value, Mapping) else {}
 
 
 def _optional_string(value: object, field: str) -> str:

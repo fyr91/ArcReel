@@ -133,6 +133,7 @@ export default {
   'action_reset_episode_planning': '重置分集规划，让新增原文进入排布',
   'action_plan_episodes': '规划分集',
   'action_draft_selling_points': '提炼卖点',
+  'action_analyze_episode': '分析这一集的独立文档',
   'action_prepare_step1': '为这一集准备内容整理',
   'action_confirm_step1': '审阅并确认内容整理',
   'action_generate_script': '生成正式脚本',

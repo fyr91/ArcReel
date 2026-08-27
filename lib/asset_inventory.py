@@ -68,6 +68,7 @@ def complete_asset_inventory(
     expected_source_revision: object,
     entries: object = None,
     linked_character_image_paths: Mapping[str, str] | None = None,
+    episode: int | None = None,
 ) -> AssetInventoryCompletion:
     """Validate and atomically persist extracted assets plus their inventory fact."""
 
@@ -88,6 +89,27 @@ def complete_asset_inventory(
 
     def _mutate(project: dict[str, Any]) -> None:
         nonlocal result
+        is_course = project.get("content_mode") == "course"
+        if is_course:
+            if type(episode) is not int or episode < 1:
+                raise AssetInventoryInvalidRequest("course asset inventory requires a positive episode")
+            episodes = project.get("episodes")
+            bound = next(
+                (
+                    item
+                    for item in episodes
+                    if isinstance(item, Mapping) and item.get("episode") == episode
+                ),
+                None,
+            ) if isinstance(episodes, list) else None
+            source_file = bound.get("source_file") if isinstance(bound, Mapping) else None
+            if not isinstance(source_file, str) or not source_file:
+                raise AssetInventoryInvalidRequest(f"course episode {episode} has no bound source file")
+            expected_scope = SourceScope(kind="files", files=[source_file])
+            if scope != expected_scope:
+                raise AssetInventoryInvalidRequest(
+                    f"course episode {episode} inventory scope must be exactly {source_file}"
+                )
         revision = compute_source_revision(project_path, project, scope)
         if revision.blockers:
             raise AssetInventorySourceBlocked(revision.blockers)
@@ -141,11 +163,18 @@ def complete_asset_inventory(
             project["workflow"] = workflow
         elif not isinstance(workflow, dict):
             raise AssetInventoryError("workflow must be an object")
-        workflow["asset_inventory"] = {
+        marker = {
             "scope": completed_scope.model_dump(mode="json"),
             "source_revision": revision.revision,
             "completed_at": datetime.now(UTC).isoformat(),
         }
+        if is_course:
+            per_episode = workflow.setdefault("asset_inventory_by_episode", {})
+            if not isinstance(per_episode, dict):
+                raise AssetInventoryError("workflow.asset_inventory_by_episode must be an object")
+            per_episode[str(episode)] = marker
+        else:
+            workflow["asset_inventory"] = marker
         result = AssetInventoryCompletion(
             scope=completed_scope,
             source_revision=revision.revision,

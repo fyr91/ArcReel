@@ -133,6 +133,7 @@ export default {
   'action_reset_episode_planning': 'đặt lại kế hoạch tập để bao gồm văn bản mới',
   'action_plan_episodes': 'lập kế hoạch các tập',
   'action_draft_selling_points': 'soạn các điểm bán hàng',
+  'action_analyze_episode': 'phân tích tài liệu riêng của tập này',
   'action_prepare_step1': 'chuẩn bị tổ chức nội dung cho tập này',
   'action_confirm_step1': 'duyệt và xác nhận nội dung',
   'action_generate_script': 'tạo kịch bản chính thức',

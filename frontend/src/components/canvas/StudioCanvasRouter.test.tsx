@@ -486,6 +486,31 @@ describe("StudioCanvasRouter", () => {
     });
   });
 
+  it("shows an explicit isolated-analysis step for a newly uploaded course episode", () => {
+    useProjectsStore.setState({
+      currentProjectName: "course-demo",
+      currentProjectData: makeProjectData({
+        content_mode: "course",
+        generation_mode: "reference_video",
+        episodes: [
+          {
+            episode: 2,
+            title: "Episode 2",
+            script_file: "scripts/episode_2.json",
+            source_file: "source/unrelated.md",
+          },
+        ],
+      }),
+      currentScripts: {},
+    });
+
+    renderAt("/episodes/2");
+
+    expect(screen.getByRole("heading", { name: "分析第 2 集" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "开始分析本集" })).toBeInTheDocument();
+    expect(screen.queryByTestId("reference-video-canvas")).not.toBeInTheDocument();
+  });
+
   it("skips the provider/system-config lookups in the demo workbench", async () => {
     const providersSpy = vi.spyOn(API, "getProviders");
     const customProvidersSpy = vi.spyOn(API, "listCustomProviders");

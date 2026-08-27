@@ -462,7 +462,11 @@ class TargetStatePlanner:
             if step1 is None:
                 continue
             try:
-                script_basis = build_episode_script_basis(step1.content, project=self.project)
+                script_basis = build_episode_script_basis(
+                    step1.content,
+                    project=self.project,
+                    episode=episode.episode,
+                )
             except (TypeError, ValueError):
                 continue
             self._add_if_present(

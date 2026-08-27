@@ -105,6 +105,7 @@ class WorkflowActionType(StrEnum):
     NONE = "none"
     COLLECT_PROJECT_INPUT = "collect_project_input"
     DRAFT_SELLING_POINTS = "draft_selling_points"
+    ANALYZE_EPISODE = "analyze_episode"
     ANALYZE_ASSETS = "analyze_assets"
     PLAN_EPISODES = "plan_episodes"
     RESET_EPISODE_PLANNING = "reset_episode_planning"
@@ -465,6 +466,10 @@ class WorkflowStateService:
     ) -> tuple[SourceRevisionResult | None, dict[str, Any]]:
         if mode == "ad":
             return None, {"state": "not_applicable"}
+        if mode == "course":
+            # Course source is selected only after resolving the requested episode. Reading the
+            # all-files scope here would let an unrelated episode block or stale the active one.
+            return None, {"state": "missing"}
 
         source = compute_source_revision(project_path, project, SourceScope(kind="all"))
         blockers.extend(WorkflowBlocker(code=item.code, path=item.path, reason=item.reason) for item in source.blockers)
@@ -511,6 +516,78 @@ class WorkflowStateService:
             artifact["state"] = "partial"
             return source, artifact
         if source.blockers:
+            artifact["state"] = "blocked"
+        elif marker.get("source_revision") == source.revision:
+            artifact["state"] = "current"
+        else:
+            artifact["state"] = "stale"
+        return source, artifact
+
+    def _course_episode_inventory(
+        self,
+        project_path: Path,
+        project: dict[str, Any],
+        episode: int,
+        source_file: str,
+        blockers: list[WorkflowBlocker],
+    ) -> tuple[SourceRevisionResult, dict[str, Any]]:
+        """Resolve source and inventory currency for one independent course document."""
+
+        source = compute_source_revision(
+            project_path,
+            project,
+            SourceScope(kind="files", files=[source_file]),
+        )
+        blockers.extend(WorkflowBlocker(code=item.code, path=item.path, reason=item.reason) for item in source.blockers)
+        workflow = project.get("workflow")
+        marker: object = None
+        if workflow is not None and not isinstance(workflow, Mapping):
+            blockers.append(
+                WorkflowBlocker(code="invalid_workflow", path="workflow", reason="workflow must be an object")
+            )
+        elif isinstance(workflow, Mapping):
+            per_episode = workflow.get("asset_inventory_by_episode")
+            if per_episode is not None and not isinstance(per_episode, Mapping):
+                blockers.append(
+                    WorkflowBlocker(
+                        code="invalid_asset_inventory",
+                        path="workflow.asset_inventory_by_episode",
+                        reason="per-episode asset inventory markers must be an object",
+                    )
+                )
+                return source, {"state": "blocked"}
+            if isinstance(per_episode, Mapping):
+                marker = per_episode.get(str(episode))
+
+        artifact: dict[str, Any] = {"state": "missing"}
+        if marker is None:
+            return source, artifact
+        if not isinstance(marker, Mapping):
+            blockers.append(
+                WorkflowBlocker(
+                    code="invalid_asset_inventory",
+                    path=f"workflow.asset_inventory_by_episode.{episode}",
+                    reason="episode asset inventory marker must be an object",
+                )
+            )
+            return source, {"state": "blocked"}
+        try:
+            recorded_scope = SourceScope.model_validate(marker.get("scope"))
+        except ValueError as exc:
+            blockers.append(
+                WorkflowBlocker(
+                    code="invalid_source_scope",
+                    path=f"workflow.asset_inventory_by_episode.{episode}.scope",
+                    reason=str(exc),
+                )
+            )
+            return source, {"state": "blocked"}
+        artifact["recorded_scope"] = recorded_scope.model_dump(mode="json")
+        artifact["recorded_revision"] = marker.get("source_revision")
+        expected_scope = SourceScope(kind="files", files=[source_file])
+        if recorded_scope != expected_scope:
+            artifact["state"] = "partial"
+        elif source.blockers:
             artifact["state"] = "blocked"
         elif marker.get("source_revision") == source.revision:
             artifact["state"] = "current"
@@ -1070,9 +1147,25 @@ class WorkflowStateService:
         mode = project.get("content_mode")
         if mode != "ad":
             workflow = project.get("workflow")
-            marker = workflow.get("asset_inventory") if isinstance(workflow, Mapping) else None
-            if marker is None:
-                return "preparation"
+            if mode == "course":
+                markers = (
+                    workflow.get("asset_inventory_by_episode")
+                    if isinstance(workflow, Mapping)
+                    else None
+                )
+                episode_entries = project.get("episodes")
+                episode_numbers = [
+                    entry.get("episode")
+                    for entry in episode_entries if isinstance(entry, Mapping)
+                ] if isinstance(episode_entries, list) else []
+                if not isinstance(markers, Mapping) or any(
+                    str(number) not in markers for number in episode_numbers
+                ):
+                    return "preparation"
+            else:
+                marker = workflow.get("asset_inventory") if isinstance(workflow, Mapping) else None
+                if marker is None:
+                    return "preparation"
         if not episodes:
             return "preparation"
         if any(episode.script_status != "generated" for episode in episodes):
@@ -1264,6 +1357,8 @@ class WorkflowStateService:
         episodes = shared.episodes
         selected = self._target(str(mode), episodes, episode)
         target = None
+        planning_sources = shared.planning_sources
+        episode_overview_current = True
         if selected is not None:
             number, entry = selected
             script_path = entry.get("script_file")
@@ -1295,6 +1390,21 @@ class WorkflowStateService:
                     ),
                 )
 
+                if mode == "course":
+                    source, inventory = self._course_episode_inventory(
+                        project_path,
+                        project,
+                        number,
+                        target.source,
+                        blockers,
+                    )
+                    planning_sources = planning_docs(source)
+                    episode_overview_current = (
+                        isinstance(entry.get("overview"), Mapping)
+                        and entry.get("source_revision") == source.revision
+                    )
+                    artifacts["asset_inventory"] = inventory
+
         state: WorkflowStateName
         next_action: WorkflowNextAction
         if blockers:
@@ -1303,16 +1413,32 @@ class WorkflowStateService:
         elif mode != "ad" and (source is None or not source.files):
             state = "PROJECT_INPUT"
             next_action = _action(WorkflowActionType.COLLECT_PROJECT_INPUT, "source text is required")
-        elif mode != "ad" and not any(doc.text.strip() for doc in shared.planning_sources):
+        elif mode != "ad" and not any(doc.text.strip() for doc in planning_sources):
             state = "PROJECT_INPUT"
             next_action = _action(WorkflowActionType.COLLECT_PROJECT_INPUT, "non-blank source text is required")
+        elif mode == "course" and target is not None and not episode_overview_current:
+            state = "PROJECT_INPUT"
+            next_action = _action(
+                WorkflowActionType.ANALYZE_EPISODE,
+                "episode overview is missing or out of date",
+                args={
+                    "episode": target.episode,
+                    "source": target.source,
+                    "expected_source_revision": source.revision if source else None,
+                },
+            )
         elif mode != "ad" and inventory.get("state") != "current":
             state = "ASSET_INVENTORY"
             next_action = _action(
                 WorkflowActionType.ANALYZE_ASSETS,
                 "asset inventory is missing or out of date",
                 args={
-                    "scope": {"kind": "all", "files": []},
+                    "episode": target.episode if mode == "course" and target is not None else None,
+                    "scope": (
+                        {"kind": "files", "files": [target.source]}
+                        if mode == "course" and target is not None
+                        else {"kind": "all", "files": []}
+                    ),
                     "expected_source_revision": source.revision if source else None,
                 },
             )

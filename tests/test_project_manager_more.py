@@ -862,6 +862,109 @@ class TestProjectManagerMore:
         assert backend.last_request is not None
         assert backend.last_request.prompt == build_overview_prompt(source_content, target_language="中文")
 
+    @pytest.mark.unit
+    @pytest.mark.asyncio
+    async def test_course_episode_overview_reads_only_bound_source(self, tmp_path, monkeypatch):
+        pm = ProjectManager(tmp_path / "projects")
+        pm.create_project("demo")
+        pm.create_project_metadata(
+            "demo",
+            "Demo",
+            content_mode="course",
+            extras={"generation_mode": "reference_video"},
+        )
+        project_path = pm.get_project_path("demo")
+        _write(project_path / "source" / "first.md", "FIRST_SECRET_TOPIC")
+        _write(project_path / "source" / "second.md", "SECOND_INDEPENDENT_TOPIC")
+
+        def _bind(project: dict) -> None:
+            project["episodes"] = [
+                {
+                    "episode": 1,
+                    "title": "First",
+                    "script_file": "scripts/episode_1.json",
+                    "source_file": "source/first.md",
+                },
+                {
+                    "episode": 2,
+                    "title": "Second",
+                    "script_file": "scripts/episode_2.json",
+                    "source_file": "source/second.md",
+                },
+            ]
+
+        pm.update_project("demo", _bind)
+        backend = _FakeTextBackend()
+
+        class _Generator:
+            async def generate(self, request, *, project_name):
+                assert project_name == "demo"
+                return await backend.generate(request)
+
+        async def _fake_create(*args, **kwargs):
+            return _Generator()
+
+        monkeypatch.setattr("lib.text_generator.TextGenerator.create", _fake_create)
+        overview = await pm.generate_episode_overview("demo", 2)
+
+        assert backend.last_request is not None
+        assert "SECOND_INDEPENDENT_TOPIC" in backend.last_request.prompt
+        assert "FIRST_SECRET_TOPIC" not in backend.last_request.prompt
+        saved = pm.load_project("demo")
+        assert saved["episodes"][1]["overview"]["synopsis"] == overview["synopsis"]
+        assert saved["episodes"][1]["source_revision"] == overview["source_revision"]
+        assert "overview" not in saved["episodes"][0]
+        assert "overview" not in saved
+
+    @pytest.mark.unit
+    def test_course_source_edit_invalidates_only_bound_episode_analysis(self, tmp_path):
+        pm = ProjectManager(tmp_path / "projects")
+        pm.create_project("demo")
+        pm.create_project_metadata(
+            "demo",
+            "Demo",
+            content_mode="course",
+            extras={"generation_mode": "reference_video"},
+        )
+        project_path = pm.get_project_path("demo")
+        _write(project_path / "source" / "first.md", "first")
+        _write(project_path / "source" / "second.md", "second")
+
+        def _seed(project: dict) -> None:
+            project["episodes"] = [
+                {
+                    "episode": 1,
+                    "script_file": "scripts/episode_1.json",
+                    "source_file": "source/first.md",
+                    "overview": {"synopsis": "first"},
+                    "source_revision": "first-revision",
+                },
+                {
+                    "episode": 2,
+                    "script_file": "scripts/episode_2.json",
+                    "source_file": "source/second.md",
+                    "overview": {"synopsis": "second"},
+                    "source_revision": "second-revision",
+                },
+            ]
+            project["overview"] = {"synopsis": "first mirror"}
+            project["workflow"] = {
+                "asset_inventory_by_episode": {"1": {"source_revision": "one"}, "2": {"source_revision": "two"}}
+            }
+
+        pm.update_project("demo", _seed)
+        pm.update_source_text("demo", "second.md", "updated second")
+
+        saved = pm.load_project("demo")
+        assert saved["episodes"][0]["overview"]["synopsis"] == "first"
+        assert saved["episodes"][0]["source_revision"] == "first-revision"
+        assert "overview" not in saved["episodes"][1]
+        assert saved["episodes"][1]["source_revision"] is None
+        assert saved["overview"]["synopsis"] == "first mirror"
+        assert saved["workflow"]["asset_inventory_by_episode"] == {
+            "1": {"source_revision": "one"}
+        }
+
 
 class TestFromCwd:
     """Tests for ProjectManager.from_cwd() classmethod."""

@@ -31,6 +31,7 @@ import { ProductsPage } from "./lorebook/ProductsPage";
 import { ReferenceVideoCanvas } from "./reference/ReferenceVideoCanvas";
 import { GridImageToVideoCanvas } from "./grid/GridImageToVideoCanvas";
 import { EpisodeSourceReview } from "./EpisodeSourceReview";
+import { CourseEpisodeAnalysisPanel } from "./CourseEpisodeAnalysisPanel";
 import { WorkflowPanel } from "@/components/workflow/WorkflowPanel";
 import { API, NarratedVideoDurationError } from "@/api";
 import {
@@ -805,6 +806,13 @@ export function StudioCanvasRouter() {
               <div className="min-h-0 flex-1">
                 {demoMode && !script ? (
                   <DemoEpisodePlaceholder />
+                ) : isCourse && episode?.source_file && !episode.overview ? (
+                  <CourseEpisodeAnalysisPanel
+                    projectName={currentProjectName}
+                    episode={epNum}
+                    sourceFile={episode.source_file}
+                    onComplete={refreshProject}
+                  />
                 ) : showSourceReview && episode ? (
                   <EpisodeSourceReview
                     projectName={currentProjectName}

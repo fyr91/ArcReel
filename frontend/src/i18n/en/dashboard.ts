@@ -1925,4 +1925,11 @@ export default {
   'narration_delivery_label': 'Narration delivery',
   'narration_delivery_post_production': 'Add in post-production',
   'narration_delivery_use_tts': 'Use current TTS',
+  'course_episode_analysis_title': 'Analyse episode {{episode}}',
+  'course_episode_analysis_description': 'This document is analysed independently. Content from other episodes will not be used.',
+  'course_episode_analyze': 'Start analysis',
+  'course_episode_analyzing': 'Analysing…',
+  'course_episode_analysis_success': 'Episode {{episode}} analysis completed',
+  'course_episode_analysis_failed': 'Episode analysis failed: {{message}}',
+  'tool_name_generate_episode_overview': 'Analyse course episode',
 };

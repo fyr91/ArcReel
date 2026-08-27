@@ -55,6 +55,7 @@ from server.agent_runtime.sdk_tools.enqueue_videos import (
     generate_video_scene_tool,
     generate_video_selected_tool,
 )
+from server.agent_runtime.sdk_tools.episode_overview import generate_episode_overview_tool
 from server.agent_runtime.sdk_tools.h3_prompt_optimization import (
     confirm_h3_video_prompts_tool,
     optimize_h3_video_prompts_tool,
@@ -533,6 +534,23 @@ def test_generate_narration_audio_registered() -> None:
     from server.agent_runtime.sdk_tools import ARCREEL_MCP_TOOL_IDS
 
     assert "generate_narration_audio" in ARCREEL_MCP_TOOL_IDS
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_generate_episode_overview_tool_uses_session_project_and_episode(fake_ctx: ToolContext) -> None:
+    generate = AsyncMock(return_value={"synopsis": "独立第二集", "source_revision": "sha256-v1:" + "a" * 64})
+    fake_ctx.pm.generate_episode_overview = generate  # type: ignore[attr-defined,method-assign]
+
+    result = await generate_episode_overview_tool(fake_ctx).handler({"episode": 2})
+
+    generate.assert_awaited_once_with("demo", 2)
+    payload = json.loads(result["content"][0]["text"])
+    assert payload["overview"]["synopsis"] == "独立第二集"
+    from server.agent_runtime.sdk_tools import ARCREEL_MCP_TOOL_IDS, MIGRATION_BLOCKED_TOOL_IDS
+
+    assert "generate_episode_overview" in ARCREEL_MCP_TOOL_IDS
+    assert "generate_episode_overview" in MIGRATION_BLOCKED_TOOL_IDS
 
 
 @pytest.mark.unit
