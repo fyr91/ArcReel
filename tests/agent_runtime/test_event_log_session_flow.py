@@ -238,11 +238,14 @@ class TestNewSessionEventLogFlow:
             sdk_id = await manager.send_new_session(
                 "demo",
                 "帮我写分镜",
+                episode=2,
                 user_entry=user_entry,
                 client_key="ck-new-1",
             )
 
         assert sdk_id == SDK_ID
+        meta = await manager.meta_store.get(SDK_ID)
+        assert meta is not None and meta.episode == 2
         # POST 受理响应的权威条目：seq 0、身份已分配
         managed = manager.sessions[SDK_ID]
         assert managed.initial_user_log_entry is not None

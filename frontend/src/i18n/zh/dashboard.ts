@@ -1600,6 +1600,8 @@ export default {
   'eyebrow_segment_refs': '引用 · 范围',
   'eyebrow_library': '资源库 · {{type}}',
   'context_clear': '清除上下文',
+  'assistant_scope_project': '全项目',
+  'assistant_scope_episode': '第 {{episode}} 集',
   'context_label_character': '角色',
   'context_label_scene': '场景',
   'context_label_prop': '道具',

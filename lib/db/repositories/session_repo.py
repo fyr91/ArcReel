@@ -18,6 +18,7 @@ def _row_to_dict(row: AgentSession) -> dict[str, Any]:
         "id": row.id,
         "sdk_session_id": row.sdk_session_id,
         "project_name": row.project_name,
+        "episode": row.episode,
         "title": row.title or "",
         "status": row.status,
         "superseded_by": row.superseded_by,
@@ -48,6 +49,7 @@ class SessionRepository(BaseRepository):
         title: str = "",
         user_id: str | None = None,
         *,
+        episode: int | None = None,
         fork_parent_session_id: str | None = None,
         fork_anchor_uuid: str | None = None,
     ) -> dict[str, Any]:
@@ -56,6 +58,7 @@ class SessionRepository(BaseRepository):
             id=uuid.uuid4().hex,
             sdk_session_id=sdk_session_id,
             project_name=project_name,
+            episode=episode,
             title=title,
             status="idle",
             fork_parent_session_id=fork_parent_session_id,
@@ -81,6 +84,8 @@ class SessionRepository(BaseRepository):
         *,
         project_name: str | None = None,
         status: str | None = None,
+        scope: str = "all",
+        episode: int | None = None,
         limit: int = 50,
         offset: int = 0,
     ) -> list[dict[str, Any]]:
@@ -90,6 +95,14 @@ class SessionRepository(BaseRepository):
             stmt = stmt.where(AgentSession.project_name == project_name)
         if status:
             stmt = stmt.where(AgentSession.status == status)
+        if scope == "project":
+            stmt = stmt.where(AgentSession.episode.is_(None))
+        elif scope == "episode":
+            if episode is None:
+                raise ValueError("episode scope requires an episode")
+            stmt = stmt.where(AgentSession.episode == episode)
+        elif scope != "all":
+            raise ValueError(f"unknown session scope: {scope}")
         stmt = stmt.order_by(AgentSession.updated_at.desc())
         stmt = stmt.limit(max(1, limit)).offset(max(0, offset))
         stmt = self._scope_query(stmt, AgentSession)

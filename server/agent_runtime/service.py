@@ -82,6 +82,18 @@ class InterruptSettleTimeoutError(MessageRewriteError):
     """等待运行中轮次中断到终态超时。"""
 
 
+class EpisodeScopeNotFoundError(ValueError):
+    """会话声明的分集已不存在。"""
+
+    def __init__(self, episode: int):
+        super().__init__(f"episode not found: {episode}")
+        self.episode = episode
+
+
+class SessionScopeMismatchError(ValueError):
+    """请求作用域与已有会话的不可变作用域不一致。"""
+
+
 class AssistantService:
     def __init__(self, project_root: Path, *, user_id: str = DEFAULT_USER_ID):
         self.project_root = Path(project_root)
@@ -161,11 +173,20 @@ class AssistantService:
         self,
         project_name: str | None = None,
         status: SessionStatus | None = None,
+        scope: str = "all",
+        episode: int | None = None,
         limit: int = 50,
         offset: int = 0,
     ) -> list[SessionMeta]:
         """List sessions, injecting SDK summary as title when available."""
-        sessions = await self.meta_store.list(project_name=project_name, status=status, limit=limit, offset=offset)
+        sessions = await self.meta_store.list(
+            project_name=project_name,
+            status=status,
+            scope=scope,
+            episode=episode,
+            limit=limit,
+            offset=offset,
+        )
         if not sessions or not project_name:
             return sessions
 
@@ -271,6 +292,7 @@ class AssistantService:
         content: str,
         *,
         session_id: str | None = None,
+        episode: int | None = None,
         images: list["ImageAttachment"] | None = None,
         locale: str = DEFAULT_LOCALE,
         client_key: str | None = None,
@@ -290,6 +312,9 @@ class AssistantService:
                 raise FileNotFoundError(f"session not found: {session_id}")
             if meta.project_name != project_name:
                 raise FileNotFoundError(f"session not found: {session_id}")
+            if meta.episode != episode:
+                raise SessionScopeMismatchError("request scope does not match session scope")
+            self._validate_episode_scope(project_name, meta.episode)
             # Build prompt
             text, sdk_prompt, echo_blocks = self._prepare_prompt(content, images)
             # 旧会话懒生成先行：保证受理条目排在重放重建的历史之后。
@@ -308,10 +333,11 @@ class AssistantService:
             return {"status": "accepted", "session_id": session_id, "entry": entry}
         else:
             # New session
+            self._validate_episode_scope(project_name, episode)
             if not client_key:
-                return await self._create_new_session(project_name, content, images, locale, client_key)
+                return await self._create_new_session(project_name, episode, content, images, locale, client_key)
 
-            existing = await self._find_accepted_new_session(client_key, project_name)
+            existing = await self._find_accepted_new_session(client_key, project_name, episode)
             if existing is not None:
                 return existing
 
@@ -320,14 +346,19 @@ class AssistantService:
             lock = self._new_session_locks.lock_for(client_key)
             async with lock:
                 # 双重检查：等锁期间先行者可能已完成同一 client_key 的建会话。
-                existing = await self._find_accepted_new_session(client_key, project_name)
+                existing = await self._find_accepted_new_session(client_key, project_name, episode)
                 if existing is not None:
                     return existing
-                result = await self._create_new_session(project_name, content, images, locale, client_key)
+                result = await self._create_new_session(project_name, episode, content, images, locale, client_key)
                 self._record_new_session_client_key(client_key, result["session_id"])
                 return result
 
-    async def _find_accepted_new_session(self, client_key: str, project_name: str) -> dict[str, Any] | None:
+    async def _find_accepted_new_session(
+        self,
+        client_key: str,
+        project_name: str,
+        episode: int | None = None,
+    ) -> dict[str, Any] | None:
         """按幂等键定位已受理的新会话：进程内映射为快路径，事件日志跨会话
         查询兜底——进程重启 / LRU 淘汰后映射丢失，受理已落库的重试仍须命中
         既有会话而非重复建会话（重复执行同一 prompt、重复计费）。
@@ -350,7 +381,7 @@ class AssistantService:
                 # 一次查询，但仍以精确条件避免这层不必要的抖动）。
                 if self._new_session_client_keys.get(client_key) == mapped_session_id:
                     self._new_session_client_keys.pop(client_key, None)
-            elif await self._new_session_matches_project(mapped_session_id, project_name):
+            elif await self._new_session_matches_scope(mapped_session_id, project_name, episode):
                 # 命中即刷新 LRU 位置：否则被频繁重试命中的 key 仍按插入
                 # 顺序（而非访问顺序）淘汰，退化成 FIFO。上一行 await 期间
                 # 该 key 可能已被其他并发请求的淘汰逻辑移除，直接
@@ -366,7 +397,7 @@ class AssistantService:
         if recovered is None:
             return None
         session_id, entry = recovered
-        if not await self._new_session_matches_project(session_id, project_name):
+        if not await self._new_session_matches_scope(session_id, project_name, episode):
             # 兜底命中的会话属于其他项目 → 视为未命中，走当前项目新建路径。
             return None
         # 上一行 await 期间该 key 可能已被其他并发请求记入新映射；仅当当前
@@ -376,12 +407,26 @@ class AssistantService:
             self._record_new_session_client_key(client_key, session_id)
         return {"status": "accepted", "session_id": session_id, "entry": entry}
 
-    async def _new_session_matches_project(self, session_id: str, project_name: str) -> bool:
-        """幂等命中的新会话是否属于当前调用项目。校验依据为会话 meta 的
-        ``project_name``；meta 不存在（异常 / 已删）时不阻断命中，保持既有幂等
-        语义——跨项目串号的前提是命中会话 meta 存在且项目不同。"""
+    async def _new_session_matches_scope(
+        self,
+        session_id: str,
+        project_name: str,
+        episode: int | None,
+    ) -> bool:
+        """幂等命中的新会话是否属于同一项目与同一不可变分集作用域。"""
         meta = await self.meta_store.get(session_id)
-        return meta is None or meta.project_name == project_name
+        return meta is None or (meta.project_name == project_name and meta.episode == episode)
+
+    def _validate_episode_scope(self, project_name: str, episode: int | None) -> None:
+        if episode is None:
+            return
+        if isinstance(episode, bool) or not isinstance(episode, int) or episode <= 0:
+            raise ValueError("episode must be a positive integer")
+        project = self.pm.load_project_readonly(project_name)
+        if not any(
+            isinstance(item, dict) and item.get("episode") == episode for item in (project.get("episodes") or [])
+        ):
+            raise EpisodeScopeNotFoundError(episode)
 
     def _record_new_session_client_key(self, client_key: str, session_id: str) -> None:
         self._new_session_client_keys[client_key] = session_id
@@ -392,6 +437,7 @@ class AssistantService:
     async def _create_new_session(
         self,
         project_name: str,
+        episode: int | None,
         content: str,
         images: list["ImageAttachment"] | None,
         locale: str,
@@ -404,6 +450,7 @@ class AssistantService:
         new_sdk_session_id = await self.session_manager.send_new_session(
             project_name,
             prompt,
+            episode=episode,
             echo_text=text,
             echo_content=echo_blocks,
             locale=locale,
@@ -478,6 +525,7 @@ class AssistantService:
         meta = await self.meta_store.get(session_id)
         if meta is None or meta.project_name != project_name:
             raise FileNotFoundError(f"session not found: {session_id}")
+        self._validate_episode_scope(project_name, meta.episode)
 
         if self._session_store is None:
             raise RewriteUnavailableError(

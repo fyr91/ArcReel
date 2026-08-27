@@ -226,6 +226,7 @@ class ManagedSession:
     actor: "SessionActor"  # per-session actor owning the SDK client
     status: SessionStatus = "idle"
     project_name: str = ""  # 用于 _register_new_session
+    episode: int | None = None  # NULL 为全项目会话；正整数为不可变分集焦点
     sdk_id_event: asyncio.Event = field(default_factory=asyncio.Event)
     resolved_sdk_id: str | None = None  # consumer 设置，send_new_session 读取
     channel: SseChannel = field(default_factory=_make_session_channel)
@@ -494,6 +495,7 @@ class SessionManager:
         locale: str = DEFAULT_LOCALE,
         stderr: Callable[[str], None] | None = None,
         session_id: str | None = None,
+        episode: int | None = None,
     ) -> Any:
         """委派给 ``OptionsAssembler.build``——SessionManager 不再直接构建 options 与
         hook，仅调用装配器；凭证注入、prompt 装配、hook 工厂均由装配器持有。"""
@@ -505,6 +507,7 @@ class SessionManager:
             locale=locale,
             stderr=stderr,
             session_id=session_id,
+            episode=episode,
         )
 
     def _build_session_store(self):
@@ -606,6 +609,7 @@ class SessionManager:
         project_name: str,
         prompt: str | AsyncIterable[dict],
         *,
+        episode: int | None = None,
         echo_text: str | None = None,
         echo_content: list[dict[str, Any]] | None = None,
         locale: str = DEFAULT_LOCALE,
@@ -637,6 +641,7 @@ class SessionManager:
                 can_use_tool=await self._build_can_use_tool_callback(temp_id, managed_ref),
                 locale=locale,
                 stderr=startup_stderr,
+                episode=episode,
             )
         except Exception as exc:
             sdk_stderr = startup_stderr.render()
@@ -659,6 +664,7 @@ class SessionManager:
             actor=actor,
             status="running",
             project_name=project_name,
+            episode=episode,
             assistant_model=assistant_model,
         )
         if user_entry is not None:
@@ -971,6 +977,7 @@ class SessionManager:
                     locale=locale,
                     stderr=startup_stderr,
                     session_id=None if resumable else meta.id,
+                    episode=meta.episode,
                 )
             except Exception as exc:
                 sdk_stderr = startup_stderr.render()
@@ -996,6 +1003,7 @@ class SessionManager:
                 actor=actor,
                 status=resumed_status,
                 project_name=meta.project_name,
+                episode=meta.episode,
                 assistant_model=assistant_model,
                 resolved_sdk_id=meta.id,  # 标记为已注册，防止重复创建 DB 记录
             )
@@ -1909,7 +1917,7 @@ class SessionManager:
 
                 tag_coro = _tag()
             await asyncio.gather(
-                self.meta_store.create(managed.project_name, sdk_id),
+                self.meta_store.create(managed.project_name, sdk_id, episode=managed.episode),
                 *([] if tag_coro is None else [tag_coro]),
             )
             await self.meta_store.update_status(sdk_id, "running")

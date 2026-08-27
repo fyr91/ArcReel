@@ -781,6 +781,35 @@ describe("API", () => {
       );
     });
 
+    it("encodes project and episode Agent session scopes explicitly", async () => {
+      const requestSpy = vi.spyOn(API, "request").mockResolvedValue({ sessions: [] } as never);
+
+      await API.listAssistantSessions("demo", null, { episode: null });
+      await API.listAssistantSessions("demo", null, { episode: 3 });
+      await API.sendAssistantMessage("demo", "hello", null, undefined, "client-1", 3);
+
+      expect(requestSpy).toHaveBeenCalledWith(
+        "/projects/demo/assistant/sessions?scope=project",
+        { signal: undefined },
+      );
+      expect(requestSpy).toHaveBeenCalledWith(
+        "/projects/demo/assistant/sessions?scope=episode&episode=3",
+        { signal: undefined },
+      );
+      expect(requestSpy).toHaveBeenCalledWith(
+        "/projects/demo/assistant/sessions/send",
+        expect.objectContaining({
+          method: "POST",
+          body: JSON.stringify({
+            content: "hello",
+            images: [],
+            client_key: "client-1",
+            episode: 3,
+          }),
+        }),
+      );
+    });
+
     it("createProject sends object body with style_template_id and model fields", async () => {
       const requestSpy = vi.spyOn(API, "request").mockResolvedValue({ success: true } as never);
       await API.createProject({

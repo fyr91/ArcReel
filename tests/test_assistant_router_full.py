@@ -24,7 +24,16 @@ class _FakeService:
             "bad": make_session_meta(id="bad", project_name=PROJECT),
         }
 
-    async def send_or_create(self, project_name, content, session_id=None, images=None, locale=None, client_key=None):
+    async def send_or_create(
+        self,
+        project_name,
+        content,
+        session_id=None,
+        episode=None,
+        images=None,
+        locale=None,
+        client_key=None,
+    ):
         if project_name == "missing":
             raise FileNotFoundError(project_name)
         if project_name == "at-capacity":
@@ -34,7 +43,7 @@ class _FakeService:
         if not content.strip() and not images:
             raise ValueError("空消息")
         returned_id = session_id or "sdk-new-session"
-        return {"status": "accepted", "session_id": returned_id}
+        return {"status": "accepted", "session_id": returned_id, "episode": episode}
 
     async def list_sessions(self, **kwargs):
         return [make_session_meta(id="session-1", project_name=kwargs.get("project_name") or "demo")]
@@ -101,6 +110,13 @@ class TestAssistantRouterFull:
             assert send_existing.status_code == 200
             assert send_existing.json()["session_id"] == "session-1"
 
+            send_episode = client.post(
+                f"{PREFIX}/sessions/send",
+                json={"content": "hello", "episode": 2},
+            )
+            assert send_episode.status_code == 200
+            assert send_episode.json()["episode"] == 2
+
             # POST /sessions/send — missing project → 404
             send_missing_project = client.post(
                 "/api/v1/projects/missing/assistant/sessions/send",
@@ -129,6 +145,8 @@ class TestAssistantRouterFull:
             listed = client.get(f"{PREFIX}/sessions")
             assert listed.status_code == 200
             assert listed.json()["sessions"][0]["id"] == "session-1"
+            assert client.get(f"{PREFIX}/sessions?scope=episode").status_code == 400
+            assert client.get(f"{PREFIX}/sessions?scope=episode&episode=2").status_code == 200
 
             get_ok = client.get(f"{PREFIX}/sessions/session-1")
             assert get_ok.status_code == 200
@@ -196,7 +214,7 @@ class TestAssistantRouterFull:
         fake = _FakeService()
 
         async def _timeout_send_or_create(
-            project_name, content, session_id=None, images=None, locale=None, client_key=None
+            project_name, content, session_id=None, episode=None, images=None, locale=None, client_key=None
         ):
             raise TimeoutError("timeout")
 
