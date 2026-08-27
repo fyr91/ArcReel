@@ -54,6 +54,10 @@ from lib.source_loader import (
     UnsupportedFormatError,
 )
 from server.routers._script_review_errors import raise_review_error
+from server.services.course_episode_deletion import (
+    CourseEpisodeDeletionError,
+    CourseEpisodeDeletionService,
+)
 from server.services.script_review import ScriptReviewError, ScriptReviewService
 
 router = APIRouter()
@@ -505,6 +509,62 @@ async def add_course_episode_document(
         normalized_path.unlink(missing_ok=True)
         raise
     return {**uploaded, "episode": attached_episode}
+
+
+def _raise_course_episode_deletion_error(
+    exc: CourseEpisodeDeletionError,
+    episode: int,
+    _t: Translator,
+) -> None:
+    status_code = 404 if exc.code == "course_episode_delete_not_found" else 409
+    raise HTTPException(
+        status_code=status_code,
+        detail=_t(exc.code, episode=episode),
+    ) from exc
+
+
+@router.post("/projects/{project_name}/course/episodes/{episode}/delete-preview")
+async def preview_course_episode_deletion(
+    project_name: str,
+    episode: int,
+    _t: Translator,
+):
+    """Return the exact destructive scope and a short-lived confirmation token."""
+
+    try:
+        preview = await asyncio.to_thread(
+            CourseEpisodeDeletionService(get_project_manager()).preview,
+            project_name,
+            episode,
+        )
+        return preview.to_dict()
+    except FileNotFoundError as exc:
+        raise NotFoundError("project_not_found", name=project_name) from exc
+    except CourseEpisodeDeletionError as exc:
+        _raise_course_episode_deletion_error(exc, episode, _t)
+
+
+@router.delete("/projects/{project_name}/course/episodes/{episode}")
+async def delete_course_episode(
+    project_name: str,
+    episode: int,
+    _t: Translator,
+    confirmation_token: str = Body(..., embed=True),
+):
+    """Delete only the course episode snapshot previously confirmed by the user."""
+
+    try:
+        with project_change_source("webui"):
+            result = await CourseEpisodeDeletionService(get_project_manager()).delete_async(
+                project_name,
+                episode,
+                confirmation_token,
+            )
+        return result.to_dict()
+    except FileNotFoundError as exc:
+        raise NotFoundError("project_not_found", name=project_name) from exc
+    except CourseEpisodeDeletionError as exc:
+        _raise_course_episode_deletion_error(exc, episode, _t)
 
 
 @router.delete("/projects/{project_name}/characters/{name}/reference-audio")

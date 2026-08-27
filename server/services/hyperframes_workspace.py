@@ -517,6 +517,15 @@ class HyperframesStudioManager:
             self._processes.clear()
         await asyncio.gather(*(self._stop_state(state) for state in states), return_exceptions=True)
 
+    async def stop(self, workspace: Path) -> None:
+        """Stop one episode Studio without affecting other project workspaces."""
+
+        resolved = workspace.resolve(strict=False)
+        async with self._lock:
+            state = self._processes.pop(resolved, None)
+        if state is not None:
+            await self._stop_state(state)
+
     @staticmethod
     async def _stop_state(state: _StudioProcess) -> None:
         if state.process.returncode is None:

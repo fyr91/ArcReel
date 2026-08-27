@@ -181,6 +181,49 @@ class TestFilesRouter:
         assert response.status_code == 409
 
     @pytest.mark.unit
+    def test_course_episode_delete_requires_preview_token_then_removes_episode(self, tmp_path, monkeypatch):
+        client, pm = _client(monkeypatch, tmp_path)
+        pm.create_project("course-demo", content_mode="course")
+        pm.create_project_metadata(
+            "course-demo",
+            "Course",
+            "Anime",
+            "course",
+            extras={"generation_mode": "reference_video", "grid_storyboard": False},
+        )
+
+        with client:
+            uploaded = client.post(
+                "/api/v1/projects/course-demo/course/episodes",
+                files={"file": ("lesson-one.md", "第一课", "text/markdown")},
+            )
+            missing_confirmation = client.delete("/api/v1/projects/course-demo/course/episodes/1")
+            preview = client.post("/api/v1/projects/course-demo/course/episodes/1/delete-preview")
+            deleted = client.request(
+                "DELETE",
+                "/api/v1/projects/course-demo/course/episodes/1",
+                json={"confirmation_token": preview.json()["confirmation_token"]},
+            )
+
+        assert uploaded.status_code == 200, uploaded.text
+        assert missing_confirmation.status_code == 422
+        assert preview.status_code == 200, preview.text
+        assert preview.json()["effects"]["source_files"] == 1
+        assert deleted.status_code == 200, deleted.text
+        assert deleted.json()["episode"] == 1
+        assert pm.load_project("course-demo")["episodes"] == []
+        assert not (pm.get_project_path("course-demo") / "source" / "lesson-one.txt").exists()
+
+    @pytest.mark.unit
+    def test_course_episode_delete_preview_rejects_non_course_projects(self, tmp_path, monkeypatch):
+        client, _ = _client(monkeypatch, tmp_path)
+
+        with client:
+            response = client.post("/api/v1/projects/demo/course/episodes/1/delete-preview")
+
+        assert response.status_code == 409
+
+    @pytest.mark.unit
     def test_source_and_file_endpoints(self, tmp_path, monkeypatch):
         client, _ = _client(monkeypatch, tmp_path)
 

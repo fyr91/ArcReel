@@ -27,6 +27,7 @@ from server.agent_runtime.sdk_tools.character_voice_references import (
     generate_character_voice_references_tool,
 )
 from server.agent_runtime.sdk_tools.confirm_asset_sheets import confirm_asset_sheets_tool
+from server.agent_runtime.sdk_tools.delete_course_episode import delete_course_episode_tool
 from server.agent_runtime.sdk_tools.delete_project_asset import delete_project_asset_tool
 from server.agent_runtime.sdk_tools.enqueue_assets import (
     generate_assets_tool,
@@ -158,6 +159,7 @@ ARCREEL_MCP_TOOL_IDS: tuple[str, ...] = (
     "rename_asset",
     "update_custom_style",
     "delete_project_asset",
+    "delete_course_episode",
     "manage_project_asset_link",
     "move_character_main_to_reference",
     "retry_project_migration",
@@ -206,6 +208,7 @@ MIGRATION_BLOCKED_TOOL_IDS: frozenset[str] = frozenset(
         "split_narration_segments",
         "plan_episodes",
         "reset_episode_planning",
+        "delete_course_episode",
     }
 )
 
@@ -291,6 +294,7 @@ def build_arcreel_mcp_server(
         rename_asset_tool(ctx),
         update_custom_style_tool(ctx),
         delete_project_asset_tool(ctx),
+        delete_course_episode_tool(ctx),
         manage_project_asset_link_tool(ctx),
         move_character_main_to_reference_tool(ctx),
         retry_project_migration_tool(ctx),

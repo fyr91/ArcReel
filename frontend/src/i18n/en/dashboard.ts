@@ -34,6 +34,15 @@ export default {
   'add_course_episode': 'Add Course Episode',
   'course_episode_drop_hint': 'Drop one course document here, or click to choose a file',
   'course_episode_added': 'Episode {{episode}} added and ready for analysis',
+  'course_episode_delete_action': 'Delete episode {{episode}}',
+  'course_episode_delete_title': 'Delete episode {{episode}}?',
+  'course_episode_delete_description': 'This permanently deletes {{total}} episode files ({{source}} source, {{scripts}} script, {{drafts}} drafts, {{generated}} generated artifacts, and {{workspace}} HyperFrames workspace files) and removes {{claims}} artifact claims.',
+  'course_episode_delete_preserves': 'Project and global resource libraries, other episodes, task history, and cost history remain. This cannot be undone.',
+  'course_episode_delete_confirm': 'Delete episode',
+  'course_episode_deleting': 'Deleting…',
+  'course_episode_delete_success': 'Episode {{episode}} deleted',
+  'course_episode_delete_preview_failed': 'Could not load the deletion scope: {{message}}',
+  'course_episode_delete_failed': 'Could not delete the episode: {{message}}',
   'course_episode_add_failed': 'Failed to add episode: {{message}}',
   'content_mode_drama_desc': 'Content-driven — character dialogue and plot propel the visuals. Best for drama episodes and fiction adaptations.',
   'optional': 'Optional',
@@ -1660,6 +1669,7 @@ export default {
   'tool_name_rename_asset': 'Rename asset',
   'tool_name_update_custom_style': 'Edit custom style',
   'tool_name_delete_project_asset': 'Delete project asset',
+  'tool_name_delete_course_episode': 'Delete course episode',
   'tool_name_retry_project_migration': 'Retry data upgrade',
 
   // Failed data upgrade banner (top of StudioLayout)

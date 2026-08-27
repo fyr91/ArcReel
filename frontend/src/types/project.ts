@@ -149,6 +149,34 @@ export interface EpisodeMeta {
   videos?: ArtifactCount;
 }
 
+export interface CourseEpisodeDeletionEffects {
+  source_files: number;
+  scripts: number;
+  drafts: number;
+  generated_artifacts: number;
+  workspace_files: number;
+}
+
+/** Exact, short-lived scope returned before a destructive course episode deletion. */
+export interface CourseEpisodeDeletionPreview {
+  episode: number;
+  title: string;
+  effects: CourseEpisodeDeletionEffects;
+  total_files: number;
+  artifact_claims: number;
+  confirmation_token: string;
+  expires_in: number;
+}
+
+export interface CourseEpisodeDeletionResult {
+  success: true;
+  episode: number;
+  title: string;
+  deleted_files: string[];
+  deleted_file_count: number;
+  removed_artifact_claims: number;
+}
+
 export interface ModelSettingEntry {
   resolution?: string | null;
 }

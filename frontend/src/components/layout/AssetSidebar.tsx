@@ -21,6 +21,9 @@ import { API } from "@/api";
 import { useDemoWorkbench } from "@/onboarding/use-demo-workbench";
 import { isDemoProject } from "@/onboarding/demo-project";
 import { normalizeRoute } from "@/utils/generation-mode";
+import { errMsg } from "@/utils/async";
+import type { CourseEpisodeDeletionPreview, EpisodeMeta } from "@/types";
+import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { EpisodeCard } from "./EpisodeCard";
 import { CourseEpisodeUploadDialog } from "./CourseEpisodeUploadDialog";
 
@@ -50,6 +53,9 @@ export function AssetSidebar({ className }: AssetSidebarProps) {
   const [collapsed, setCollapsed] = useState(false);
   const [search, setSearch] = useState("");
   const [showCourseEpisodeUpload, setShowCourseEpisodeUpload] = useState(false);
+  const [deletePreview, setDeletePreview] = useState<CourseEpisodeDeletionPreview | null>(null);
+  const [deletePreviewEpisode, setDeletePreviewEpisode] = useState<number | null>(null);
+  const [deletingEpisode, setDeletingEpisode] = useState<number | null>(null);
 
   const characterCount = Object.keys(currentProjectData?.characters ?? {}).length;
   const sceneCount = Object.keys(currentProjectData?.scenes ?? {}).length;
@@ -153,6 +159,55 @@ export function AssetSidebar({ className }: AssetSidebarProps) {
     : episodes.filter(
         (ep) => !search || ep.title.includes(search) || String(ep.episode).includes(search),
       );
+
+  const requestEpisodeDeletion = async (ep: EpisodeMeta) => {
+    if (!currentProjectName || !isCourse || deletePreviewEpisode !== null || deletingEpisode !== null) return;
+    setDeletePreviewEpisode(ep.episode);
+    try {
+      setDeletePreview(await API.previewCourseEpisodeDeletion(currentProjectName, ep.episode));
+    } catch (error) {
+      useAppStore.getState().pushToast(
+        t("dashboard:course_episode_delete_preview_failed", { message: errMsg(error) }),
+        "error",
+      );
+    } finally {
+      setDeletePreviewEpisode(null);
+    }
+  };
+
+  const confirmEpisodeDeletion = async () => {
+    if (!currentProjectName || !deletePreview || deletingEpisode !== null) return;
+    const episode = deletePreview.episode;
+    const remainingEpisodes = episodes
+      .filter((candidate) => candidate.episode !== episode)
+      .sort((left, right) => left.episode - right.episode);
+    const nextEpisode =
+      remainingEpisodes.find((candidate) => candidate.episode > episode) ??
+      remainingEpisodes.at(-1) ??
+      null;
+    setDeletingEpisode(episode);
+    try {
+      await API.deleteCourseEpisode(currentProjectName, episode, deletePreview.confirmation_token);
+      setDeletePreview(null);
+      useAppStore.getState().invalidateSourceFiles();
+      if (activeEp === episode) {
+        setLocation(nextEpisode ? `/episodes/${nextEpisode.episode}` : "/");
+      }
+      await useProjectsStore.getState().refreshProject(currentProjectName);
+      useAppStore.getState().pushToast(
+        t("dashboard:course_episode_delete_success", { episode }),
+        "success",
+      );
+    } catch (error) {
+      setDeletePreview(null);
+      useAppStore.getState().pushToast(
+        t("dashboard:course_episode_delete_failed", { message: errMsg(error) }),
+        "error",
+      );
+    } finally {
+      setDeletingEpisode(null);
+    }
+  };
 
   return (
     <aside
@@ -318,6 +373,13 @@ export function AssetSidebar({ className }: AssetSidebarProps) {
                   showEpisodeBadge={!isAd}
                   fallbackTitle={isAd ? currentProjectData?.title : undefined}
                   route={normalizeRoute(currentProjectData?.generation_mode)}
+                  onDelete={isCourse ? () => void requestEpisodeDeletion(ep) : undefined}
+                  deleteLabel={
+                    isCourse
+                      ? t("dashboard:course_episode_delete_action", { episode: ep.episode })
+                      : undefined
+                  }
+                  deleting={deletePreviewEpisode === ep.episode || deletingEpisode === ep.episode}
                 />
               ))
             )}
@@ -366,6 +428,36 @@ export function AssetSidebar({ className }: AssetSidebarProps) {
           }}
         />
       )}
+      <ConfirmDialog
+        open={deletePreview !== null}
+        title={t("dashboard:course_episode_delete_title", {
+          episode: deletePreview?.episode ?? "",
+        })}
+        description={
+          deletePreview ? (
+            <div className="space-y-2">
+              <p>
+                {t("dashboard:course_episode_delete_description", {
+                  total: deletePreview.total_files,
+                  source: deletePreview.effects.source_files,
+                  scripts: deletePreview.effects.scripts,
+                  drafts: deletePreview.effects.drafts,
+                  generated: deletePreview.effects.generated_artifacts,
+                  workspace: deletePreview.effects.workspace_files,
+                  claims: deletePreview.artifact_claims,
+                })}
+              </p>
+              <p>{t("dashboard:course_episode_delete_preserves")}</p>
+            </div>
+          ) : undefined
+        }
+        confirmLabel={t("dashboard:course_episode_delete_confirm")}
+        loadingLabel={t("dashboard:course_episode_deleting")}
+        tone="danger"
+        loading={deletingEpisode !== null}
+        onConfirm={confirmEpisodeDeletion}
+        onCancel={() => setDeletePreview(null)}
+      />
 
       {/* ---- Collapse footer ---- */}
       <div

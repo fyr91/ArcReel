@@ -35,6 +35,15 @@ export default {
   'add_course_episode': 'Thêm tập khóa học',
   'course_episode_drop_hint': 'Thả một tài liệu khóa học hoặc nhấp để chọn tệp',
   'course_episode_added': 'Đã thêm tập {{episode}} và sẵn sàng phân tích',
+  'course_episode_delete_action': 'Xóa tập {{episode}}',
+  'course_episode_delete_title': 'Xóa tập {{episode}}?',
+  'course_episode_delete_description': 'Thao tác này sẽ xóa vĩnh viễn {{total}} tệp của tập ({{source}} tệp nguồn, {{scripts}} kịch bản, {{drafts}} bản nháp, {{generated}} sản phẩm đã tạo và {{workspace}} tệp không gian HyperFrames) đồng thời gỡ {{claims}} khai báo sản phẩm.',
+  'course_episode_delete_preserves': 'Thư viện tài nguyên dự án và toàn cục, các tập khác, lịch sử tác vụ và lịch sử chi phí vẫn được giữ lại. Không thể hoàn tác thao tác này.',
+  'course_episode_delete_confirm': 'Xóa tập',
+  'course_episode_deleting': 'Đang xóa…',
+  'course_episode_delete_success': 'Đã xóa tập {{episode}}',
+  'course_episode_delete_preview_failed': 'Không thể tải phạm vi xóa: {{message}}',
+  'course_episode_delete_failed': 'Không thể xóa tập: {{message}}',
   'course_episode_add_failed': 'Không thể thêm tập: {{message}}',
   'content_mode_drama_desc': 'Dẫn dắt bởi nội dung — đối thoại nhân vật và cốt truyện thúc đẩy hình ảnh. Phù hợp cho phim truyện và chuyển thể tiểu thuyết.',
   'optional': 'Tùy chọn',
@@ -1783,6 +1792,7 @@ export default {
   'tool_name_rename_asset': 'Đổi tên tài sản',
   'tool_name_update_custom_style': 'Chỉnh sửa phong cách tùy chỉnh',
   'tool_name_delete_project_asset': 'Xóa tài sản dự án',
+  'tool_name_delete_course_episode': 'Xóa tập khóa học',
   'tool_name_retry_project_migration': 'Thử lại nâng cấp dữ liệu',
 
   // Biểu ngữ nâng cấp dữ liệu thất bại (đầu StudioLayout)

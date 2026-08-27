@@ -1,5 +1,5 @@
-import { render, screen } from "@testing-library/react";
-import { describe, expect, it } from "vitest";
+import { fireEvent, render, screen } from "@testing-library/react";
+import { describe, expect, it, vi } from "vitest";
 
 import { EpisodeCard } from "./EpisodeCard";
 import type { EpisodeMeta } from "@/types/project";
@@ -75,6 +75,26 @@ describe("EpisodeCard", () => {
     renderCard(unplannedEpisode(), "reference_video");
 
     expect(screen.getByText(/^4 视频单元/)).toBeInTheDocument();
+  });
+
+  it("exposes a separate delete action without opening the episode", () => {
+    const onClick = vi.fn();
+    const onDelete = vi.fn();
+    render(
+      <EpisodeCard
+        ep={makeEpisode()}
+        active={false}
+        onClick={onClick}
+        route="reference_video"
+        onDelete={onDelete}
+        deleteLabel="删除 Episode 1"
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "删除 Episode 1" }));
+
+    expect(onDelete).toHaveBeenCalledOnce();
+    expect(onClick).not.toHaveBeenCalled();
   });
 });
 

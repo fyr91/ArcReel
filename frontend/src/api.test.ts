@@ -383,6 +383,8 @@ describe("API", () => {
       await API.getProject("a b");
       await API.updateProject("demo", { style: "Anime" });
       await API.deleteProject("demo");
+      await API.previewCourseEpisodeDeletion("course demo", 2);
+      await API.deleteCourseEpisode("course demo", 2, "confirmed-snapshot");
 
       await API.addCharacter("demo", "Hero", "brave");
       await API.updateCharacter("demo", "Hero", { description: "updated" });
@@ -452,6 +454,14 @@ describe("API", () => {
       });
       expect(requestSpy).toHaveBeenCalledWith("/projects/demo", {
         method: "DELETE",
+      });
+      expect(requestSpy).toHaveBeenCalledWith(
+        "/projects/course%20demo/course/episodes/2/delete-preview",
+        { method: "POST" },
+      );
+      expect(requestSpy).toHaveBeenCalledWith("/projects/course%20demo/course/episodes/2", {
+        method: "DELETE",
+        body: JSON.stringify({ confirmation_token: "confirmed-snapshot" }),
       });
       expect(requestSpy).toHaveBeenCalledWith("/projects/demo/characters", {
         method: "POST",

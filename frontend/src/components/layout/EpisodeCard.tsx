@@ -1,5 +1,5 @@
 import { useTranslation } from "react-i18next";
-import { Clapperboard } from "lucide-react";
+import { Clapperboard, Loader2, Trash2 } from "lucide-react";
 import type { EpisodeMeta } from "@/types";
 import { itemCountKey, type GenerationRoute } from "@/utils/generation-mode";
 import { useCostStore } from "@/stores/cost-store";
@@ -15,6 +15,10 @@ interface EpisodeCardProps {
   fallbackTitle?: string;
   /** 项目生成路线：决定条目数报「分镜数」还是「视频单元数」。必填，漏接线时类型报错而不是静默显示错名词。 */
   route: GenerationRoute;
+  /** 课程项目可删除独立分集；未提供时不渲染破坏性入口。 */
+  onDelete?: () => void;
+  deleteLabel?: string;
+  deleting?: boolean;
 }
 
 const STATUS_COLOR: Record<string, string> = {
@@ -44,6 +48,9 @@ export function EpisodeCard({
   showEpisodeBadge = true,
   fallbackTitle,
   route,
+  onDelete,
+  deleteLabel,
+  deleting = false,
 }: EpisodeCardProps) {
   const { t } = useTranslation(["dashboard"]);
   const status = ep.status ?? "draft";
@@ -81,28 +88,29 @@ export function EpisodeCard({
   const durLabel = dur > 0 ? `${Math.floor(dur / 60)}:${String(dur % 60).padStart(2, "0")}` : null;
 
   return (
-    <button
-      type="button"
-      onClick={onClick}
-      className="relative grid w-full items-center gap-2.5 rounded-lg p-2 text-left transition-colors focus-ring"
-      style={{
-        gridTemplateColumns: "auto 1fr auto",
-        marginBottom: 3,
-        background: active
-          ? "linear-gradient(180deg, oklch(0.26 0.018 160 / 0.55), oklch(0.22 0.015 160 / 0.4))"
-          : "transparent",
-        border: active ? "1px solid var(--color-accent-soft)" : "1px solid transparent",
-        boxShadow: active
-          ? "0 0 0 1px var(--color-accent-soft), 0 4px 12px -6px oklch(0 0 0 / 0.5), inset 0 1px 0 oklch(1 0 0 / 0.04)"
-          : "none",
-      }}
-      onMouseEnter={(e) => {
-        if (!active) e.currentTarget.style.background = "oklch(0.24 0.012 265 / 0.4)";
-      }}
-      onMouseLeave={(e) => {
-        if (!active) e.currentTarget.style.background = "transparent";
-      }}
-    >
+    <div className="group relative w-full" style={{ marginBottom: 3 }}>
+      <button
+        type="button"
+        onClick={onClick}
+        className="grid w-full items-center gap-2.5 rounded-lg p-2 text-left transition-colors focus-ring"
+        style={{
+          gridTemplateColumns: "auto 1fr auto",
+          paddingRight: onDelete ? 36 : undefined,
+          background: active
+            ? "linear-gradient(180deg, oklch(0.26 0.018 160 / 0.55), oklch(0.22 0.015 160 / 0.4))"
+            : "transparent",
+          border: active ? "1px solid var(--color-accent-soft)" : "1px solid transparent",
+          boxShadow: active
+            ? "0 0 0 1px var(--color-accent-soft), 0 4px 12px -6px oklch(0 0 0 / 0.5), inset 0 1px 0 oklch(1 0 0 / 0.04)"
+            : "none",
+        }}
+        onMouseEnter={(e) => {
+          if (!active) e.currentTarget.style.background = "oklch(0.24 0.012 265 / 0.4)";
+        }}
+        onMouseLeave={(e) => {
+          if (!active) e.currentTarget.style.background = "transparent";
+        }}
+      >
       <div
         className="num grid h-[34px] w-[34px] shrink-0 place-items-center rounded-md text-[11px] font-bold leading-none"
         style={{
@@ -194,14 +202,36 @@ export function EpisodeCard({
         )}
       </div>
 
-      {costText && (
-        <span
-          className="num self-start pt-0.5 text-[10.5px]"
-          style={{ color: active ? "var(--color-accent-2)" : "var(--color-text-4)" }}
+        {costText && (
+          <span
+            className="num self-start pt-0.5 text-[10.5px]"
+            style={{ color: active ? "var(--color-accent-2)" : "var(--color-text-4)" }}
+          >
+            {costText}
+          </span>
+        )}
+      </button>
+      {onDelete && deleteLabel && (
+        <button
+          type="button"
+          onClick={onDelete}
+          disabled={deleting}
+          title={deleteLabel}
+          aria-label={deleteLabel}
+          className="focus-ring absolute bottom-1.5 right-1.5 grid h-6 w-6 place-items-center rounded-md opacity-65 transition-[opacity,background-color,color] hover:opacity-100 focus-visible:opacity-100 disabled:cursor-wait"
+          style={{
+            background: "oklch(0.22 0.02 25 / 0.82)",
+            color: "var(--color-warm-bright)",
+            border: "1px solid oklch(0.58 0.14 30 / 0.25)",
+          }}
         >
-          {costText}
-        </span>
+          {deleting ? (
+            <Loader2 className="h-3 w-3 motion-safe:animate-spin" aria-hidden />
+          ) : (
+            <Trash2 className="h-3 w-3" aria-hidden />
+          )}
+        </button>
       )}
-    </button>
+    </div>
   );
 }

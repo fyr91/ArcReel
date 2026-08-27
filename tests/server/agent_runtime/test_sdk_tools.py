@@ -14,6 +14,7 @@ import json
 import re
 from dataclasses import replace
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Any
 from unittest.mock import AsyncMock
 
@@ -6654,6 +6655,74 @@ async def test_reset_episode_planning_requires_from_episode(fake_ctx: ToolContex
 
     out = await _call(mod.reset_episode_planning_tool(fake_ctx), {})
     assert out.get("is_error") is True
+
+
+# ---------------------------------------------------------------------------
+# delete_course_episode — two-phase confirmation boundary
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.unit
+async def test_delete_course_episode_tool_previews_before_commit(
+    fake_ctx: ToolContext,
+    monkeypatch,
+) -> None:
+    from server.agent_runtime.sdk_tools import delete_course_episode as mod
+
+    calls: list[tuple[str, object]] = []
+
+    class _Service:
+        def __init__(self, pm):
+            assert pm is fake_ctx.pm
+
+        def preview(self, project_name: str, episode: int):
+            calls.append(("preview", (project_name, episode)))
+            return SimpleNamespace(
+                to_dict=lambda: {
+                    "episode": episode,
+                    "title": "Lesson",
+                    "effects": {
+                        "source_files": 1,
+                        "scripts": 1,
+                        "drafts": 2,
+                        "generated_artifacts": 3,
+                        "workspace_files": 0,
+                    },
+                    "total_files": 7,
+                    "artifact_claims": 3,
+                    "confirmation_token": "confirm-me",
+                    "expires_in": 300,
+                }
+            )
+
+        async def delete_async(self, project_name: str, episode: int, token: str):
+            calls.append(("delete", (project_name, episode, token)))
+            return SimpleNamespace(
+                to_dict=lambda: {
+                    "success": True,
+                    "episode": episode,
+                    "title": "Lesson",
+                    "deleted_files": [],
+                    "deleted_file_count": 0,
+                    "removed_artifact_claims": 3,
+                }
+            )
+
+    monkeypatch.setattr(mod, "CourseEpisodeDeletionService", _Service)
+    tool_obj = mod.delete_course_episode_tool(fake_ctx)
+
+    preview = await _call(tool_obj, {"episode": 1})
+
+    assert preview.get("is_error") is not True
+    assert preview["preview"]["requires_confirmation"] is True
+    assert preview["preview"]["confirmation_token"] == "confirm-me"
+    assert calls == [("preview", ("demo", 1))]
+
+    deleted = await _call(tool_obj, {"episode": 1, "confirmation_token": "confirm-me"})
+
+    assert deleted.get("is_error") is not True
+    assert deleted["result"]["success"] is True
+    assert calls[-1] == ("delete", ("demo", 1, "confirm-me"))
 
 
 # ---------------------------------------------------------------------------

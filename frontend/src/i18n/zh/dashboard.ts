@@ -35,6 +35,15 @@ export default {
   'add_course_episode': '添加课程 Episode',
   'course_episode_drop_hint': '拖入一份新课程文档，或点击选择文件',
   'course_episode_added': 'Episode {{episode}} 已上传，等待解析',
+  'course_episode_delete_action': '删除 Episode {{episode}}',
+  'course_episode_delete_title': '删除 Episode {{episode}}？',
+  'course_episode_delete_description': '将永久删除该集的 {{total}} 个文件（源文件 {{source}}、剧本 {{scripts}}、草稿 {{drafts}}、生成产物 {{generated}}、HyperFrames 工作区文件 {{workspace}}），并移除 {{claims}} 条产物声明。',
+  'course_episode_delete_preserves': '项目与全局资源库、其他分集、任务历史和费用历史都会保留。此操作不可撤销。',
+  'course_episode_delete_confirm': '确认删除分集',
+  'course_episode_deleting': '正在删除…',
+  'course_episode_delete_success': 'Episode {{episode}} 已删除',
+  'course_episode_delete_preview_failed': '无法读取删除影响范围：{{message}}',
+  'course_episode_delete_failed': '删除分集失败：{{message}}',
   'course_episode_add_failed': '添加 Episode 失败：{{message}}',
   'content_mode_drama_desc': '内容驱动——角色对话与剧情推动画面，适合剧情演绎、小说改编等故事型内容。',
   'optional': '可选',
@@ -1659,6 +1668,7 @@ export default {
   'tool_name_rename_asset': '重命名资产',
   'tool_name_update_custom_style': '编辑自定义风格',
   'tool_name_delete_project_asset': '删除项目资产',
+  'tool_name_delete_course_episode': '删除课程分集',
   'tool_name_retry_project_migration': '重试数据升级',
 
   // 数据升级失败条幅（StudioLayout 顶部）

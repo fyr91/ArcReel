@@ -77,6 +77,8 @@ import type {
   GenerateHyperframesBgmRequest,
   HyperframesBgmTaskResponse,
   PrepareHyperframesWorkspaceRequest,
+  CourseEpisodeDeletionPreview,
+  CourseEpisodeDeletionResult,
 } from "@/types";
 import type { GenerationRoute } from "@/utils/generation-mode";
 import type { GridCapability, GridGeneration } from "@/types/grid";
@@ -1693,6 +1695,27 @@ class API {
       filename?: string;
       episode: { episode: number; title: string; script_file: string; source_file: string };
     };
+  }
+
+  static async previewCourseEpisodeDeletion(
+    projectName: string,
+    episode: number,
+  ): Promise<CourseEpisodeDeletionPreview> {
+    return this.request(
+      `/projects/${encodeURIComponent(projectName)}/course/episodes/${episode}/delete-preview`,
+      { method: "POST" },
+    );
+  }
+
+  static async deleteCourseEpisode(
+    projectName: string,
+    episode: number,
+    confirmationToken: string,
+  ): Promise<CourseEpisodeDeletionResult> {
+    return this.request(`/projects/${encodeURIComponent(projectName)}/course/episodes/${episode}`, {
+      method: "DELETE",
+      body: JSON.stringify({ confirmation_token: confirmationToken }),
+    });
   }
 
   /** 单文件 multipart 上传 POST，返回 JSON 响应体。 */
