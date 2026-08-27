@@ -1956,7 +1956,10 @@ class API {
   static async generateEpisodeOverview(
     projectName: string,
     episode: number,
-  ): Promise<{ success: boolean; overview: ProjectOverview }> {
+  ): Promise<{
+    success: boolean;
+    overview: ProjectOverview & { title: string; source_revision: string };
+  }> {
     return this.request(
       `/projects/${encodeURIComponent(projectName)}/episodes/${episode}/generate-overview`,
       { method: "POST" },

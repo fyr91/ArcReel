@@ -105,4 +105,33 @@ describe("AssetSidebar course episode deletion", () => {
       expect(screen.getByTestId("location")).toHaveTextContent("/episodes/2");
     });
   });
+
+  it("renames a course episode from the sidebar and refreshes the visible title", async () => {
+    const user = userEvent.setup();
+    const updateSpy = vi.spyOn(API, "updateEpisode").mockResolvedValue({ success: true });
+    vi.spyOn(API, "getProject").mockResolvedValue({
+      project: courseProject([
+        { episode: 1, title: "New Lesson", script_file: "scripts/episode_1.json" },
+        { episode: 2, title: "Lesson Two", script_file: "scripts/episode_2.json" },
+      ]),
+      scripts: {},
+      asset_fingerprints: {},
+    });
+    const memory = memoryLocation({ path: "/episodes/1" });
+    render(
+      <Router hook={memory.hook}>
+        <AssetSidebar />
+      </Router>,
+    );
+
+    await user.dblClick(screen.getByText("Lesson One"));
+    const input = screen.getByRole("textbox", { name: "编辑分集标题" });
+    await user.clear(input);
+    await user.type(input, "New Lesson{Enter}");
+
+    await waitFor(() => {
+      expect(updateSpy).toHaveBeenCalledWith("course", 1, { title: "New Lesson" });
+      expect(screen.getByText("New Lesson")).toBeInTheDocument();
+    });
+  });
 });

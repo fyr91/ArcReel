@@ -93,6 +93,7 @@ class _FakeTextBackend:
         return TextGenerationResult(
             text=json.dumps(
                 {
+                    "title": "景泰蓝制作工艺",
                     "synopsis": "故事梗概",
                     "genre": "悬疑",
                     "theme": "真相",
@@ -911,10 +912,24 @@ class TestProjectManagerMore:
         assert "SECOND_INDEPENDENT_TOPIC" in backend.last_request.prompt
         assert "FIRST_SECRET_TOPIC" not in backend.last_request.prompt
         saved = pm.load_project("demo")
+        assert overview["title"] == "景泰蓝制作工艺"
+        assert saved["episodes"][1]["title"] == "景泰蓝制作工艺"
         assert saved["episodes"][1]["overview"]["synopsis"] == overview["synopsis"]
+        assert "title" not in saved["episodes"][1]["overview"]
         assert saved["episodes"][1]["source_revision"] == overview["source_revision"]
         assert "overview" not in saved["episodes"][0]
         assert "overview" not in saved
+
+        formal_script = _narration_script("E2S01")
+        formal_script["episode"] = 2
+        formal_script["title"] = "人工确认标题"
+        pm.save_script("demo", formal_script, "episode_2.json", validate=False)
+
+        regenerated = await pm.generate_episode_overview("demo", 2)
+
+        assert regenerated["title"] == "人工确认标题"
+        assert pm.load_project("demo")["episodes"][1]["title"] == "人工确认标题"
+        assert pm.load_script("demo", "episode_2.json")["title"] == "人工确认标题"
 
     @pytest.mark.unit
     def test_course_source_edit_invalidates_only_bound_episode_analysis(self, tmp_path):

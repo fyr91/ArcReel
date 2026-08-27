@@ -747,6 +747,7 @@ export default {
   'ad_short_video_mode': 'Quảng cáo / Video ngắn',
   'drama_animation_mode': 'Phim truyện',
   'project_overview_title': 'Tổng quan dự án',
+  'course_episode_overview_title': 'Tổng quan tập',
   'regen_overview_title': 'Tạo lại tổng quan',
   'regenerating_short': 'Đang tạo...',
   'regen_short': 'Tạo lại',

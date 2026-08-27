@@ -766,6 +766,7 @@ export default {
   'ad_short_video_mode': '广告/短片',
   'drama_animation_mode': '剧情演绎',
   'project_overview_title': '项目概述',
+  'course_episode_overview_title': '本集概述',
   'regen_overview_title': '重新生成概述',
   'regenerating_short': '生成中...',
   'regen_short': '重新生成',

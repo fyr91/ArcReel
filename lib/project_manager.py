@@ -214,6 +214,12 @@ class ProjectOverview(BaseModel):
     language: Literal["zh", "en", "vi"] = Field(description="小说源语言代码")
 
 
+class CourseEpisodeOverview(ProjectOverview):
+    """课程分集解析结果；title 写入分集索引，其余字段保存为该集 overview。"""
+
+    title: str = Field(min_length=1, description="简洁、具体的课程单集标题，不含集号或文件名")
+
+
 def _rename_agnostic_errors(
     result: ValidationResult, old_name: str, new_name: str
 ) -> dict[tuple[str, tuple[tuple[str, str], ...]], str]:
@@ -3612,7 +3618,7 @@ class ProjectManager:
         legacy project-level field solely for the existing overview canvas and compatibility.
         """
 
-        from .prompt_builders_script import build_overview_prompt
+        from .prompt_builders_script import build_course_episode_overview_prompt
         from .text_backends.base import TextGenerationRequest, TextTaskType
         from .text_generator import TextGenerator
 
@@ -3622,13 +3628,14 @@ class ProjectManager:
         if project.get("content_mode") != "course":
             raise ValueError("episode overview is only available for course projects")
         entries = project.get("episodes")
-        entry = next(
-            (
-                item
-                for item in entries if isinstance(item, Mapping) and item.get("episode") == episode
-            ),
-            None,
-        ) if isinstance(entries, list) else None
+        entry = (
+            next(
+                (item for item in entries if isinstance(item, Mapping) and item.get("episode") == episode),
+                None,
+            )
+            if isinstance(entries, list)
+            else None
+        )
         if entry is None:
             raise ValueError(f"episode {episode} does not exist")
         source_file = entry.get("source_file")
@@ -3654,27 +3661,35 @@ class ProjectManager:
         generator = await TextGenerator.create(TextTaskType.OVERVIEW, project_name)
         result = await generator.generate(
             TextGenerationRequest(
-                prompt=build_overview_prompt(source_content, target_language=target_language),
-                response_schema=ProjectOverview,
+                prompt=build_course_episode_overview_prompt(
+                    source_content,
+                    target_language=target_language,
+                ),
+                response_schema=CourseEpisodeOverview,
             ),
             project_name=project_name,
         )
-        overview = ProjectOverview.model_validate_json(result.text).model_dump()
+        generated = CourseEpisodeOverview.model_validate_json(result.text)
+        episode_title = generated.title.strip()
+        if not episode_title:
+            raise ValueError("course episode title must not be blank")
+        overview = generated.model_dump(exclude={"title"})
         overview["generated_at"] = datetime.now(UTC).isoformat()
 
         persisted: dict[str, Any] | None = None
+        persisted_title: str | None = None
 
         def _mutate(current: dict[str, Any]) -> None:
-            nonlocal persisted
+            nonlocal persisted, persisted_title
             current_entries = current.get("episodes")
-            current_entry = next(
-                (
-                    item
-                    for item in current_entries
-                    if isinstance(item, dict) and item.get("episode") == episode
-                ),
-                None,
-            ) if isinstance(current_entries, list) else None
+            current_entry = (
+                next(
+                    (item for item in current_entries if isinstance(item, dict) and item.get("episode") == episode),
+                    None,
+                )
+                if isinstance(current_entries, list)
+                else None
+            )
             if current_entry is None or current_entry.get("source_file") != source_file:
                 raise EpisodeScriptReboundError(f"episode {episode} source binding changed")
             before = compute_source_revision(project_path, current, scope)
@@ -3689,16 +3704,27 @@ class ProjectManager:
             if after.revision is None:
                 raise EmptySourceError(f"episode {episode} source revision is unavailable")
             persisted = {**overview, "source_revision": after.revision}
+            script_file = current_entry.get("script_file")
+            formal_script_exists = (
+                isinstance(script_file, str) and bool(script_file) and safe_join(project_path, script_file).is_file()
+            )
+            if formal_script_exists:
+                # 正式文稿存在后其顶层 title 是真相源；重新解析只刷新 overview，不用 AI 标题
+                # 反向覆盖用户已确认的文稿标题。
+                persisted_title = str(current_entry.get("title") or "")
+            else:
+                current_entry["title"] = episode_title
+                persisted_title = episode_title
             current_entry["overview"] = persisted
             current_entry["source_revision"] = after.revision
             if episode == 1:
                 current["overview"] = overview
 
         self.update_project(project_name, _mutate)
-        if persisted is None:  # pragma: no cover - update_project invokes the callback or raises
+        if persisted is None or persisted_title is None:  # pragma: no cover - callback 会执行或抛错
             raise RuntimeError("episode overview update did not run")
         logger.info("课程第 %s 集概述已生成并保存", episode)
-        return persisted
+        return {**persisted, "title": persisted_title}
 
 
 _project_manager: ProjectManager | None = None

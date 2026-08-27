@@ -767,6 +767,7 @@ export default {
   'ad_short_video_mode': 'Ad / Short Video',
   'drama_animation_mode': 'Drama',
   'project_overview_title': 'Project Overview',
+  'course_episode_overview_title': 'Episode Overview',
   'regen_overview_title': 'Regenerate overview',
   'regenerating_short': 'Generating...',
   'regen_short': 'Regenerate',

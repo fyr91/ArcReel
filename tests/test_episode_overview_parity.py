@@ -24,6 +24,7 @@ class _OverviewOperationProbe:
 
     async def generate_episode_overview(self, project_name: str, episode: int) -> dict[str, str]:
         result = {
+            "title": f"Course episode {episode}",
             "synopsis": f"episode-{episode}",
             "source_revision": "sha256-v1:" + "a" * 64,
         }

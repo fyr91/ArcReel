@@ -52,11 +52,13 @@ import {
 } from "@/utils/reference-mentions";
 import type {
   H3PromptState,
+  ProjectOverview,
   ReferenceBatchAdmission,
   ReferenceVideoUnit,
   UnitStatus,
 } from "@/types";
 import { projectSettingsNavigationTarget } from "@/app-routes";
+import { CourseEpisodeOverviewCard } from "./CourseEpisodeOverviewCard";
 
 export interface ReferenceVideoCanvasProps {
   projectName: string;
@@ -64,6 +66,9 @@ export interface ReferenceVideoCanvasProps {
   episodeTitle?: string;
   onSaveTitle?: (next: string) => Promise<void>;
   canEditTitle?: boolean;
+  /** 课程分集解析结果；在预处理页持续展示，避免解析完成后上下文消失。 */
+  episodeOverview?: ProjectOverview;
+  onRegenerateOverview?: () => Promise<void>;
   /** step2 剧本（scripts/episode_N.json）是否已生成——决定默认 tab（镜像 GridImageToVideoCanvas 的 hasScript 判定）。 */
   hasScript?: boolean;
   /** ad 参考路线一阶段产出，不展示 step1 预处理页。 */
@@ -141,6 +146,8 @@ export function ReferenceVideoCanvas({
   episodeTitle,
   onSaveTitle,
   canEditTitle,
+  episodeOverview,
+  onRegenerateOverview,
   hasScript = true,
   showPreprocess = true,
   freeDuration = false,
@@ -1246,6 +1253,12 @@ export function ReferenceVideoCanvas({
       ) : tab === "preproc" ? (
         <div className="min-h-0 flex-1 overflow-auto bg-[oklch(0.18_0.011_250_/_0.25)]">
           <div className="mx-auto w-full max-w-3xl px-6 py-5">
+            {isCourse && episodeOverview && (
+              <CourseEpisodeOverviewCard
+                overview={episodeOverview}
+                onRegenerate={onRegenerateOverview}
+              />
+            )}
             <ReferenceStep1PreviewPanel
               key={`${projectName}:${episode}`}
               projectName={projectName}
