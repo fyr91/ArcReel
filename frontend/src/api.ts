@@ -1966,6 +1966,30 @@ class API {
     );
   }
 
+  /** 保存人工复核后的课程单集概述，并标记该解析为已确认。 */
+  static async confirmEpisodeOverview(
+    projectName: string,
+    episode: number,
+    overview: ProjectOverview,
+    expectedSourceRevision: string,
+  ): Promise<{
+    success: boolean;
+    episode: number;
+    overview: ProjectOverview;
+    overview_status: "confirmed";
+  }> {
+    return this.request(
+      `/projects/${encodeURIComponent(projectName)}/episodes/${episode}/overview`,
+      {
+        method: "PATCH",
+        body: JSON.stringify({
+          ...overview,
+          expected_source_revision: expectedSourceRevision,
+        }),
+      },
+    );
+  }
+
   /**
    * 更新项目概述（手动编辑）
    */

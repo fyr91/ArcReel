@@ -126,6 +126,8 @@ export interface EpisodeMeta {
   overview?: ProjectOverview;
   /** overview 与本集源文件绑定时的正式修订号。 */
   source_revision?: string | null;
+  /** AI 解析后先待确认；缺失表示兼容历史项目的已确认状态。 */
+  overview_status?: "draft" | "confirmed";
   /** Written by episode_planner at split time: ending hook / suspense */
   hook?: string;
   /** Written by episode_planner at split time: slice boundary in the source file (char offsets) */

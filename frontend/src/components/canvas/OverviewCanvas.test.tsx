@@ -299,6 +299,48 @@ describe("OverviewCanvas", () => {
     });
   });
 
+  it("confirms the mirrored first-episode overview for a course project", async () => {
+    const revision = `sha256-v1:${"a".repeat(64)}`;
+    const projectData = makeProjectData({
+      content_mode: "course",
+      generation_mode: "reference_video",
+      episodes: [
+        {
+          episode: 1,
+          title: "课程第一集",
+          script_file: "scripts/episode_1.json",
+          source_file: "source/lesson.md",
+          source_revision: revision,
+          overview_status: "draft",
+        },
+      ],
+    });
+    const confirm = vi.spyOn(API, "confirmEpisodeOverview").mockResolvedValue({
+      success: true,
+      episode: 1,
+      overview: projectData.overview!,
+      overview_status: "confirmed",
+    });
+    vi.spyOn(API, "updateOverview");
+    vi.spyOn(API, "getProject").mockResolvedValue({ project: projectData, scripts: {} });
+
+    render(<OverviewCanvas projectName="course-demo" projectData={projectData} />);
+
+    fireEvent.click(screen.getByRole("button", { name: "编辑" }));
+    fireEvent.change(screen.getByLabelText("故事梗概"), { target: { value: "确认后的概述" } });
+    fireEvent.click(screen.getByRole("button", { name: "保存并标记完成" }));
+
+    await waitFor(() => {
+      expect(confirm).toHaveBeenCalledWith(
+        "course-demo",
+        1,
+        expect.objectContaining({ synopsis: "确认后的概述" }),
+        revision,
+      );
+    });
+    expect(API.updateOverview).not.toHaveBeenCalled();
+  });
+
   it("reverts overview edits on cancel", () => {
     render(<OverviewCanvas projectName="demo" projectData={makeProjectData()} />);
 

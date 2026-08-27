@@ -427,6 +427,12 @@ describe("API", () => {
       await API.deleteDraft("demo", 1, 2);
       await API.generateOverview("demo");
       await API.generateEpisodeOverview("demo", 2);
+      await API.confirmEpisodeOverview(
+        "demo",
+        2,
+        { synopsis: "概述", genre: "课程", theme: "学习", world_setting: "课堂" },
+        "sha256-v1:revision",
+      );
       await API.updateOverview("demo", { synopsis: "new" });
 
       await API.generateStoryboard("demo", "seg-1", "img", "episode_1.json");
@@ -541,6 +547,16 @@ describe("API", () => {
       expect(requestSpy).toHaveBeenCalledWith("/projects/demo/episodes/3", {
         method: "PATCH",
         body: JSON.stringify({ title: "新标题" }),
+      });
+      expect(requestSpy).toHaveBeenCalledWith("/projects/demo/episodes/2/overview", {
+        method: "PATCH",
+        body: JSON.stringify({
+          synopsis: "概述",
+          genre: "课程",
+          theme: "学习",
+          world_setting: "课堂",
+          expected_source_revision: "sha256-v1:revision",
+        }),
       });
       expect(requestSpy).toHaveBeenCalledWith("/system/config");
       expect(requestSpy).toHaveBeenCalledWith("/system/version");

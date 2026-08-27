@@ -132,6 +132,7 @@ export default {
   'action_plan_episodes': 'plan the episodes',
   'action_draft_selling_points': 'draft the selling points',
   'action_analyze_episode': 'analyse this episode document',
+  'action_confirm_episode_overview': 'review and confirm this episode analysis',
   'action_prepare_step1': 'prepare content organization for this episode',
   'action_confirm_step1': 'review and confirm the content organization',
   'action_generate_script': 'generate the final script',

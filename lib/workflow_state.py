@@ -105,6 +105,7 @@ class WorkflowActionType(StrEnum):
     COLLECT_PROJECT_INPUT = "collect_project_input"
     DRAFT_SELLING_POINTS = "draft_selling_points"
     ANALYZE_EPISODE = "analyze_episode"
+    CONFIRM_EPISODE_OVERVIEW = "confirm_episode_overview"
     ANALYZE_ASSETS = "analyze_assets"
     PLAN_EPISODES = "plan_episodes"
     RESET_EPISODE_PLANNING = "reset_episode_planning"
@@ -1344,6 +1345,7 @@ class WorkflowStateService:
         target = None
         planning_sources = shared.planning_sources
         episode_overview_current = True
+        episode_overview_confirmed = True
         if selected is not None:
             number, entry = selected
             script_path = entry.get("script_file")
@@ -1385,9 +1387,11 @@ class WorkflowStateService:
                     )
                     planning_sources = planning_docs(source)
                     episode_overview_current = (
-                        isinstance(entry.get("overview"), Mapping)
-                        and entry.get("source_revision") == source.revision
+                        isinstance(entry.get("overview"), Mapping) and entry.get("source_revision") == source.revision
                     )
+                    # Missing status is the backward-compatible confirmed state for projects
+                    # created before editable episode-overview review existed.
+                    episode_overview_confirmed = episode_overview_current and entry.get("overview_status") != "draft"
                     artifacts["asset_inventory"] = inventory
 
         state: WorkflowStateName
@@ -1406,6 +1410,17 @@ class WorkflowStateService:
             next_action = _action(
                 WorkflowActionType.ANALYZE_EPISODE,
                 "episode overview is missing or out of date",
+                args={
+                    "episode": target.episode,
+                    "source": target.source,
+                    "expected_source_revision": source.revision if source else None,
+                },
+            )
+        elif mode == "course" and target is not None and not episode_overview_confirmed:
+            state = "PROJECT_INPUT"
+            next_action = _action(
+                WorkflowActionType.CONFIRM_EPISODE_OVERVIEW,
+                "episode overview is waiting for user review",
                 args={
                     "episode": target.episode,
                     "source": target.source,

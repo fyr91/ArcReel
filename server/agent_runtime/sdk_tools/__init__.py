@@ -43,7 +43,10 @@ from server.agent_runtime.sdk_tools.enqueue_videos import (
     generate_video_scene_tool,
     generate_video_selected_tool,
 )
-from server.agent_runtime.sdk_tools.episode_overview import generate_episode_overview_tool
+from server.agent_runtime.sdk_tools.episode_overview import (
+    confirm_episode_overview_tool,
+    generate_episode_overview_tool,
+)
 from server.agent_runtime.sdk_tools.episode_planning import (
     plan_episodes_tool,
     reset_episode_planning_tool,
@@ -112,6 +115,7 @@ ARCREEL_MCP_TOOL_IDS: tuple[str, ...] = (
     "list_global_assets",
     "complete_asset_inventory",
     "generate_episode_overview",
+    "confirm_episode_overview",
     "complete_step1_rebuild",
     "get_workflow_plan",
     "get_project_path_link",
@@ -175,6 +179,7 @@ MIGRATION_BLOCKED_TOOL_IDS: frozenset[str] = frozenset(
     {
         "complete_asset_inventory",
         "generate_episode_overview",
+        "confirm_episode_overview",
         "complete_step1_rebuild",
         "manage_project_asset_link",
         "move_character_main_to_reference",
@@ -249,6 +254,7 @@ def build_arcreel_mcp_server(
         list_global_assets_tool(ctx),
         complete_asset_inventory_tool(ctx),
         generate_episode_overview_tool(ctx),
+        confirm_episode_overview_tool(ctx),
         complete_step1_rebuild_tool(ctx),
         get_workflow_plan_tool(ctx),
         get_project_path_link_tool(ctx),

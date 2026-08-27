@@ -71,6 +71,11 @@ from server.routers._script_edits import (
 from server.routers._validators import validate_backend_value
 from server.services import workflow_planner as workflow_plan_service
 from server.services.episode_metadata import EpisodeMetadataNotFoundError, update_episode_metadata
+from server.services.episode_overview_review import (
+    EpisodeOverviewNotFoundError,
+    EpisodeOverviewRevisionConflictError,
+    confirm_episode_overview,
+)
 from server.services.project_archive import (
     ProjectArchiveService,
     ProjectArchiveValidationError,
@@ -1486,6 +1491,18 @@ class UpdateOverviewRequest(BaseModel):
     world_setting: str | None = None
 
 
+class ConfirmEpisodeOverviewRequest(BaseModel):
+    """Complete editable analysis fields plus the source revision being reviewed."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    synopsis: str
+    genre: str
+    theme: str
+    world_setting: str
+    expected_source_revision: str
+
+
 class UpdateEpisodeRequest(BaseModel):
     """Editable formal-script metadata mirrored into project.json episodes[]."""
 
@@ -1885,6 +1902,45 @@ async def generate_episode_overview(name: str, episode: int, _t: Translator):
         raise
     except Exception:
         logger.exception("课程分集概述生成失败")
+        raise HTTPException(status_code=500, detail=_t("internal_server_error"))
+
+
+@router.patch("/projects/{name}/episodes/{episode}/overview")
+async def confirm_course_episode_overview(
+    name: str,
+    episode: int,
+    req: ConfirmEpisodeOverviewRequest,
+    _t: Translator,
+):
+    """Save the reviewed episode overview and mark it confirmed."""
+
+    try:
+
+        def _sync():
+            manager = get_project_manager()
+            with project_change_source("webui"):
+                return confirm_episode_overview(
+                    manager,
+                    name,
+                    episode,
+                    req.model_dump(exclude={"expected_source_revision"}),
+                    expected_source_revision=req.expected_source_revision,
+                )
+
+        updated = await asyncio.to_thread(_sync)
+        return {"success": True, **updated}
+    except EpisodeOverviewNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=_t("episode_overview_not_found", episode=episode)) from exc
+    except EpisodeOverviewRevisionConflictError as exc:
+        raise HTTPException(status_code=409, detail=_t("episode_overview_revision_conflict")) from exc
+    except FileNotFoundError as exc:
+        raise NotFoundError("project_not_found", name=name) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    except (HTTPException, ApiError):
+        raise
+    except Exception:
+        logger.exception("确认课程分集概述失败")
         raise HTTPException(status_code=500, detail=_t("internal_server_error"))
 
 

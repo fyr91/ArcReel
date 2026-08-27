@@ -375,6 +375,8 @@ MESSAGES = {
     ),
     # Episode meta
     "episode_not_found": "Không tìm thấy tập {episode} hoặc tập chưa có tệp kịch bản",
+    "episode_overview_not_found": "Tập {episode} chưa có kết quả phân tích để xác nhận",
+    "episode_overview_revision_conflict": "Nguồn hoặc kết quả phân tích của tập đã thay đổi; hãy phân tích lại trước khi xác nhận",
     "episode_title_empty": "Tiêu đề tập không được để trống",
     "about_update_check_failed": "Kiểm tra cập nhật thất bại, vui lòng thử lại sau",
     "about_version_read_failed": "Không đọc được phiên bản ứng dụng",
