@@ -689,6 +689,10 @@ class VideoGenerationRequest:
     # 不构成契约，编排层（reference_video 渲染管线）必须显式提供。
     reference_audio_targets: list[int] | None = None
     continuation_guide: VideoContinuationGuide | None = None
+    # MiniMax H3 two-stage workflow.  The orchestration layer enables this only
+    # for eligible drama/course reference-video requests.  Backends that do not
+    # implement the H3 contract ignore the flag.
+    manual_refine: bool = False
     generate_audio: bool = True
 
     # 项目上下文（用于构建文件服务 URL 等）

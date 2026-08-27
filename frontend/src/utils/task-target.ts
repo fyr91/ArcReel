@@ -32,6 +32,7 @@ const FAILURE_TEXT_KEYS: Partial<
   prop: { key: "prop_task_failed", idParam: "id" },
   grid: { key: "grid_task_failed", idParam: "id" },
   reference_video: { key: "reference_generation_task_failed", idParam: "unitId" },
+  reference_video_refine: { key: "reference_generation_task_failed", idParam: "unitId" },
   image_edit: { key: "image_edit_task_failed", idParam: "id" },
 };
 
@@ -80,7 +81,8 @@ export function buildTaskFailureTarget(
       const route = resolveEpisodeRoute(projectData, task.script_file);
       return route ? { type: "grid", id: task.resource_id, route } : null;
     }
-    case "reference_video": {
+    case "reference_video":
+    case "reference_video_refine": {
       const route = resolveEpisodeRoute(projectData, task.script_file);
       return route ? { type: "reference_unit", id: task.resource_id, route } : null;
     }

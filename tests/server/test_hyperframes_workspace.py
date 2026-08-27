@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import json
 from pathlib import Path
+from unittest.mock import AsyncMock
 
 import pytest
 
@@ -154,6 +155,25 @@ async def test_prepare_writes_complete_studio_project_only_inside_arcreel_projec
     assert manifest["editing_plan_file"] == "EDITING_PLAN.md"
     assert manifest["total_duration_microseconds"] == 2_000_000
     assert manifest["hyperframes_version"] == "0.8.14"
+
+
+async def test_prepare_runs_hd_gate_before_materializing_media(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    pm, project_path = _project(tmp_path)
+    materialized = _materialized(project_path)
+    gate = AsyncMock(return_value=[])
+    monkeypatch.setattr("server.services.hyperframes_workspace.ensure_episode_h3_hd", gate)
+
+    await HyperframesWorkspaceService(pm, presentation_reader=_Reader(materialized)).prepare(
+        "demo",
+        1,
+        variant=USE_TTS,
+        user_id="u1",
+    )
+
+    gate.assert_awaited_once_with(pm, "demo", 1, source="hyperframes", user_id="u1")
 
 
 async def test_prepare_preserves_an_existing_editable_workspace(tmp_path: Path) -> None:

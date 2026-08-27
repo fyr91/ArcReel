@@ -1450,7 +1450,7 @@ def compute_affected_fingerprints(project_name: str, task_type: str, resource_id
                 # 绝对路径，会把服务器路径泄漏给前端且匹配不上前端的资源 key
                 rel = candidate.relative_to(project_root).as_posix()
                 paths.append((rel, candidate))
-    elif task_type == "reference_video":
+    elif task_type in {"reference_video", "reference_video_refine"}:
         paths.append(
             (
                 f"reference_videos/{resource_id}.mp4",
@@ -1508,6 +1508,7 @@ _SKELETON_DRIVEN_TASK_ACTIONS: dict[str, str] = {
     "storyboard": "storyboard_ready",
     "video": "video_ready",
     "reference_video": "reference_video_ready",
+    "reference_video_refine": "reference_video_ready",
     "tts": "tts_ready",
 }
 
@@ -1516,6 +1517,7 @@ _SKELETON_DRIVEN_TASK_ACTIONS: dict[str, str] = {
 # 的 label_key（分镜/场景/镜头），与同项目分镜级事件同口径。
 _SKELETON_TASK_LABEL_KEYS: dict[str, str] = {
     "reference_video": "skeleton_video_units",
+    "reference_video_refine": "skeleton_video_units",
     "tts": "narration_audio",
 }
 
@@ -1557,7 +1559,7 @@ def emit_generation_success_batch(
 
     action = _SKELETON_DRIVEN_TASK_ACTIONS.get(task_type)
     if action is not None:
-        reference_route_task = task_type == "reference_video"
+        reference_route_task = task_type in {"reference_video", "reference_video_refine"}
         if task_type == "tts":
             try:
                 reference_route_task = is_reference_video_project(get_project_manager().load_project(project_name))
@@ -3711,6 +3713,27 @@ async def _execute_hyperframes_bgm_task_proxy(
     )
 
 
+async def _execute_h3_refine_task_proxy(
+    project_name: str,
+    resource_id: str,
+    payload: dict[str, Any],
+    *,
+    user_id: str = DEFAULT_USER_ID,
+    task_id: str | None = None,
+    provider_job_id: str | None = None,
+) -> dict[str, Any]:
+    from server.services.h3_refine_tasks import execute_h3_refine_task
+
+    return await execute_h3_refine_task(
+        project_name,
+        resource_id,
+        payload,
+        user_id=user_id,
+        task_id=task_id,
+        provider_job_id=provider_job_id,
+    )
+
+
 _TASK_EXECUTORS = {
     "storyboard": execute_storyboard_task,
     "video": execute_video_task,
@@ -3726,6 +3749,7 @@ _TASK_EXECUTORS = {
     "reference_keyframe": _execute_reference_keyframe_task_proxy,
     "reference_storyboard_sheet": _execute_reference_storyboard_sheet_task_proxy,
     "hyperframes_bgm": _execute_hyperframes_bgm_task_proxy,
+    "reference_video_refine": _execute_h3_refine_task_proxy,
 }
 
 
@@ -3772,6 +3796,15 @@ async def execute_generation_task(task: dict[str, Any], *, claimed_provider_id: 
             )
         elif task_type == "hyperframes_bgm":
             result = await _execute_hyperframes_bgm_task_proxy(
+                project_name,
+                resource_id,
+                payload,
+                user_id=user_id,
+                task_id=queue_task_id,
+                provider_job_id=task.get("provider_job_id"),
+            )
+        elif task_type == "reference_video_refine":
+            result = await _execute_h3_refine_task_proxy(
                 project_name,
                 resource_id,
                 payload,

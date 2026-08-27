@@ -164,6 +164,7 @@ export function ReferenceVideoCanvas({
   const error = useReferenceVideoStore((s) => s.error);
   const loading = useReferenceVideoStore((s) => s.loading);
   const isCourse = project?.content_mode === "course";
+  const canConfirmVideo = project?.content_mode === "course" || project?.content_mode === "drama";
   const courseSceneNames = Object.keys(project?.scenes ?? {});
   const coursePropNames = Object.keys(project?.props ?? {});
   const courseCharacterNames = Object.keys(project?.characters ?? {});
@@ -224,6 +225,10 @@ export function ReferenceVideoCanvas({
   // resource（=unit）→ 最新任务行。「最新行胜出」下沉到 store selector：
   // store 不保证 tasks 顺序（SSE 原位 upsert），重试的新行不被旧失败行盖住。
   const tasksByUnit = useLatestTasksByResource(projectName, "reference_video");
+  const hdTasksByUnit = useLatestTasksByResource(projectName, "reference_video_refine");
+  const [hdStates, setHdStates] = useState<
+    Record<string, "available" | "processing" | "completed" | "failed" | "unavailable">
+  >({});
 
   // 参考生视频任务完成时经项目事件 SSE 自增，驱动本 effect 重拉分组展示成片。
   const unitsRevision = useAppStore((s) => s.referenceVideoUnitsRevision);
@@ -239,6 +244,22 @@ export function ReferenceVideoCanvas({
     () => units.find((u) => u.unit_id === selectedUnitId) ?? null,
     [units, selectedUnitId],
   );
+  const selectedHdTaskStatus = selected ? hdTasksByUnit.get(selected.unit_id)?.status : undefined;
+
+  useEffect(() => {
+    if (!selected || selected.video_review_status !== "confirmed") return;
+    let active = true;
+    void API.getReferenceVideoHdStatus(projectName, episode, selected.unit_id)
+      .then((status) => {
+        if (active) setHdStates((current) => ({ ...current, [selected.unit_id]: status.state }));
+      })
+      .catch(() => {
+        if (active) setHdStates((current) => ({ ...current, [selected.unit_id]: "unavailable" }));
+      });
+    return () => {
+      active = false;
+    };
+  }, [episode, projectName, selected, selectedHdTaskStatus, unitsRevision]);
   const selectedMentionLookup = useMemo(() => {
     const next = Object.assign(Object.create(null) as MentionLookup, mentionLookup);
     for (const keyframe of selected?.keyframes ?? []) {
@@ -918,6 +939,20 @@ export function ReferenceVideoCanvas({
       }
     },
     [episode, loadUnits, projectName, t],
+  );
+
+  const handleMakeHd = useCallback(
+    async (unitId: string) => {
+      setHdStates((current) => ({ ...current, [unitId]: "processing" }));
+      try {
+        await API.makeReferenceVideoHd(projectName, episode, unitId);
+        await useTasksStore.getState().refreshTasks();
+      } catch (e) {
+        setHdStates((current) => ({ ...current, [unitId]: "failed" }));
+        toastError(e);
+      }
+    },
+    [episode, projectName],
   );
 
   // Reset tab to units on project/episode change (render-time derived-state pattern).
@@ -1624,8 +1659,10 @@ export function ReferenceVideoCanvas({
                           onRestoringChange={handleRestoringChange}
                           checkBusy={isUnitLocked}
                           onRestored={handleUnitsRefresh}
-                          onConfirmVideo={isCourse ? handleConfirmVideo : undefined}
+                          onConfirmVideo={canConfirmVideo ? handleConfirmVideo : undefined}
                           videoConfirmed={selected.video_review_status === "confirmed"}
+                          hdState={hdStates[selected.unit_id] ?? "unavailable"}
+                          onMakeHd={handleMakeHd}
                         />
                       </div>
                     )}
@@ -1660,8 +1697,10 @@ export function ReferenceVideoCanvas({
                   onRestoringChange={handleRestoringChange}
                   checkBusy={isUnitLocked}
                   onRestored={handleUnitsRefresh}
-                  onConfirmVideo={isCourse ? handleConfirmVideo : undefined}
+                  onConfirmVideo={canConfirmVideo ? handleConfirmVideo : undefined}
                   videoConfirmed={selected?.video_review_status === "confirmed"}
+                  hdState={selected ? (hdStates[selected.unit_id] ?? "unavailable") : "unavailable"}
+                  onMakeHd={handleMakeHd}
                 />
               </div>
             )}

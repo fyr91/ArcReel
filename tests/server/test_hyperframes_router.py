@@ -35,7 +35,8 @@ class _Service:
     def status(self, _project_name: str, _episode: int):
         return self.workspace
 
-    async def prepare(self, project_name: str, episode: int, *, variant: str):
+    async def prepare(self, project_name: str, episode: int, *, variant: str, user_id: str):
+        assert user_id == "default"
         self.calls.append((project_name, episode, variant))
         assert self.workspace is not None
         return self.workspace

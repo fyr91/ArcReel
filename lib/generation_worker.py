@@ -404,7 +404,13 @@ async def _extract_provider(task: dict[str, Any]) -> str:
         # callers and must not be able to redirect claim-time current-state projection to a different script.
         payload = {**payload, "script_file": task["script_file"]}
     # 以 media lane 区分 video / audio / image：reference_video 等 task_type 同属 video lane。
-    is_video = task.get("media_type") == "video" or task.get("task_type") in ("video", "reference_video")
+    if task.get("task_type") == "reference_video_refine":
+        return "croco"
+    is_video = task.get("media_type") == "video" or task.get("task_type") in (
+        "video",
+        "reference_video",
+        "reference_video_refine",
+    )
     is_audio = task.get("media_type") == "audio" or task.get("task_type") == "tts"
 
     # 整体兜底：含项目加载（队列里可能残留指向已删除/不可读项目的任务，load_project 会抛
@@ -687,7 +693,7 @@ class GenerationWorker:
                             "回队前投影刷新失败 task_id=%s provider=%s", task["task_id"], provider_id, exc_info=True
                         )
                     await self._requeue_single_task(task["task_id"])
-                    if task.get("task_type") in ("video", "reference_video"):
+                    if task.get("task_type") in ("video", "reference_video", "reference_video_refine"):
                         # 两条视频路线都必须先重投影才能判断当前 provider；本 cycle 排除已
                         # 重投影且仍池满的任务，继续寻找其它 provider 的可运行任务。
                         attempted_current_state_tasks.add(task["task_id"])
@@ -698,7 +704,7 @@ class GenerationWorker:
 
                 # Dispatch：登记占用（INFLIGHT），bucket 由 register 自动创建
                 claimed_any = True
-                if task.get("task_type") in ("video", "reference_video"):
+                if task.get("task_type") in ("video", "reference_video", "reference_video_refine"):
                     process_task = self._process_task(task, claimed_provider_id=provider_id)
                 else:
                     process_task = self._process_task(task)
@@ -807,7 +813,7 @@ class GenerationWorker:
         from server.services.generation_tasks import execute_generation_task
 
         try:
-            if task_type in ("video", "reference_video"):
+            if task_type in ("video", "reference_video", "reference_video_refine"):
                 result = await execute_generation_task(task, claimed_provider_id=provider_id)
             else:
                 result = await execute_generation_task(task)
@@ -1028,7 +1034,7 @@ class GenerationWorker:
     async def _cleanup_video_staging(self, task: dict[str, Any]) -> None:
         """Best-effort cleanup when either video route becomes terminal outside normal finalization."""
 
-        if task.get("task_type") not in ("video", "reference_video"):
+        if task.get("task_type") not in ("video", "reference_video", "reference_video_refine"):
             return
         try:
             from lib.project_manager import get_project_manager
@@ -1043,7 +1049,11 @@ class GenerationWorker:
             try:
                 from lib.media_generator import cleanup_staged_video_output
 
-                resource_type = "reference_videos" if task["task_type"] == "reference_video" else "videos"
+                resource_type = (
+                    "reference_videos"
+                    if task["task_type"] in {"reference_video", "reference_video_refine"}
+                    else "videos"
+                )
                 await asyncio.to_thread(
                     cleanup_staged_video_output,
                     project_path,
@@ -1115,7 +1125,7 @@ class GenerationWorker:
             task_type = task.get("task_type")
             if task.get("media_type"):
                 media_type = task["media_type"]
-            elif task_type in ("video", "reference_video"):
+            elif task_type in ("video", "reference_video", "reference_video_refine"):
                 media_type = "video"
             elif task_type == "tts":
                 media_type = "audio"
@@ -1148,6 +1158,14 @@ class GenerationWorker:
                 )
                 if rows == 0:
                     await self.queue.mark_task_cancelled(task_id, cancelled_by="user")
+                continue
+
+            if task_type == "reference_video_refine":
+                # POST /refine is idempotent by the ArcReel task id.  Requeue is
+                # therefore safe both after child-id persistence and in the
+                # response-loss window before persistence.
+                await self._requeue_single_task(task_id)
+                logger.info("孤儿 H3 高清任务 running → resume queue: %s", task_id)
                 continue
 
             checkpoint = None

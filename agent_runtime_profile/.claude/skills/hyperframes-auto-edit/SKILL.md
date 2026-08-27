@@ -20,7 +20,7 @@ description: 把 ArcReel 已生成的视频单元转成项目内 HyperFrames 工
 
 ## 自动剪辑工作流
 
-1. 调用 `mcp__arcreel__prepare_hyperframes_episode`，传入集号和本次声音版本。**该工具只生成可播放的顺序拼接底稿（assembly draft），不是 AI 剪辑完成态。** HyperFrames 没有另一个“自动替你剪完”的黑盒调用；Agent 对 `index.html` 的具体 Edit/Write 才是剪辑执行。
+1. 调用 `mcp__arcreel__prepare_hyperframes_episode`，传入集号和本次声音版本。如果当前集含已确认的 MiniMax H3 480P 首采，该工具会先统一完成“高清”任务，只有全部成功才物化剪辑媒体；任一失败就保留原 480P 视频并停止导入。**该工具只生成可播放的顺序拼接底稿（assembly draft），不是 AI 剪辑完成态。** HyperFrames 没有另一个“自动替你剪完”的黑盒调用；Agent 对 `index.html` 的具体 Edit/Write 才是剪辑执行。
 2. 读取工具返回的 `source_script`、`workspace.write_boundary`、`workspace.entry_file`、`workspace.editing_plan_file`，再读取工程内 `manifest.json` 与 `DESIGN.md`。
 3. 在写方案前分析真实媒体，而不只读剧本文字：
    - 用 `ffprobe` 读取每段真实时长、音视频流；

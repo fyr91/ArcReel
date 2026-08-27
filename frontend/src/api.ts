@@ -3406,6 +3406,33 @@ class API {
     );
   }
 
+  static async getReferenceVideoHdStatus(
+    projectName: string,
+    episode: number,
+    unitId: string,
+  ): Promise<{
+    state: "available" | "processing" | "completed" | "failed" | "unavailable";
+    unit_id: string;
+    task_id?: string;
+    version?: number;
+    message?: string;
+  }> {
+    return this.request(
+      `/projects/${encodeURIComponent(projectName)}/reference-videos/episodes/${episode}/units/${encodeURIComponent(unitId)}/hd`,
+    );
+  }
+
+  static async makeReferenceVideoHd(
+    projectName: string,
+    episode: number,
+    unitId: string,
+  ): Promise<{ task_id: string; status: string; deduped: boolean }> {
+    return this.request(
+      `/projects/${encodeURIComponent(projectName)}/reference-videos/episodes/${episode}/units/${encodeURIComponent(unitId)}/hd`,
+      { method: "POST" },
+    );
+  }
+
   static async patchCourseBookends(
     projectName: string,
     episode: number,

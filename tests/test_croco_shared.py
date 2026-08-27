@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import httpx
 import pytest
@@ -43,3 +43,23 @@ async def test_wait_until_terminal_surfaces_permanent_status_error(monkeypatch) 
         await client.wait_until_terminal("job", max_wait_seconds=60)
 
     sleep.assert_not_awaited()
+
+
+async def test_refine_job_posts_without_body_and_uses_explicit_idempotency_key() -> None:
+    response = MagicMock()
+    response.raise_for_status = MagicMock()
+    response.json.return_value = {"job_id": "child-job"}
+    http = AsyncMock()
+    http.post = AsyncMock(return_value=response)
+    http.__aenter__ = AsyncMock(return_value=http)
+    http.__aexit__ = AsyncMock(return_value=None)
+
+    with patch("lib.croco_shared.httpx.AsyncClient", return_value=http):
+        client = CrocoClient(token="token", base_url="https://croco.example")
+        result = await client.refine_job("preview-job", idempotency_key="task-123")
+
+    assert result["job_id"] == "child-job"
+    http.post.assert_awaited_once_with(
+        "https://croco.example/api/v2/jobs/preview-job/refine",
+        headers={"Authorization": "Bearer token", "Idempotency-Key": "task-123"},
+    )

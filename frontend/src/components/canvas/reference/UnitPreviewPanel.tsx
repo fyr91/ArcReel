@@ -56,6 +56,8 @@ export interface UnitPreviewPanelProps {
   onRestored?: () => void | Promise<void>;
   onConfirmVideo?: (unitId: string) => void | Promise<void>;
   videoConfirmed?: boolean;
+  hdState?: "available" | "processing" | "completed" | "failed" | "unavailable";
+  onMakeHd?: (unitId: string) => void | Promise<void>;
 }
 
 function hasCost(b: CostBreakdown | undefined): boolean {
@@ -85,6 +87,8 @@ export function UnitPreviewPanel({
   onRestored,
   onConfirmVideo,
   videoConfirmed = false,
+  hdState = "unavailable",
+  onMakeHd,
 }: UnitPreviewPanelProps) {
   const { t } = useTranslation("dashboard");
   const clip = unit?.generated_assets.video_clip ?? null;
@@ -286,6 +290,32 @@ export function UnitPreviewPanel({
         >
           <CheckCircle2 className="h-4 w-4" aria-hidden="true" />
           {videoConfirmed ? t("course_video_confirmed") : t("course_video_confirm")}
+        </button>
+      )}
+
+      {ready && videoConfirmed && onMakeHd && hdState !== "unavailable" && (
+        <button
+          type="button"
+          disabled={hdState === "processing" || hdState === "completed" || busy || restoring}
+          onClick={() => void onMakeHd(unit.unit_id)}
+          className="focus-ring inline-flex items-center justify-center gap-2 rounded-lg border border-sky-400/40 bg-sky-400/10 px-3.5 py-2 text-sm font-medium text-sky-100 disabled:cursor-default disabled:opacity-60"
+        >
+          {hdState === "processing" ? (
+            <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
+          ) : hdState === "failed" ? (
+            <RotateCcw className="h-4 w-4" aria-hidden="true" />
+          ) : hdState === "completed" ? (
+            <CheckCircle2 className="h-4 w-4" aria-hidden="true" />
+          ) : (
+            <Sparkles className="h-4 w-4" aria-hidden="true" />
+          )}
+          {hdState === "processing"
+            ? t("reference_video_hd_processing")
+            : hdState === "completed"
+              ? t("reference_video_hd_completed")
+              : hdState === "failed"
+                ? t("reference_video_hd_retry")
+                : t("reference_video_hd")}
         </button>
       )}
 

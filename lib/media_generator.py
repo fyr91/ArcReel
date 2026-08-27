@@ -793,6 +793,7 @@ class MediaGenerator:
         reference_audio_files: list[Path] | None = None,
         reference_audio_targets: list[int] | None = None,
         continuation_guide: "VideoContinuationGuide | None" = None,
+        manual_refine: bool = False,
         aspect_ratio: str = "9:16",
         duration_seconds: str | int = "8",
         resolution: str | None = None,
@@ -813,6 +814,7 @@ class MediaGenerator:
                 reference_images 的下标（0-based）；仅 backend 声明 reference_audio_per_image
                 时读取，见 VideoGenerationRequest.reference_audio_targets
             continuation_guide: 已解析的前序 GPU 原始视频续接事实
+            manual_refine: 为 MiniMax H3 一采任务预留手动高清化断点
             aspect_ratio: 宽高比，默认 9:16（竖屏）
             duration_seconds: 视频时长，可选 "4", "6", "8"
             resolution: 分辨率，默认不传（由 backend/SDK 决定）
@@ -832,6 +834,7 @@ class MediaGenerator:
                 reference_audio_files=reference_audio_files,
                 reference_audio_targets=reference_audio_targets,
                 continuation_guide=continuation_guide,
+                manual_refine=manual_refine,
                 aspect_ratio=aspect_ratio,
                 duration_seconds=duration_seconds,
                 resolution=resolution,
@@ -850,6 +853,7 @@ class MediaGenerator:
         reference_audio_files: list[Path] | None = None,
         reference_audio_targets: list[int] | None = None,
         continuation_guide: "VideoContinuationGuide | None" = None,
+        manual_refine: bool = False,
         aspect_ratio: str = "9:16",
         duration_seconds: str | int = "8",
         resolution: str | None = None,
@@ -1070,6 +1074,7 @@ class MediaGenerator:
                         # reference_images 下标算出的 targets 对压缩后的 ref_arg 同样有效。
                         reference_audio_targets=reference_audio_targets,
                         continuation_guide=continuation_guide,
+                        manual_refine=manual_refine,
                         generate_audio=effective_generate_audio,
                         project_name=self.project_name,
                         task_id=task_id,

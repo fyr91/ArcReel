@@ -7,8 +7,10 @@ from typing import Annotated, Literal
 from fastapi import APIRouter, HTTPException, Path, Request
 from pydantic import BaseModel
 
+from lib.i18n import Translator
 from lib.project_manager import get_project_manager
 from server.auth import CurrentUser
+from server.services.h3_refine_tasks import H3RefineUnavailable
 from server.services.hyperframes_music import HyperframesMusicUnavailable
 from server.services.hyperframes_music_tasks import enqueue_hyperframes_bgm_task
 from server.services.hyperframes_workspace import (
@@ -74,6 +76,8 @@ async def prepare_hyperframes_workspace(
     episode: EpisodeNumber,
     payload: PrepareHyperframesRequest,
     request: Request,
+    user: CurrentUser,
+    _t: Translator,
 ):
     service = get_hyperframes_workspace_service()
     try:
@@ -81,10 +85,13 @@ async def prepare_hyperframes_workspace(
             project_name,
             episode,
             variant=payload.narration_delivery,
+            user_id=user.id,
         )
         manager = get_hyperframes_studio_manager()
         port = await manager.ensure_started(workspace.path)
         studio_url = manager.public_url(port, _browser_origin(request))
+    except H3RefineUnavailable as exc:
+        raise HTTPException(status_code=422, detail=_t(exc.code, **exc.params)) from exc
     except (HyperframesWorkspaceUnavailable, PresentationUnavailableError) as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
     except HyperframesStudioUnavailable as exc:

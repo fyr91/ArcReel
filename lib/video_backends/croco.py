@@ -133,9 +133,21 @@ class CrocoVideoBackend(ProviderJobIdPersistenceMixin):
         parameters = {
             "mode": mode,
             "prompt": request.prompt,
-            "quality": _resolve_quality(request.resolution, request.aspect_ratio),
+            # H3 manual refine is defined only for the 864x480 preview pass.
+            # Project/UI resolution preferences are intentionally ignored for
+            # this two-stage workflow.
+            "quality": (
+                "preview" if request.manual_refine else _resolve_quality(request.resolution, request.aspect_ratio)
+            ),
             "duration_seconds": request.duration_seconds,
         }
+        if request.manual_refine:
+            if mode != "r2v":
+                raise VideoCapabilityError("video_h3_refine_mode_unsupported", model=self._model)
+            parameters["refine"] = {
+                "profile": "latent_upscale_2mp_v1",
+                "execution": "manual",
+            }
         if request.continuation_guide is not None:
             guide = request.continuation_guide
             if mode == "i2v":
@@ -143,7 +155,7 @@ class CrocoVideoBackend(ProviderJobIdPersistenceMixin):
             parameters["add_guide"] = {
                 "source_job_id": guide.source_job_id,
                 "guide_frames": guide.guide_frames,
-                "include_guide_audio": guide.include_guide_audio,
+                "include_guide_audio": True if request.manual_refine else guide.include_guide_audio,
                 "source_media": guide.source_media,
             }
         job = await self._client.submit_job(
@@ -196,6 +208,34 @@ class CrocoVideoBackend(ProviderJobIdPersistenceMixin):
             await asyncio.sleep(2.0)
 
     async def resume_video(self, job_id: str, request: VideoGenerationRequest) -> VideoGenerationResult:
+        return await self._poll_and_download(job_id, request)
+
+    async def refine_preview(
+        self,
+        source_job_id: str,
+        *,
+        output_path: Path,
+        task_id: str,
+        provider_job_id: str | None = None,
+        duration_seconds: int = 5,
+    ) -> VideoGenerationResult:
+        """Run or resume the manual 2MP continuation for one H3 preview."""
+        request = VideoGenerationRequest(
+            prompt="",
+            output_path=output_path,
+            resolution="1920x1088",
+            duration_seconds=duration_seconds,
+            task_id=task_id,
+        )
+        job_id = provider_job_id
+        if job_id is None:
+            child = await self._client.refine_job(source_job_id, idempotency_key=task_id)
+            raw_job_id = child.get("job_id")
+            if not isinstance(raw_job_id, str) or not raw_job_id:
+                raise RuntimeError("Croco H3 高清化响应缺少 job_id")
+            job_id = raw_job_id
+            await self._persist_provider_job_id(request, job_id, provider=PROVIDER_CROCO)
+            await persist_h3_execution_progress(task_id, h3_progress_from_provider(child))
         return await self._poll_and_download(job_id, request)
 
     async def _poll_and_download(self, job_id: str, request: VideoGenerationRequest) -> VideoGenerationResult:
