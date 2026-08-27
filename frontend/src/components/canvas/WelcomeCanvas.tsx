@@ -13,6 +13,7 @@ import {
 } from "lucide-react";
 import { API } from "@/api";
 import { useAppStore } from "@/stores/app-store";
+import type { OverviewAnalysisStatus } from "@/stores/overview-analysis-store";
 import { getProjectDisplayName } from "@/utils/project-display";
 import {
   SOURCE_FILE_ACCEPT,
@@ -31,6 +32,7 @@ interface WelcomeCanvasProps {
   projectTitle?: string;
   onUpload?: (file: File) => Promise<void>;
   onAnalyze?: () => Promise<void>;
+  analysisStatus?: OverviewAnalysisStatus;
 }
 
 const CARD_BG =
@@ -49,6 +51,7 @@ export function WelcomeCanvas({
   projectTitle,
   onUpload,
   onAnalyze,
+  analysisStatus = "idle",
 }: WelcomeCanvasProps) {
   const { t } = useTranslation("dashboard");
   const [isDragging, setIsDragging] = useState(false);
@@ -61,6 +64,12 @@ export function WelcomeCanvas({
   const fileInputRef = useRef<HTMLInputElement>(null);
   const sourceFilesVersion = useAppStore((s) => s.sourceFilesVersion);
   const displayProjectTitle = getProjectDisplayName(projectTitle, t("untitled_project"));
+  const displayedPhase: UploadPhase =
+    analysisStatus === "running"
+      ? "analyzing"
+      : analysisStatus === "succeeded"
+        ? "done"
+        : phase;
 
   useEffect(() => {
     sourceFilesRef.current = sourceFiles;
@@ -175,7 +184,7 @@ export function WelcomeCanvas({
     [processFile],
   );
 
-  if (phase === "loading") {
+  if (displayedPhase === "loading") {
     return (
       <div
         className="flex min-h-[400px] items-center justify-center"
@@ -216,16 +225,16 @@ export function WelcomeCanvas({
           className="mt-2 text-[13px] leading-relaxed"
           style={{ color: "var(--color-text-3)" }}
         >
-          {phase === "idle" && t("welcome_idle_desc")}
-          {phase === "has_sources" && t("welcome_has_sources_desc")}
-          {phase === "uploading" && t("uploading_file", { name: fileName })}
-          {phase === "analyzing" && t("analyzing_content_desc")}
-          {phase === "done" && t("analysis_complete_loading")}
+          {displayedPhase === "idle" && t("welcome_idle_desc")}
+          {displayedPhase === "has_sources" && t("welcome_has_sources_desc")}
+          {displayedPhase === "uploading" && t("uploading_file", { name: fileName })}
+          {displayedPhase === "analyzing" && t("analyzing_content_desc")}
+          {displayedPhase === "done" && t("analysis_complete_loading")}
         </p>
       </header>
 
       {/* IDLE: drag-drop zone */}
-      {phase === "idle" && (
+      {displayedPhase === "idle" && (
         <>
           <button
             type="button"
@@ -364,7 +373,7 @@ export function WelcomeCanvas({
       )}
 
       {/* HAS_SOURCES: file list + analyze CTA */}
-      {phase === "has_sources" && (
+      {displayedPhase === "has_sources" && (
         <div className="space-y-4">
           <section
             className="relative overflow-hidden rounded-2xl p-5 text-left"
@@ -507,7 +516,7 @@ export function WelcomeCanvas({
       )}
 
       {/* UPLOADING */}
-      {phase === "uploading" && (
+      {displayedPhase === "uploading" && (
         <div
           role="status"
           aria-live="polite"
@@ -538,7 +547,7 @@ export function WelcomeCanvas({
       )}
 
       {/* ANALYZING */}
-      {phase === "analyzing" && (
+      {displayedPhase === "analyzing" && (
         <div
           role="status"
           aria-live="polite"
@@ -593,7 +602,7 @@ export function WelcomeCanvas({
       )}
 
       {/* DONE */}
-      {phase === "done" && (
+      {displayedPhase === "done" && (
         <div
           role="status"
           aria-live="polite"

@@ -7,6 +7,10 @@ import { API, ConflictError } from "@/api";
 import { useProjectsStore } from "@/stores/projects-store";
 import { useAppStore } from "@/stores/app-store";
 import { useCostStore } from "@/stores/cost-store";
+import {
+  overviewAnalysisKey,
+  useOverviewAnalysisStore,
+} from "@/stores/overview-analysis-store";
 import { costEntries, formatCost, totalBreakdown } from "@/utils/cost-format";
 import { errMsg } from "@/utils/async";
 import { itemCountKey, normalizeRoute } from "@/utils/generation-mode";
@@ -72,6 +76,12 @@ export function OverviewCanvas({
   const isAd = projectData?.content_mode === "ad";
   // 内容规模的口径按生成路线定，与创作类型无关：分镜路线报分镜数、参考路线报视频单元数。
   const route = normalizeRoute(projectData?.generation_mode);
+  const analysisEpisode = projectData?.content_mode === "course" ? 1 : undefined;
+  const analysisKey = overviewAnalysisKey(projectName, analysisEpisode);
+  const analysisStatus = useOverviewAnalysisStore(
+    (state) => state.statuses[analysisKey] ?? "idle",
+  );
+  const startOverviewAnalysis = useOverviewAnalysisStore((state) => state.startAnalysis);
   const projectTotals = useCostStore((s) => s.costData?.project_totals);
   const getEpisodeCost = useCostStore((s) => s.getEpisodeCost);
   const costLoading = useCostStore((s) => s.loading);
@@ -220,13 +230,9 @@ export function OverviewCanvas({
   );
 
   const handleAnalyze = useCallback(async () => {
-    if (projectData?.content_mode === "course") {
-      await API.generateEpisodeOverview(projectName, 1);
-    } else {
-      await API.generateOverview(projectName);
-    }
+    await startOverviewAnalysis(projectName, analysisEpisode);
     await refreshProject();
-  }, [projectData?.content_mode, projectName, refreshProject]);
+  }, [analysisEpisode, projectName, refreshProject, startOverviewAnalysis]);
 
   const handleRegenerate = useCallback(async () => {
     setRegenerating(true);
@@ -365,10 +371,12 @@ export function OverviewCanvas({
           <AdInitCanvas projectName={projectName} onDone={refreshProject} />
         ) : showWelcome ? (
           <WelcomeCanvas
+            key={projectName}
             projectName={projectName}
             projectTitle={projectData.title}
             onUpload={handleUpload}
             onAnalyze={handleAnalyze}
+            analysisStatus={analysisStatus}
           />
         ) : (
           <>

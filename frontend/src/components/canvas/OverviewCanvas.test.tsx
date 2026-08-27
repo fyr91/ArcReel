@@ -6,22 +6,29 @@ import { useAppStore } from "@/stores/app-store";
 import { useAssistantStore } from "@/stores/assistant-store";
 import { useProjectsStore } from "@/stores/projects-store";
 import { useCostStore } from "@/stores/cost-store";
+import { useOverviewAnalysisStore } from "@/stores/overview-analysis-store";
 import type { ProjectData } from "@/types";
 
 vi.mock("./WelcomeCanvas", () => ({
   WelcomeCanvas: ({
     onUpload,
     onAnalyze,
+    analysisStatus,
   }: {
     onUpload: (file: File) => void;
     onAnalyze: () => void;
+    analysisStatus?: string;
   }) => (
     <div data-testid="welcome-canvas">
       <button data-testid="welcome-upload" onClick={() => onUpload(new File(["x"], "source.txt"))}>
         upload
       </button>
-      <button data-testid="welcome-analyze" onClick={() => onAnalyze()}>
-        analyze
+      <button
+        data-testid="welcome-analyze"
+        disabled={analysisStatus === "running"}
+        onClick={() => onAnalyze()}
+      >
+        {analysisStatus === "running" ? "analyzing" : "analyze"}
       </button>
     </div>
   ),
@@ -57,6 +64,7 @@ describe("OverviewCanvas", () => {
     useAssistantStore.setState(useAssistantStore.getInitialState(), true);
     useProjectsStore.setState(useProjectsStore.getInitialState(), true);
     useCostStore.setState(useCostStore.getInitialState(), true);
+    useOverviewAnalysisStore.getState().reset();
     sessionStorage.clear();
     vi.restoreAllMocks();
     vi.stubGlobal("confirm", vi.fn(() => true));
@@ -110,6 +118,44 @@ describe("OverviewCanvas", () => {
       />,
     );
     expect(screen.getByTestId("welcome-canvas")).toBeInTheDocument();
+  });
+
+  it("keeps project analysis busy after leaving and returning without submitting twice", async () => {
+    let resolveAnalysis:
+      | ((value: Awaited<ReturnType<typeof API.generateOverview>>) => void)
+      | undefined;
+    const generateOverview = vi.spyOn(API, "generateOverview").mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          resolveAnalysis = resolve;
+        }),
+    );
+    vi.spyOn(API, "getProject").mockResolvedValue({
+      project: makeProjectData(),
+      scripts: {},
+    });
+    const emptyProject = makeProjectData({ overview: undefined, episodes: [] });
+
+    const { rerender } = render(
+      <OverviewCanvas projectName="project-a" projectData={emptyProject} />,
+    );
+    fireEvent.click(screen.getByTestId("welcome-analyze"));
+    await waitFor(() => expect(generateOverview).toHaveBeenCalledTimes(1));
+
+    rerender(<OverviewCanvas projectName="project-b" projectData={emptyProject} />);
+    expect(screen.getByTestId("welcome-analyze")).toBeEnabled();
+    rerender(<OverviewCanvas projectName="project-a" projectData={emptyProject} />);
+
+    expect(screen.getByTestId("welcome-analyze")).toBeDisabled();
+    fireEvent.click(screen.getByTestId("welcome-analyze"));
+    expect(generateOverview).toHaveBeenCalledTimes(1);
+
+    useProjectsStore.setState({
+      currentProjectName: "project-a",
+      currentProjectData: emptyProject,
+    });
+    resolveAnalysis?.({ success: true, overview: makeProjectData().overview! });
+    await waitFor(() => expect(API.getProject).toHaveBeenCalledWith("project-a", expect.any(Object)));
   });
 
   it("shows the shared upload-and-analyze welcome canvas for an empty course placeholder episode", () => {

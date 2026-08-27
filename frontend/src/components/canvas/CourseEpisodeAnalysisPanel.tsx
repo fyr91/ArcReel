@@ -1,9 +1,11 @@
-import { useState } from "react";
 import { Sparkles } from "lucide-react";
 import { useTranslation } from "react-i18next";
 
-import { API } from "@/api";
 import { useAppStore } from "@/stores/app-store";
+import {
+  overviewAnalysisKey,
+  useOverviewAnalysisStore,
+} from "@/stores/overview-analysis-store";
 import { errMsg } from "@/utils/async";
 
 interface CourseEpisodeAnalysisPanelProps {
@@ -20,12 +22,16 @@ export function CourseEpisodeAnalysisPanel({
   onComplete,
 }: CourseEpisodeAnalysisPanelProps) {
   const { t } = useTranslation("dashboard");
-  const [analyzing, setAnalyzing] = useState(false);
+  const analysisKey = overviewAnalysisKey(projectName, episode);
+  const analysisStatus = useOverviewAnalysisStore(
+    (state) => state.statuses[analysisKey] ?? "idle",
+  );
+  const startAnalysis = useOverviewAnalysisStore((state) => state.startAnalysis);
+  const analyzing = analysisStatus === "running";
 
   const analyze = async () => {
-    setAnalyzing(true);
     try {
-      await API.generateEpisodeOverview(projectName, episode);
+      await startAnalysis(projectName, episode);
       await onComplete();
       useAppStore.getState().pushToast(t("course_episode_analysis_success", { episode }), "success");
     } catch (error) {
@@ -33,8 +39,6 @@ export function CourseEpisodeAnalysisPanel({
         t("course_episode_analysis_failed", { message: errMsg(error) }),
         "error",
       );
-    } finally {
-      setAnalyzing(false);
     }
   };
 
