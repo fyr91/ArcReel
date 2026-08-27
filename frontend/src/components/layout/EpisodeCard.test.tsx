@@ -113,8 +113,54 @@ describe("EpisodeCard", () => {
     const input = screen.getByRole("textbox", { name: "编辑分集标题" });
     fireEvent.change(input, { target: { value: "  景泰蓝制作工艺  " } });
     fireEvent.keyDown(input, { key: "Enter" });
+    fireEvent.blur(input);
 
-    await waitFor(() => expect(onRename).toHaveBeenCalledWith("景泰蓝制作工艺"));
+    await waitFor(() => expect(onRename).toHaveBeenCalledOnce());
+    expect(onRename).toHaveBeenCalledWith("景泰蓝制作工艺");
+    expect(screen.queryByRole("textbox", { name: "编辑分集标题" })).not.toBeInTheDocument();
+  });
+
+  it("saves and exits title editing when the input loses focus", async () => {
+    const onRename = vi.fn().mockResolvedValue(undefined);
+    render(
+      <EpisodeCard
+        ep={makeEpisode()}
+        active
+        onClick={() => {}}
+        route="reference_video"
+        onRename={onRename}
+      />,
+    );
+
+    fireEvent.doubleClick(screen.getByText("第一集"));
+    const input = screen.getByRole("textbox", { name: "编辑分集标题" });
+    fireEvent.change(input, { target: { value: "点击外部保存" } });
+    fireEvent.blur(input);
+
+    await waitFor(() => expect(onRename).toHaveBeenCalledWith("点击外部保存"));
+    expect(screen.queryByRole("textbox", { name: "编辑分集标题" })).not.toBeInTheDocument();
+  });
+
+  it("cancels a blank title and exits editing on blur", () => {
+    const onRename = vi.fn();
+    render(
+      <EpisodeCard
+        ep={makeEpisode()}
+        active
+        onClick={() => {}}
+        route="reference_video"
+        onRename={onRename}
+      />,
+    );
+
+    fireEvent.doubleClick(screen.getByText("第一集"));
+    const input = screen.getByRole("textbox", { name: "编辑分集标题" });
+    fireEvent.change(input, { target: { value: "   " } });
+    fireEvent.blur(input);
+
+    expect(onRename).not.toHaveBeenCalled();
+    expect(screen.queryByRole("textbox", { name: "编辑分集标题" })).not.toBeInTheDocument();
+    expect(screen.getByText("第一集")).toBeInTheDocument();
   });
 
   it("keeps the inline editor open when renaming fails", async () => {
@@ -133,7 +179,7 @@ describe("EpisodeCard", () => {
     fireEvent.change(screen.getByRole("textbox", { name: "编辑分集标题" }), {
       target: { value: "新标题" },
     });
-    fireEvent.keyDown(screen.getByRole("textbox", { name: "编辑分集标题" }), { key: "Enter" });
+    fireEvent.blur(screen.getByRole("textbox", { name: "编辑分集标题" }));
 
     await waitFor(() => expect(onRename).toHaveBeenCalledWith("新标题"));
     expect(screen.getByRole("textbox", { name: "编辑分集标题" })).toHaveValue("新标题");

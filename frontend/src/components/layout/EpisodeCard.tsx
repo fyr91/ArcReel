@@ -66,6 +66,7 @@ export function EpisodeCard({
   const [titleDraft, setTitleDraft] = useState(displayTitle);
   const [savingTitle, setSavingTitle] = useState(false);
   const titleInputRef = useRef<HTMLInputElement>(null);
+  const savingTitleRef = useRef(false);
 
   useEffect(() => {
     if (!editingTitle) return;
@@ -85,13 +86,14 @@ export function EpisodeCard({
   };
 
   const saveTitle = async () => {
-    if (!onRename || savingTitle) return;
+    if (!onRename || savingTitleRef.current) return;
     const next = titleDraft.trim();
     if (!next) return;
     if (next === displayTitle) {
       setEditingTitle(false);
       return;
     }
+    savingTitleRef.current = true;
     setSavingTitle(true);
     try {
       await onRename(next);
@@ -100,8 +102,18 @@ export function EpisodeCard({
       // 调用方负责 toast；保留输入内容，方便用户修正或重试。
       requestAnimationFrame(() => titleInputRef.current?.focus());
     } finally {
+      savingTitleRef.current = false;
       setSavingTitle(false);
     }
+  };
+
+  const finishTitleEdit = () => {
+    if (savingTitleRef.current) return;
+    if (!titleDraft.trim()) {
+      cancelTitleEdit();
+      return;
+    }
+    void saveTitle();
   };
 
   // 进度按视频产物的可用数算——可用 = current ∪ stale，与工作台同一份计数。
@@ -184,6 +196,7 @@ export function EpisodeCard({
             onChange={(event) => setTitleDraft(event.target.value)}
             onClick={(event) => event.stopPropagation()}
             onDoubleClick={(event) => event.stopPropagation()}
+            onBlur={finishTitleEdit}
             onKeyDown={(event) => {
               event.stopPropagation();
               if (event.nativeEvent.isComposing) return;
@@ -195,9 +208,10 @@ export function EpisodeCard({
                 cancelTitleEdit();
               }
             }}
-            disabled={savingTitle}
+            readOnly={savingTitle}
+            aria-busy={savingTitle}
             aria-label={t("edit_episode_title")}
-            className="focus-ring pointer-events-auto block w-full min-w-0 rounded border border-[var(--color-accent-soft)] bg-[oklch(0.16_0.01_250/0.9)] px-1 py-0.5 text-[13px] outline-none disabled:opacity-60"
+            className="focus-ring pointer-events-auto block w-full min-w-0 rounded border border-[var(--color-accent-soft)] bg-[oklch(0.16_0.01_250/0.9)] px-1 py-0.5 text-[13px] outline-none read-only:opacity-60"
             style={{
               color: "var(--color-text)",
               fontWeight: active ? 600 : 500,
