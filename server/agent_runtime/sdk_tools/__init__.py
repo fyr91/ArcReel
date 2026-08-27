@@ -56,6 +56,7 @@ from server.agent_runtime.sdk_tools.h3_prompt_optimization import (
 from server.agent_runtime.sdk_tools.hyperframes import (
     generate_hyperframes_bgm_tool,
     inspect_hyperframes_episode_tool,
+    make_reference_video_hd_tool,
     prepare_hyperframes_episode_tool,
 )
 from server.agent_runtime.sdk_tools.patch_episode_meta import patch_episode_meta_tool
@@ -138,6 +139,7 @@ ARCREEL_MCP_TOOL_IDS: tuple[str, ...] = (
     "prepare_hyperframes_episode",
     "inspect_hyperframes_episode",
     "generate_hyperframes_bgm",
+    "make_reference_video_hd",
     "generate_episode_script",
     "confirm_script_review",
     "normalize_drama_script",
@@ -197,6 +199,7 @@ MIGRATION_BLOCKED_TOOL_IDS: frozenset[str] = frozenset(
         "update_video_style",
         "prepare_hyperframes_episode",
         "generate_hyperframes_bgm",
+        "make_reference_video_hd",
         "generate_episode_script",
         "confirm_script_review",
         "normalize_drama_script",
@@ -271,6 +274,7 @@ def build_arcreel_mcp_server(
         prepare_hyperframes_episode_tool(ctx),
         inspect_hyperframes_episode_tool(ctx),
         generate_hyperframes_bgm_tool(ctx),
+        make_reference_video_hd_tool(ctx),
         generate_episode_script_tool(ctx),
         confirm_script_review_tool(ctx),
         normalize_drama_script_tool(ctx),

@@ -100,6 +100,52 @@ def test_list_units_404_for_unknown_project(client: TestClient):
 
 
 @pytest.mark.unit
+def test_hd_status_uses_shared_operation(client: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:
+    from server.routers import reference_videos as router_mod
+
+    operation = AsyncMock(return_value={"state": "available", "unit_id": "E1U01"})
+    monkeypatch.setattr(router_mod, "h3_refine_status", operation)
+
+    response = client.get("/api/v1/projects/demo/reference-videos/episodes/1/units/E1U01/hd")
+
+    assert response.status_code == 200
+    assert response.json()["state"] == "available"
+    assert operation.await_args.args[1:4] == ("demo", 1, "E1U01")
+    assert operation.await_args.kwargs["user_id"] == "u1"
+
+
+@pytest.mark.unit
+def test_hd_submit_uses_shared_operation(client: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:
+    from server.routers import reference_videos as router_mod
+
+    operation = AsyncMock(return_value={"task_id": "hd-1", "status": "queued", "deduped": False})
+    monkeypatch.setattr(router_mod, "enqueue_h3_refine_task", operation)
+
+    response = client.post("/api/v1/projects/demo/reference-videos/episodes/1/units/E1U01/hd")
+
+    assert response.status_code == 202
+    assert response.json()["task_id"] == "hd-1"
+    assert operation.await_args.args[1:4] == ("demo", 1, "E1U01")
+    assert operation.await_args.kwargs == {"source": "webui", "user_id": "u1"}
+
+
+@pytest.mark.unit
+def test_hd_submit_localizes_structured_rejection(client: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:
+    from server.routers import reference_videos as router_mod
+
+    operation = AsyncMock(side_effect=router_mod.H3RefineUnavailable("video_hd_confirm_first"))
+    monkeypatch.setattr(router_mod, "enqueue_h3_refine_task", operation)
+
+    response = client.post(
+        "/api/v1/projects/demo/reference-videos/episodes/1/units/E1U01/hd",
+        headers={"Accept-Language": "en"},
+    )
+
+    assert response.status_code == 409
+    assert response.json()["detail"] == "Confirm the current video before making it HD"
+
+
+@pytest.mark.unit
 def test_update_h3_prompt_routes_through_the_shared_operation(
     client: TestClient,
     monkeypatch: pytest.MonkeyPatch,

@@ -10,6 +10,7 @@ from claude_agent_sdk import tool
 from lib.narration_delivery import POST_PRODUCTION, USE_TTS
 from lib.path_safety import safe_join
 from server.agent_runtime.sdk_tools._context import ToolContext, tool_error
+from server.services.h3_refine_tasks import enqueue_h3_refine_task
 from server.services.hyperframes_music import MAX_MUSIC_DIRECTION_LENGTH
 from server.services.hyperframes_music_tasks import enqueue_hyperframes_bgm_task
 from server.services.hyperframes_workspace import HyperframesWorkspaceService
@@ -48,6 +49,7 @@ def prepare_hyperframes_episode_tool(ctx: ToolContext):
                 ctx.project_name,
                 episode,
                 variant=variant,
+                user_id=ctx.user_id,
             )
         except Exception as exc:  # noqa: BLE001
             return tool_error("prepare_hyperframes_episode", exc)
@@ -112,6 +114,54 @@ def inspect_hyperframes_episode_tool(ctx: ToolContext):
         return {
             "content": [{"type": "text", "text": json.dumps(payload, ensure_ascii=False, indent=2)}],
             "inspection": payload,
+        }
+
+    return _handler
+
+
+def make_reference_video_hd_tool(ctx: ToolContext):
+    @tool(
+        "make_reference_video_hd",
+        "将已确认的 MiniMax H3 480P 视频异步处理为高清版；立即返回 task_id。",
+        {
+            "type": "object",
+            "properties": {
+                "episode": {"type": "integer", "minimum": 1},
+                "unit_id": {"type": "string", "minLength": 1},
+            },
+            "required": ["episode", "unit_id"],
+            "additionalProperties": False,
+        },
+    )
+    async def _handler(args: dict[str, Any]) -> dict[str, Any]:
+        episode = args.get("episode")
+        unit_id = args.get("unit_id")
+        if type(episode) is not int or episode <= 0:
+            return tool_error("make_reference_video_hd", ValueError("episode 必须是正整数"))
+        if not isinstance(unit_id, str) or not unit_id.strip():
+            return tool_error("make_reference_video_hd", ValueError("unit_id 必须是非空文本"))
+        try:
+            task = await enqueue_h3_refine_task(
+                ctx.pm,
+                ctx.project_name,
+                episode,
+                unit_id.strip(),
+                source="agent",
+                user_id=ctx.user_id,
+            )
+        except Exception as exc:  # noqa: BLE001
+            return tool_error("make_reference_video_hd", exc)
+        payload = {
+            "task_id": task["task_id"],
+            "status": task["status"],
+            "deduped": bool(task.get("deduped", False)),
+            "episode": episode,
+            "unit_id": unit_id.strip(),
+            "message": "高清任务已提交；成功后会自动选中高清版。",
+        }
+        return {
+            "content": [{"type": "text", "text": json.dumps(payload, ensure_ascii=False, indent=2)}],
+            "task": payload,
         }
 
     return _handler
@@ -182,5 +232,6 @@ def generate_hyperframes_bgm_tool(ctx: ToolContext):
 __all__ = [
     "generate_hyperframes_bgm_tool",
     "inspect_hyperframes_episode_tool",
+    "make_reference_video_hd_tool",
     "prepare_hyperframes_episode_tool",
 ]

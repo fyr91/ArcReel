@@ -78,6 +78,11 @@ from server.services.cost_estimation import quote_video_request
 from server.services.effective_global_assets import resolve_linked_global_reference_audio_paths
 from server.services.generation_tasks import emit_generation_success_batch
 from server.services.h3_prompt_optimization import H3PromptOptimizationError, H3PromptOptimizationService
+from server.services.h3_refine_tasks import (
+    H3RefineUnavailable,
+    enqueue_h3_refine_task,
+    h3_refine_status,
+)
 from server.services.image_model_selection import ImageModelSelection
 from server.services.narration_delivery_tasks import (
     prepare_current_reference_video_request_options,
@@ -1014,6 +1019,49 @@ async def confirm_unit_video(
     }
 
 
+@router.get("/episodes/{episode}/units/{unit_id}/hd")
+async def get_unit_hd_status(
+    project_name: str,
+    episode: int,
+    unit_id: str,
+    user: CurrentUser,
+    _t: Translator,
+) -> dict[str, Any]:
+    result = await h3_refine_status(
+        get_project_manager(),
+        project_name,
+        episode,
+        unit_id,
+        user_id=user.id,
+    )
+    code = result.get("code")
+    if isinstance(code, str):
+        params = result.get("params")
+        result["message"] = _t(code, **(params if isinstance(params, dict) else {}))
+    return result
+
+
+@router.post("/episodes/{episode}/units/{unit_id}/hd", status_code=status.HTTP_202_ACCEPTED)
+async def make_unit_hd(
+    project_name: str,
+    episode: int,
+    unit_id: str,
+    user: CurrentUser,
+    _t: Translator,
+) -> dict[str, Any]:
+    try:
+        return await enqueue_h3_refine_task(
+            get_project_manager(),
+            project_name,
+            episode,
+            unit_id,
+            source="webui",
+            user_id=user.id,
+        )
+    except H3RefineUnavailable as exc:
+        raise HTTPException(status_code=409, detail=_t(exc.code, **exc.params)) from exc
+
+
 @router.get("/episodes/{episode}/units/{unit_id}/duration-precheck")
 async def precheck_unit_duration(
     project_name: str,
@@ -1483,7 +1531,7 @@ async def generate_units_batch(
             **(spec.payload or {}),
             "reference_request_options": options.to_payload(),
         }
-    if project.get("content_mode") == "course":
+    if project.get("content_mode") in {"course", "drama"}:
         target_ids = {spec.resource_id for spec in specs}
         unit_by_id = {unit.get("unit_id"): unit for unit in targets}
         for index, spec in enumerate(specs):

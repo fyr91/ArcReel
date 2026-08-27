@@ -137,6 +137,74 @@ describe("UnitPreviewPanel", () => {
     expect(screen.getByTestId("presentation-player")).toHaveAttribute("data-resource-id", "E1U1");
   });
 
+  it("shows one simple HD action only after the video is confirmed", () => {
+    const onMakeHd = vi.fn();
+    const unit = mkUnit({
+      generated_assets: {
+        ...mkUnit().generated_assets,
+        status: "completed",
+        video_clip: "reference_videos/E1U1.mp4",
+      },
+    });
+    const { rerender } = render(
+      <UnitPreviewPanel
+        unit={unit}
+        projectName="proj"
+        status="ready"
+        onMakeHd={onMakeHd}
+        hdState="available"
+      />,
+    );
+    expect(screen.queryByRole("button", { name: /^HD$|^高清$/ })).not.toBeInTheDocument();
+
+    rerender(
+      <UnitPreviewPanel
+        unit={unit}
+        projectName="proj"
+        status="ready"
+        videoConfirmed
+        onMakeHd={onMakeHd}
+        hdState="available"
+      />,
+    );
+    fireEvent.click(screen.getByRole("button", { name: /^HD$|^高清$/ }));
+    expect(onMakeHd).toHaveBeenCalledWith("E1U1");
+  });
+
+  it("renders HD processing and completion without exposing refine terminology", () => {
+    const unit = mkUnit({
+      generated_assets: {
+        ...mkUnit().generated_assets,
+        status: "completed",
+        video_clip: "reference_videos/E1U1.mp4",
+      },
+    });
+    const { rerender } = render(
+      <UnitPreviewPanel
+        unit={unit}
+        projectName="proj"
+        status="ready"
+        videoConfirmed
+        onMakeHd={vi.fn()}
+        hdState="processing"
+      />,
+    );
+    expect(screen.getByText(/Making HD|高清处理中/)).toBeInTheDocument();
+    expect(screen.queryByText(/refine|latent|二采/i)).not.toBeInTheDocument();
+
+    rerender(
+      <UnitPreviewPanel
+        unit={unit}
+        projectName="proj"
+        status="ready"
+        videoConfirmed
+        onMakeHd={vi.fn()}
+        hdState="completed"
+      />,
+    );
+    expect(screen.getByText(/HD ready|已高清/)).toBeInTheDocument();
+  });
+
   it("invokes onUploadVideo with unit id and selected file", () => {
     const onUploadVideo = vi.fn();
     const { container } = render(
