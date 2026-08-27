@@ -62,6 +62,18 @@ describe("MediaCard upload", () => {
     expect(input?.accept).toContain(".mp4");
   });
 
+  it("previews an existing video path directly", () => {
+    const { container } = renderCard({
+      kind: "video",
+      assetPath: "videos/scene_E1S01.mp4",
+      posterPath: "storyboards/scene_E1S01.png",
+    });
+
+    const video = container.querySelector("video");
+    expect(video?.getAttribute("src")).toContain("/files/demo/videos/scene_E1S01.mp4");
+    expect(video?.getAttribute("poster")).toContain("/files/demo/storyboards/scene_E1S01.png");
+  });
+
   it("disables the generate CTA when a sibling upload is in flight (uploadDisabled)", () => {
     const { getByRole } = renderCard({ onGenerate: vi.fn(), uploadDisabled: true });
     expect(getByRole("button", { name: /生成分镜/ })).toBeDisabled();
