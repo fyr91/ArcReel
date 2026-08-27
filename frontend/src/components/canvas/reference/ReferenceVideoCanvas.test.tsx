@@ -438,6 +438,56 @@ describe("ReferenceVideoCanvas", () => {
     );
   });
 
+  it("shows course type and related assets as read-only projections of the current manuscript", async () => {
+    useProjectsStore.setState({
+      currentProjectName: "proj",
+      currentProjectData: {
+        ...STUB_PROJECT,
+        content_mode: "course",
+        characters: {
+          学员: {
+            description: "",
+            character_sheet: "characters/student.png",
+            course_role: "actor",
+          },
+        },
+        scenes: {
+          教室: { description: "", scene_sheet: "scenes/classroom.png" },
+          操场: { description: "", scene_sheet: "scenes/playground.png" },
+        },
+        props: { 课本: { description: "", prop_sheet: "props/book.png" } },
+      },
+    });
+    vi.spyOn(API, "listReferenceVideoUnits").mockResolvedValue({
+      units: [
+        {
+          ...mkUnit("E1U1", "@[教室] 里，@[学员] 拿起 @[课本]。"),
+          unit_type: "story",
+        },
+      ],
+    });
+
+    render(<ReferenceVideoCanvas projectName="proj" episode={1} />);
+    const textarea = await screen.findByRole("combobox");
+    const editorPanel = screen.getByRole("tabpanel");
+    const editorUnitId = within(editorPanel).getByText("E1U1");
+    expect(editorUnitId.parentElement).toHaveTextContent(/Story|故事演绎/);
+
+    const assets = within(editorPanel).getByRole("region", {
+      name: /Assets referenced by the script|文稿相关素材/,
+    });
+    expect(within(assets).getByText("教室")).toBeInTheDocument();
+    expect(within(assets).getByText("学员")).toBeInTheDocument();
+    expect(within(assets).getByText("课本")).toBeInTheDocument();
+    expect(assets.querySelector("select, input, button, textarea")).toBeNull();
+
+    fireEvent.change(textarea, { target: { value: "@[操场] 空无一人。" } });
+    expect(within(assets).getByText("操场")).toBeInTheDocument();
+    expect(within(assets).queryByText("教室")).toBeNull();
+    expect(within(assets).queryByText("学员")).toBeNull();
+    expect(within(assets).queryByText("课本")).toBeNull();
+  });
+
   // 未登记的 `@[名称]` 只是提示：保存与生成入口都不受影响。
   it("keeps saving and generating available when the body mentions an unregistered name", async () => {
     const unit = mkUnit("E1U1", "推门。");

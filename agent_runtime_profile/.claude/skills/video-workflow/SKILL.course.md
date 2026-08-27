@@ -15,7 +15,8 @@ description: 编排课程视频项目的单文档单集工作流；用户说继�
 3. `analyze_assets`：严格传入计划给出的 `episode`、单文件 `scope` 和 revision；提取角色、场景、道具。角色以 `course_role` 区分一位主讲、零到多位特邀和故事演员。能匹配全局角色则复用，否则新建。
 4. `generate_asset_sheets`：沿用现有资产图流程；讲师额外生成 1:1 方形头像衍生图。
 5. `prepare_step1`：dispatch `next_action.args.preprocessor` 指定的子任务，产出单集 course video units；不调用 episode planning。
-6. `confirm_step1`：展示可编辑的 unit 类型、文稿、场景、角色、道具与讲师，用户确认后继续。
+6. `confirm_step1`：展示可编辑的文稿与时长；unit 类型以只读 tag 展示，场景、角色和道具按文稿
+   `@[名称]` mention 实时派生为只读预览。用户通过修改文稿引用改变相关素材，确认后继续。
 7. `generate_script`：沿用现有 ReferenceVideoScript 生成。
 8. 沿用 Storyboard Sheet 与 Keyframes 的生成、编辑和确认。
 9. 先并行生成 `opening`、全部 `story`、`closing`，逐条确认视频。

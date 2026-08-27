@@ -36,10 +36,12 @@ function ControlledCard({
   unit,
   initial,
   onChange,
+  showUnitType,
 }: {
   unit: ReferenceVideoUnit;
   initial?: string;
   onChange?: (next: string) => void;
+  showUnitType?: boolean;
 }) {
   const [val, setVal] = useState(initial ?? unit.text);
   return (
@@ -48,6 +50,7 @@ function ControlledCard({
       projectName="proj"
       episode={1}
       value={val}
+      showUnitType={showUnitType}
       onChange={(next) => {
         setVal(next);
         onChange?.(next);
@@ -81,6 +84,16 @@ afterEach(() => {
 });
 
 describe("ReferenceVideoCard", () => {
+  it("shows a course unit type as a read-only tag beside the unit ID", () => {
+    const unit = mkUnit({ unit_type: "explanation" });
+    const { container } = render(<ControlledCard unit={unit} showUnitType />);
+
+    expect(screen.getByText("E1U1").parentElement).toHaveTextContent(
+      /Knowledge explanation|知识解说/,
+    );
+    expect(container.querySelector("select")).toBeNull();
+  });
+
   // 正文是唯一真相：编辑器逐字展示 `text`，不合成任何前缀。
   it("renders the unit body verbatim, multi-line included", () => {
     const unit = mkUnit({ text: "line1\nline2", duration_seconds: 8 });

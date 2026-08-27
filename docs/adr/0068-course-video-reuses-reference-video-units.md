@@ -15,8 +15,10 @@ status: accepted
 
 - 角色资产增加 `course_role`：恰好一位 `main_lecturer`、零到多位
   `guest_lecturer`，其余为 `actor`。讲师仍是角色资产；全局库匹配失败时按普通新角色生成。
-- Unit 增加 `opening`、`story`、`explanation`、`closing` 类型，以及可编辑的场景、演员、
-  道具和讲师引用。首尾各一个，位于固定首尾，共用一个场景和同一组至少一位角色。
+- Unit 增加 `opening`、`story`、`explanation`、`closing` 类型；类型由工作流规划，在文稿编辑器中
+  以只读 tag 展示。场景、角色和道具不提供独立编辑入口，编辑器按当前正文的 `@[名称]` mention
+  实时派生圆形素材预览；台词说话人也进入角色信息组。首尾各一个，位于固定首尾，共用一个场景
+  和同一组至少一位角色。
 - 第一条 explanation 依赖前一条 story；连续 explanation 依赖前一条 explanation；新 story
   开启新的依赖链。不同 story 链的基础视频可并行生成。
 - 先生成并确认 opening/story/closing，再生成 explanation。执行 explanation 时，从直接前置

@@ -25,7 +25,9 @@
 2. 一个或多个 `story`，每段故事后可接一个或多个连续 `explanation`；
 3. 唯一 `closing`。
 
-opening 与 closing 必须共用同一个场景和同一组至少一位角色。每个 unit 的正文、时长、场景、角色、道具和讲师均由用户在现有 Unit 编辑器中审核和调整。
+opening 与 closing 必须共用同一个场景和同一组至少一位角色。Unit 编辑器允许用户调整正文与时长；
+单元类型以只读 tag 展示，场景、角色和道具由当前正文的 `@[名称]` mention 实时派生为只读素材预览。
+用户要改变相关素材时直接修改正文引用，不维护第二份素材选择结果。
 
 explanation 的依赖按顺序机械派生：故事后的第一条依赖该 story；连续 explanation 依赖前一条 explanation；遇到新 story 开启新链。不同 story 链可并行。
 

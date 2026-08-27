@@ -17,6 +17,8 @@ export interface ReferenceVideoCardProps {
   /** Image descriptions share the same asset picker but do not reference sibling Keyframes. */
   includeKeyframes?: boolean;
   showMeta?: boolean;
+  /** Course units expose their workflow-owned type as a read-only tag beside the unit ID. */
+  showUnitType?: boolean;
   placeholder?: string;
   ariaLabel?: string;
   disabled?: boolean;
@@ -30,6 +32,7 @@ export function ReferenceVideoCard({
   onChange,
   includeKeyframes = true,
   showMeta = true,
+  showUnitType = false,
   placeholder,
   ariaLabel,
   disabled = false,
@@ -55,8 +58,15 @@ export function ReferenceVideoCard({
     <div className="flex h-full min-h-0 flex-1 flex-col">
       {showMeta && (
         <div className="mb-1 flex items-center justify-between text-[11px] text-gray-500">
-          <span className="font-mono text-gray-400" translate="no">
-            {unit.unit_id}
+          <span className="flex min-w-0 items-center gap-1.5">
+            <span className="font-mono text-gray-400" translate="no">
+              {unit.unit_id}
+            </span>
+            {showUnitType && unit.unit_type && (
+              <span className="rounded-full border border-violet-400/20 bg-violet-500/10 px-2 py-0.5 text-[9px] font-medium tracking-wide text-violet-200">
+                {t(`course_unit_${unit.unit_type}`)}
+              </span>
+            )}
           </span>
           <span className="tabular-nums text-gray-500">
             {t("reference_editor_unit_meta", { duration: unit.duration_seconds })}
