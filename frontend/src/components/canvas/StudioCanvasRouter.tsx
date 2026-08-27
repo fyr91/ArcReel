@@ -31,6 +31,7 @@ import { ProductsPage } from "./lorebook/ProductsPage";
 import { ReferenceVideoCanvas } from "./reference/ReferenceVideoCanvas";
 import { GridImageToVideoCanvas } from "./grid/GridImageToVideoCanvas";
 import { EpisodeSourceReview } from "./EpisodeSourceReview";
+import { CourseEpisodeAnalysisPanel } from "./CourseEpisodeAnalysisPanel";
 import { WorkflowPanel } from "@/components/workflow/WorkflowPanel";
 import { API, NarratedVideoDurationError } from "@/api";
 import {
@@ -64,6 +65,7 @@ import type {
   ProviderInfo,
   ReferenceGenerationRequestOptions,
   ImageModelSelection,
+  ProjectOverview,
 } from "@/types";
 import type { EpisodeScript } from "@/types/script";
 
@@ -276,6 +278,54 @@ export function StudioCanvasRouter() {
     } catch (err) {
       useAppStore.getState().pushToast(tRef.current("episode_title_update_failed", { message: errMsg(err) }), "error");
       throw err; // 让 EditableEpisodeTitle 保持编辑态，不误清空
+    }
+  }, [currentProjectName, refreshProject]);
+
+  const handleRegenerateEpisodeOverview = useCallback(async (episode: number) => {
+    if (!currentProjectName) return;
+    try {
+      await API.generateEpisodeOverview(currentProjectName, episode);
+      await refreshProject();
+      useAppStore.getState().pushToast(
+        tRef.current("course_episode_analysis_success", { episode }),
+        "success",
+      );
+    } catch (err) {
+      useAppStore.getState().pushToast(
+        tRef.current("course_episode_analysis_failed", { message: errMsg(err) }),
+        "error",
+      );
+      throw err;
+    }
+  }, [currentProjectName, refreshProject]);
+
+  const handleConfirmEpisodeOverview = useCallback(async (
+    episode: number,
+    overview: ProjectOverview,
+    sourceRevision?: string | null,
+  ) => {
+    if (!currentProjectName) throw new Error("project is unavailable");
+    if (!sourceRevision) {
+      const error = new Error("episode analysis source revision is unavailable");
+      useAppStore.getState().pushToast(
+        tRef.current("course_episode_overview_confirm_failed", { message: errMsg(error) }),
+        "error",
+      );
+      throw error;
+    }
+    try {
+      await API.confirmEpisodeOverview(currentProjectName, episode, overview, sourceRevision);
+      await refreshProject();
+      useAppStore.getState().pushToast(
+        tRef.current("course_episode_overview_confirmed"),
+        "success",
+      );
+    } catch (err) {
+      useAppStore.getState().pushToast(
+        tRef.current("course_episode_overview_confirm_failed", { message: errMsg(err) }),
+        "error",
+      );
+      throw err;
     }
   }, [currentProjectName, refreshProject]);
 
@@ -805,6 +855,13 @@ export function StudioCanvasRouter() {
               <div className="min-h-0 flex-1">
                 {demoMode && !script ? (
                   <DemoEpisodePlaceholder />
+                ) : isCourse && episode?.source_file && !episode.overview ? (
+                  <CourseEpisodeAnalysisPanel
+                    projectName={currentProjectName}
+                    episode={epNum}
+                    sourceFile={episode.source_file}
+                    onComplete={refreshProject}
+                  />
                 ) : showSourceReview && episode ? (
                   <EpisodeSourceReview
                     projectName={currentProjectName}
@@ -823,6 +880,12 @@ export function StudioCanvasRouter() {
                     episodeTitle={episode?.title}
                     onSaveTitle={(title) => handleUpdateEpisodeTitle(epNum, title)}
                     canEditTitle={Boolean(episode?.script_file)}
+                    episodeOverview={episode?.overview}
+                    episodeOverviewStatus={episode?.overview_status}
+                    onConfirmOverview={(overview) =>
+                      handleConfirmEpisodeOverview(epNum, overview, episode?.source_revision)
+                    }
+                    onRegenerateOverview={() => handleRegenerateEpisodeOverview(epNum)}
                     hasScript={Boolean(script)}
                     scriptFile={scriptFile ?? undefined}
                     showPreprocess={!isAd}

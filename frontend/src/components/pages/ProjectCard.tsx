@@ -10,10 +10,17 @@ import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react"
 import { Link } from "wouter";
 import { MoreHorizontal, Trash2 } from "lucide-react";
 import { useTranslation } from "react-i18next";
+import type { TFunction } from "i18next";
 import { getProjectDisplayName } from "@/utils/project-display";
 import { ProgressBar } from "@/components/ui/ProgressBar";
 import { hashHue, posterGridStyle } from "@/components/ui/darkroom-tokens";
-import type { ArtifactCount, Phase, ProjectStatus, ProjectSummary } from "@/types";
+import type {
+  ArtifactCount,
+  Phase,
+  ProjectContentMode,
+  ProjectStatus,
+  ProjectSummary,
+} from "@/types";
 
 interface PhaseTone {
   dot: string;
@@ -199,6 +206,33 @@ export function PhasePill({ phase, label }: { phase: Phase | null; label: string
   );
 }
 
+/** 列表接口的内容类型映射到面向用户的项目类型名称。 */
+export function contentModeLabelOf(
+  contentMode: ProjectContentMode | null,
+  t: TFunction,
+): string {
+  switch (contentMode) {
+    case "course":
+      return t("dashboard:course_video");
+    case "ad":
+      return t("dashboard:ad_short_video");
+    case "drama":
+      return t("dashboard:drama_animation");
+    default:
+      return "";
+  }
+}
+
+/** 项目类型与工作流阶段是不同维度，使用独立标签避免把两者混为一个状态。 */
+export function ContentModePill({ label }: { label: string }) {
+  if (!label) return null;
+  return (
+    <span className="inline-flex items-center rounded-full border border-accent/25 bg-accent-dim px-2 py-[2px] font-mono text-[10px] font-semibold tracking-[0.04em] text-accent-2">
+      {label}
+    </span>
+  );
+}
+
 function episodeDotColor(
   i: number,
   summary: ProjectStatus["episodes_summary"],
@@ -357,12 +391,14 @@ export function ProjectCard(props: ProjectCardProps) {
   const episodes =
     status?.episodes_summary ?? { total: 0, scripted: 0, in_production: 0, completed: 0 };
   const projectDisplayName = getProjectDisplayName(project.title, t("untitled_project"));
+  const contentModeLabel = contentModeLabelOf(project.content_mode, t);
   // 演示卡的可读名里带上「只读」：视觉上有 eyebrow 说明，只听朗读的人否则会以为点进的是自己的项目
   // 「需要修复」与原因也进可读名：视觉上是一枚 pill 加一行原因，只听朗读的人否则拿不到
   // 这张卡为什么被阻断
   const repairReason = repairReasonOf(status);
   const linkLabel = [
     projectDisplayName,
+    contentModeLabel,
     styleLabel,
     phaseLabel,
     status?.needs_repair ? t("lobby_card_needs_repair") : "",
@@ -396,7 +432,8 @@ export function ProjectCard(props: ProjectCardProps) {
           </span>
         </div>
 
-        <div className="mb-3 flex items-center gap-2">
+        <div className="mb-3 flex flex-wrap items-center gap-2">
+          <ContentModePill label={contentModeLabel} />
           <PhasePill phase={phase} label={phaseLabel} />
           {status?.needs_repair ? <NeedsRepairPill /> : null}
         </div>

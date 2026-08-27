@@ -7,6 +7,10 @@ import { API, ConflictError } from "@/api";
 import { useProjectsStore } from "@/stores/projects-store";
 import { useAppStore } from "@/stores/app-store";
 import { useCostStore } from "@/stores/cost-store";
+import {
+  overviewAnalysisKey,
+  useOverviewAnalysisStore,
+} from "@/stores/overview-analysis-store";
 import { costEntries, formatCost, totalBreakdown } from "@/utils/cost-format";
 import { errMsg } from "@/utils/async";
 import { itemCountKey, normalizeRoute } from "@/utils/generation-mode";
@@ -72,6 +76,12 @@ export function OverviewCanvas({
   const isAd = projectData?.content_mode === "ad";
   // 内容规模的口径按生成路线定，与创作类型无关：分镜路线报分镜数、参考路线报视频单元数。
   const route = normalizeRoute(projectData?.generation_mode);
+  const analysisEpisode = projectData?.content_mode === "course" ? 1 : undefined;
+  const analysisKey = overviewAnalysisKey(projectName, analysisEpisode);
+  const analysisStatus = useOverviewAnalysisStore(
+    (state) => state.statuses[analysisKey] ?? "idle",
+  );
+  const startOverviewAnalysis = useOverviewAnalysisStore((state) => state.startAnalysis);
   const projectTotals = useCostStore((s) => s.costData?.project_totals);
   const getEpisodeCost = useCostStore((s) => s.getEpisodeCost);
   const costLoading = useCostStore((s) => s.loading);
@@ -220,14 +230,18 @@ export function OverviewCanvas({
   );
 
   const handleAnalyze = useCallback(async () => {
-    await API.generateOverview(projectName);
+    await startOverviewAnalysis(projectName, analysisEpisode);
     await refreshProject();
-  }, [projectName, refreshProject]);
+  }, [analysisEpisode, projectName, refreshProject, startOverviewAnalysis]);
 
   const handleRegenerate = useCallback(async () => {
     setRegenerating(true);
     try {
-      await API.generateOverview(projectName);
+      if (projectData?.content_mode === "course") {
+        await API.generateEpisodeOverview(projectName, 1);
+      } else {
+        await API.generateOverview(projectName);
+      }
       await refreshProject();
       useAppStore.getState().pushToast(tRef.current("project_overview_regenerated"), "success");
     } catch (err) {
@@ -237,7 +251,7 @@ export function OverviewCanvas({
     } finally {
       setRegenerating(false);
     }
-  }, [projectName, refreshProject]);
+  }, [projectData?.content_mode, projectName, refreshProject]);
 
   const [editingOverview, setEditingOverview] = useState(false);
   const [savingOverview, setSavingOverview] = useState(false);
@@ -281,15 +295,31 @@ export function OverviewCanvas({
     setSavingOverview(true);
     try {
       // 与分集标题写入口一致:落盘前裁剪首尾空白(避免持久化纯空白/缩进噪音)
-      await API.updateOverview(projectName, {
+      const updates = {
         synopsis: draft.synopsis.trim(),
         genre: draft.genre.trim(),
         theme: draft.theme.trim(),
         world_setting: draft.world_setting.trim(),
-      });
+      };
+      if (projectData?.content_mode === "course") {
+        const firstEpisode = projectData.episodes?.find((episode) => episode.episode === 1);
+        if (!firstEpisode?.source_revision) {
+          throw new Error("episode analysis source revision is unavailable");
+        }
+        await API.confirmEpisodeOverview(projectName, 1, updates, firstEpisode.source_revision);
+      } else {
+        await API.updateOverview(projectName, updates);
+      }
       await refreshProject();
       setEditingOverview(false);
-      useAppStore.getState().pushToast(tRef.current("overview_updated"), "success");
+      useAppStore.getState().pushToast(
+        tRef.current(
+          projectData?.content_mode === "course"
+            ? "course_episode_overview_confirmed"
+            : "overview_updated",
+        ),
+        "success",
+      );
     } catch (err) {
       useAppStore
         .getState()
@@ -297,7 +327,7 @@ export function OverviewCanvas({
     } finally {
       setSavingOverview(false);
     }
-  }, [projectName, draft, refreshProject]);
+  }, [projectData, projectName, draft, refreshProject]);
 
   if (!projectData) {
     // 项目数据加载期间保留同结构的空容器（不渲染居中 loading 文字），
@@ -357,10 +387,12 @@ export function OverviewCanvas({
           <AdInitCanvas projectName={projectName} onDone={refreshProject} />
         ) : showWelcome ? (
           <WelcomeCanvas
+            key={projectName}
             projectName={projectName}
             projectTitle={projectData.title}
             onUpload={handleUpload}
             onAnalyze={handleAnalyze}
+            analysisStatus={analysisStatus}
           />
         ) : (
           <>
@@ -485,7 +517,11 @@ export function OverviewCanvas({
                           "inset 0 1px 0 oklch(1 0 0 / 0.35), 0 6px 18px -4px var(--color-accent-glow), 0 0 0 1px var(--color-accent-soft)",
                       }}
                     >
-                      {savingOverview ? t("common:saving") : t("common:save")}
+                      {savingOverview
+                        ? t("common:saving")
+                        : projectData.content_mode === "course"
+                          ? t("course_episode_save_and_confirm")
+                          : t("common:save")}
                     </button>
                     <button
                       type="button"

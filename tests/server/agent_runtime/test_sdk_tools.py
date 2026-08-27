@@ -14,6 +14,7 @@ import json
 import re
 from dataclasses import replace
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Any
 from unittest.mock import AsyncMock
 
@@ -55,6 +56,7 @@ from server.agent_runtime.sdk_tools.enqueue_videos import (
     generate_video_scene_tool,
     generate_video_selected_tool,
 )
+from server.agent_runtime.sdk_tools.episode_overview import generate_episode_overview_tool
 from server.agent_runtime.sdk_tools.h3_prompt_optimization import (
     confirm_h3_video_prompts_tool,
     optimize_h3_video_prompts_tool,
@@ -533,6 +535,23 @@ def test_generate_narration_audio_registered() -> None:
     from server.agent_runtime.sdk_tools import ARCREEL_MCP_TOOL_IDS
 
     assert "generate_narration_audio" in ARCREEL_MCP_TOOL_IDS
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_generate_episode_overview_tool_uses_session_project_and_episode(fake_ctx: ToolContext) -> None:
+    generate = AsyncMock(return_value={"synopsis": "独立第二集", "source_revision": "sha256-v1:" + "a" * 64})
+    fake_ctx.pm.generate_episode_overview = generate  # type: ignore[attr-defined,method-assign]
+
+    result = await generate_episode_overview_tool(fake_ctx).handler({"episode": 2})
+
+    generate.assert_awaited_once_with("demo", 2)
+    payload = json.loads(result["content"][0]["text"])
+    assert payload["overview"]["synopsis"] == "独立第二集"
+    from server.agent_runtime.sdk_tools import ARCREEL_MCP_TOOL_IDS, MIGRATION_BLOCKED_TOOL_IDS
+
+    assert "generate_episode_overview" in ARCREEL_MCP_TOOL_IDS
+    assert "generate_episode_overview" in MIGRATION_BLOCKED_TOOL_IDS
 
 
 @pytest.mark.unit
@@ -6636,6 +6655,74 @@ async def test_reset_episode_planning_requires_from_episode(fake_ctx: ToolContex
 
     out = await _call(mod.reset_episode_planning_tool(fake_ctx), {})
     assert out.get("is_error") is True
+
+
+# ---------------------------------------------------------------------------
+# delete_course_episode — two-phase confirmation boundary
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.unit
+async def test_delete_course_episode_tool_previews_before_commit(
+    fake_ctx: ToolContext,
+    monkeypatch,
+) -> None:
+    from server.agent_runtime.sdk_tools import delete_course_episode as mod
+
+    calls: list[tuple[str, object]] = []
+
+    class _Service:
+        def __init__(self, pm):
+            assert pm is fake_ctx.pm
+
+        def preview(self, project_name: str, episode: int):
+            calls.append(("preview", (project_name, episode)))
+            return SimpleNamespace(
+                to_dict=lambda: {
+                    "episode": episode,
+                    "title": "Lesson",
+                    "effects": {
+                        "source_files": 1,
+                        "scripts": 1,
+                        "drafts": 2,
+                        "generated_artifacts": 3,
+                        "workspace_files": 0,
+                    },
+                    "total_files": 7,
+                    "artifact_claims": 3,
+                    "confirmation_token": "confirm-me",
+                    "expires_in": 300,
+                }
+            )
+
+        async def delete_async(self, project_name: str, episode: int, token: str):
+            calls.append(("delete", (project_name, episode, token)))
+            return SimpleNamespace(
+                to_dict=lambda: {
+                    "success": True,
+                    "episode": episode,
+                    "title": "Lesson",
+                    "deleted_files": [],
+                    "deleted_file_count": 0,
+                    "removed_artifact_claims": 3,
+                }
+            )
+
+    monkeypatch.setattr(mod, "CourseEpisodeDeletionService", _Service)
+    tool_obj = mod.delete_course_episode_tool(fake_ctx)
+
+    preview = await _call(tool_obj, {"episode": 1})
+
+    assert preview.get("is_error") is not True
+    assert preview["preview"]["requires_confirmation"] is True
+    assert preview["preview"]["confirmation_token"] == "confirm-me"
+    assert calls == [("preview", ("demo", 1))]
+
+    deleted = await _call(tool_obj, {"episode": 1, "confirmation_token": "confirm-me"})
+
+    assert deleted.get("is_error") is not True
+    assert deleted["result"]["success"] is True
+    assert calls[-1] == ("delete", ("demo", 1, "confirm-me"))
 
 
 # ---------------------------------------------------------------------------

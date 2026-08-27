@@ -18,11 +18,13 @@ from typing import BinaryIO
 from urllib.parse import urlsplit, urlunsplit
 
 from lib import PROJECT_ROOT
+from lib.db.base import DEFAULT_USER_ID
 from lib.json_io import atomic_write_json
 from lib.narration_delivery import POST_PRODUCTION
 from lib.path_safety import safe_join
 from lib.project_manager import ProjectManager
 from lib.speech_artifact_provenance import RenditionVariant
+from server.services.h3_refine_tasks import ensure_episode_h3_hd
 from server.services.hyperframes_editing import HyperframesEditingAnalysis, analyze_hyperframes_editing
 from server.services.presentation_read_model import MaterializedEpisode, PresentationReadModelService
 
@@ -220,10 +222,19 @@ class HyperframesWorkspaceService:
         episode: int,
         *,
         variant: RenditionVariant = POST_PRODUCTION,
+        user_id: str = DEFAULT_USER_ID,
     ) -> HyperframesWorkspace:
         existing = await asyncio.to_thread(self.status, project_name, episode)
         if existing is not None:
             return existing
+
+        await ensure_episode_h3_hd(
+            self._pm,
+            project_name,
+            episode,
+            source="hyperframes",
+            user_id=user_id,
+        )
 
         materialized = await self._reader.materialize_episode(
             project_name=project_name,
@@ -516,6 +527,15 @@ class HyperframesStudioManager:
             states = list(self._processes.values())
             self._processes.clear()
         await asyncio.gather(*(self._stop_state(state) for state in states), return_exceptions=True)
+
+    async def stop(self, workspace: Path) -> None:
+        """Stop one episode Studio without affecting other project workspaces."""
+
+        resolved = workspace.resolve(strict=False)
+        async with self._lock:
+            state = self._processes.pop(resolved, None)
+        if state is not None:
+            await self._stop_state(state)
 
     @staticmethod
     async def _stop_state(state: _StudioProcess) -> None:

@@ -6,22 +6,29 @@ import { useAppStore } from "@/stores/app-store";
 import { useAssistantStore } from "@/stores/assistant-store";
 import { useProjectsStore } from "@/stores/projects-store";
 import { useCostStore } from "@/stores/cost-store";
+import { useOverviewAnalysisStore } from "@/stores/overview-analysis-store";
 import type { ProjectData } from "@/types";
 
 vi.mock("./WelcomeCanvas", () => ({
   WelcomeCanvas: ({
     onUpload,
     onAnalyze,
+    analysisStatus,
   }: {
     onUpload: (file: File) => void;
     onAnalyze: () => void;
+    analysisStatus?: string;
   }) => (
     <div data-testid="welcome-canvas">
       <button data-testid="welcome-upload" onClick={() => onUpload(new File(["x"], "source.txt"))}>
         upload
       </button>
-      <button data-testid="welcome-analyze" onClick={() => onAnalyze()}>
-        analyze
+      <button
+        data-testid="welcome-analyze"
+        disabled={analysisStatus === "running"}
+        onClick={() => onAnalyze()}
+      >
+        {analysisStatus === "running" ? "analyzing" : "analyze"}
       </button>
     </div>
   ),
@@ -57,6 +64,7 @@ describe("OverviewCanvas", () => {
     useAssistantStore.setState(useAssistantStore.getInitialState(), true);
     useProjectsStore.setState(useProjectsStore.getInitialState(), true);
     useCostStore.setState(useCostStore.getInitialState(), true);
+    useOverviewAnalysisStore.getState().reset();
     sessionStorage.clear();
     vi.restoreAllMocks();
     vi.stubGlobal("confirm", vi.fn(() => true));
@@ -110,6 +118,44 @@ describe("OverviewCanvas", () => {
       />,
     );
     expect(screen.getByTestId("welcome-canvas")).toBeInTheDocument();
+  });
+
+  it("keeps project analysis busy after leaving and returning without submitting twice", async () => {
+    let resolveAnalysis:
+      | ((value: Awaited<ReturnType<typeof API.generateOverview>>) => void)
+      | undefined;
+    const generateOverview = vi.spyOn(API, "generateOverview").mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          resolveAnalysis = resolve;
+        }),
+    );
+    vi.spyOn(API, "getProject").mockResolvedValue({
+      project: makeProjectData(),
+      scripts: {},
+    });
+    const emptyProject = makeProjectData({ overview: undefined, episodes: [] });
+
+    const { rerender } = render(
+      <OverviewCanvas projectName="project-a" projectData={emptyProject} />,
+    );
+    fireEvent.click(screen.getByTestId("welcome-analyze"));
+    await waitFor(() => expect(generateOverview).toHaveBeenCalledTimes(1));
+
+    rerender(<OverviewCanvas projectName="project-b" projectData={emptyProject} />);
+    expect(screen.getByTestId("welcome-analyze")).toBeEnabled();
+    rerender(<OverviewCanvas projectName="project-a" projectData={emptyProject} />);
+
+    expect(screen.getByTestId("welcome-analyze")).toBeDisabled();
+    fireEvent.click(screen.getByTestId("welcome-analyze"));
+    expect(generateOverview).toHaveBeenCalledTimes(1);
+
+    useProjectsStore.setState({
+      currentProjectName: "project-a",
+      currentProjectData: emptyProject,
+    });
+    resolveAnalysis?.({ success: true, overview: makeProjectData().overview! });
+    await waitFor(() => expect(API.getProject).toHaveBeenCalledWith("project-a", expect.any(Object)));
   });
 
   it("shows the shared upload-and-analyze welcome canvas for an empty course placeholder episode", () => {
@@ -198,6 +244,9 @@ describe("OverviewCanvas", () => {
     });
     const genericUpload = vi.spyOn(API, "uploadFile");
     const generateOverview = vi.spyOn(API, "generateOverview").mockResolvedValue(undefined as never);
+    const generateEpisodeOverview = vi
+      .spyOn(API, "generateEpisodeOverview")
+      .mockResolvedValue(undefined as never);
     vi.spyOn(API, "getProject").mockResolvedValue({ project: uploaded, scripts: {} });
 
     render(<OverviewCanvas projectName="course-demo" projectData={initial} />);
@@ -206,9 +255,11 @@ describe("OverviewCanvas", () => {
     await waitFor(() => expect(addCourseEpisode).toHaveBeenCalledWith("course-demo", expect.any(File)));
     expect(genericUpload).not.toHaveBeenCalled();
     expect(generateOverview).not.toHaveBeenCalled();
+    expect(generateEpisodeOverview).not.toHaveBeenCalled();
 
     fireEvent.click(screen.getByTestId("welcome-analyze"));
-    await waitFor(() => expect(generateOverview).toHaveBeenCalledWith("course-demo"));
+    await waitFor(() => expect(generateEpisodeOverview).toHaveBeenCalledWith("course-demo", 1));
+    expect(generateOverview).not.toHaveBeenCalled();
   });
 
   it("regenerates overview on button click", async () => {
@@ -246,6 +297,48 @@ describe("OverviewCanvas", () => {
         expect.objectContaining({ synopsis: "新梗概", world_setting: "新世界观" }),
       );
     });
+  });
+
+  it("confirms the mirrored first-episode overview for a course project", async () => {
+    const revision = `sha256-v1:${"a".repeat(64)}`;
+    const projectData = makeProjectData({
+      content_mode: "course",
+      generation_mode: "reference_video",
+      episodes: [
+        {
+          episode: 1,
+          title: "课程第一集",
+          script_file: "scripts/episode_1.json",
+          source_file: "source/lesson.md",
+          source_revision: revision,
+          overview_status: "draft",
+        },
+      ],
+    });
+    const confirm = vi.spyOn(API, "confirmEpisodeOverview").mockResolvedValue({
+      success: true,
+      episode: 1,
+      overview: projectData.overview!,
+      overview_status: "confirmed",
+    });
+    vi.spyOn(API, "updateOverview");
+    vi.spyOn(API, "getProject").mockResolvedValue({ project: projectData, scripts: {} });
+
+    render(<OverviewCanvas projectName="course-demo" projectData={projectData} />);
+
+    fireEvent.click(screen.getByRole("button", { name: "编辑" }));
+    fireEvent.change(screen.getByLabelText("故事梗概"), { target: { value: "确认后的概述" } });
+    fireEvent.click(screen.getByRole("button", { name: "保存并标记完成" }));
+
+    await waitFor(() => {
+      expect(confirm).toHaveBeenCalledWith(
+        "course-demo",
+        1,
+        expect.objectContaining({ synopsis: "确认后的概述" }),
+        revision,
+      );
+    });
+    expect(API.updateOverview).not.toHaveBeenCalled();
   });
 
   it("reverts overview edits on cancel", () => {

@@ -77,14 +77,11 @@ import type {
   GenerateHyperframesBgmRequest,
   HyperframesBgmTaskResponse,
   PrepareHyperframesWorkspaceRequest,
+  CourseEpisodeDeletionPreview,
+  CourseEpisodeDeletionResult,
 } from "@/types";
 import type { GenerationRoute } from "@/utils/generation-mode";
 import type { GridCapability, GridGeneration } from "@/types/grid";
-import type {
-  PresentationReadModel,
-  PresentationRequestOptions,
-  PresentationResourceType,
-} from "@/types/presentation";
 import type { Asset, AssetType, AssetCreatePayload, AssetUpdatePayload } from "@/types/asset";
 import type { WorkflowPlan, WorkflowPlanRequest } from "@/types/workflow";
 import type {
@@ -134,19 +131,6 @@ function referenceRequestQuery(
   }
   const serialized = query.toString();
   return serialized ? `?${serialized}` : "";
-}
-
-function presentationEndpoint(
-  projectName: string,
-  resourceType: PresentationResourceType,
-  resourceId: string,
-  options: PresentationRequestOptions,
-  suffix = "",
-): string {
-  const query = new URLSearchParams({ variant: options.variant ?? "post_production" });
-  if (options.videoVersion !== undefined) query.set("video_version", String(options.videoVersion));
-  if (options.audioVersion !== undefined) query.set("audio_version", String(options.audioVersion));
-  return `/projects/${encodeURIComponent(projectName)}/presentations/${resourceType}/${encodeURIComponent(resourceId)}${suffix}?${query.toString()}`;
 }
 
 /** 资产级联重命名的影响报告（dry_run 预览与执行同一结构）。 */
@@ -1121,30 +1105,6 @@ class API {
     return `${API_BASE}/projects/${encodeURIComponent(projectName)}/export/jianying-draft?episode=${encodeURIComponent(episode)}&draft_path=${encodeURIComponent(draftPath)}&download_token=${encodeURIComponent(downloadToken)}&jianying_version=${encodeURIComponent(jianyingVersion)}&narration_delivery=${encodeURIComponent(narrationDelivery)}`;
   }
 
-  static async getPresentation(
-    projectName: string,
-    resourceType: PresentationResourceType,
-    resourceId: string,
-    options: PresentationRequestOptions = {},
-  ): Promise<PresentationReadModel> {
-    const endpoint = presentationEndpoint(projectName, resourceType, resourceId, options);
-    return this.request(endpoint, { signal: options.signal });
-  }
-
-  static async downloadPresentationBundle(
-    projectName: string,
-    resourceType: PresentationResourceType,
-    resourceId: string,
-    options: PresentationRequestOptions = {},
-  ): Promise<{ blob: Blob; filename: string }> {
-    const endpoint = presentationEndpoint(projectName, resourceType, resourceId, options, "/bundle");
-    const response = await fetch(`${API_BASE}${endpoint}`, withAuth(endpoint));
-    await throwIfNotOk(response, `HTTP ${response.status}`);
-    const disposition = response.headers.get("Content-Disposition") ?? "";
-    const filename = disposition.match(/filename="?([^";]+)"?/)?.[1] ?? `${resourceId}_presentation.zip`;
-    return { blob: await response.blob(), filename };
-  }
-
   static async importProject(
     file: File,
     conflictPolicy: ImportConflictPolicy = "prompt"
@@ -1695,6 +1655,27 @@ class API {
     };
   }
 
+  static async previewCourseEpisodeDeletion(
+    projectName: string,
+    episode: number,
+  ): Promise<CourseEpisodeDeletionPreview> {
+    return this.request(
+      `/projects/${encodeURIComponent(projectName)}/course/episodes/${episode}/delete-preview`,
+      { method: "POST" },
+    );
+  }
+
+  static async deleteCourseEpisode(
+    projectName: string,
+    episode: number,
+    confirmationToken: string,
+  ): Promise<CourseEpisodeDeletionResult> {
+    return this.request(`/projects/${encodeURIComponent(projectName)}/course/episodes/${episode}`, {
+      method: "DELETE",
+      body: JSON.stringify({ confirmation_token: confirmationToken }),
+    });
+  }
+
   /** 单文件 multipart 上传 POST，返回 JSON 响应体。 */
   private static async postFileUpload<T>(url: string, file: File): Promise<T> {
     const formData = new FormData();
@@ -1968,6 +1949,44 @@ class API {
       {
         method: "POST",
       }
+    );
+  }
+
+  /** 仅分析课程项目中指定集绑定的源文件。 */
+  static async generateEpisodeOverview(
+    projectName: string,
+    episode: number,
+  ): Promise<{
+    success: boolean;
+    overview: ProjectOverview & { title: string; source_revision: string };
+  }> {
+    return this.request(
+      `/projects/${encodeURIComponent(projectName)}/episodes/${episode}/generate-overview`,
+      { method: "POST" },
+    );
+  }
+
+  /** 保存人工复核后的课程单集概述，并标记该解析为已确认。 */
+  static async confirmEpisodeOverview(
+    projectName: string,
+    episode: number,
+    overview: ProjectOverview,
+    expectedSourceRevision: string,
+  ): Promise<{
+    success: boolean;
+    episode: number;
+    overview: ProjectOverview;
+    overview_status: "confirmed";
+  }> {
+    return this.request(
+      `/projects/${encodeURIComponent(projectName)}/episodes/${episode}/overview`,
+      {
+        method: "PATCH",
+        body: JSON.stringify({
+          ...overview,
+          expected_source_revision: expectedSourceRevision,
+        }),
+      },
     );
   }
 
@@ -2597,10 +2616,18 @@ class API {
   static async listAssistantSessions(
     projectName: string,
     status: string | null = null,
-    options: { signal?: AbortSignal } = {}
+    options: { signal?: AbortSignal; episode?: number | null } = {}
   ): Promise<{ sessions: SessionMeta[] }> {
     const params = new URLSearchParams();
     if (status) params.append("status", status);
+    if (options.episode !== undefined) {
+      if (options.episode === null) {
+        params.append("scope", "project");
+      } else {
+        params.append("scope", "episode");
+        params.append("episode", String(options.episode));
+      }
+    }
     const query = params.toString();
     return this.request(
       `${this.assistantBase(projectName)}/sessions${query ? "?" + query : ""}`,
@@ -2638,7 +2665,8 @@ class API {
     content: string,
     sessionId?: string | null,
     images?: ImagePayload[],
-    clientKey?: string
+    clientKey?: string,
+    episode?: number | null
   ): Promise<{ session_id: string; status: string; entry: TimelineEntry | null }> {
     return this.request(`${this.assistantBase(projectName)}/sessions/send`, {
       method: "POST",
@@ -2647,6 +2675,7 @@ class API {
         session_id: sessionId || undefined,
         images: images || [],
         client_key: clientKey || undefined,
+        episode: episode ?? undefined,
       }),
     });
   }
@@ -3410,6 +3439,33 @@ class API {
   ): Promise<{ success: boolean; unit_id: string; confirmed_video_version: number }> {
     return this.request(
       `/projects/${encodeURIComponent(projectName)}/reference-videos/episodes/${episode}/units/${encodeURIComponent(unitId)}/confirm-video`,
+      { method: "POST" },
+    );
+  }
+
+  static async getReferenceVideoHdStatus(
+    projectName: string,
+    episode: number,
+    unitId: string,
+  ): Promise<{
+    state: "available" | "processing" | "completed" | "failed" | "unavailable";
+    unit_id: string;
+    task_id?: string;
+    version?: number;
+    message?: string;
+  }> {
+    return this.request(
+      `/projects/${encodeURIComponent(projectName)}/reference-videos/episodes/${episode}/units/${encodeURIComponent(unitId)}/hd`,
+    );
+  }
+
+  static async makeReferenceVideoHd(
+    projectName: string,
+    episode: number,
+    unitId: string,
+  ): Promise<{ task_id: string; status: string; deduped: boolean }> {
+    return this.request(
+      `/projects/${encodeURIComponent(projectName)}/reference-videos/episodes/${episode}/units/${encodeURIComponent(unitId)}/hd`,
       { method: "POST" },
     );
   }

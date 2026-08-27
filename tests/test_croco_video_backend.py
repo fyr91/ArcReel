@@ -140,6 +140,66 @@ async def test_guided_continuation_uses_r2v_and_add_guide(tmp_path: Path):
     }
 
 
+async def test_manual_refine_first_pass_combines_r2v_add_guide_and_fixed_preview(tmp_path: Path):
+    backend = CrocoVideoBackend(api_key="test-token")
+    backend._client.upload_image = AsyncMock(return_value="asset-current")
+    backend._client.submit_job = AsyncMock(return_value={"job_id": "job-new"})
+    backend._client.wait_until_terminal = AsyncMock(return_value={"status": "succeeded"})
+    backend._client.list_outputs = AsyncMock(
+        side_effect=[
+            {
+                "items": [
+                    {
+                        "output_id": "video",
+                        "archive_state": "ready",
+                        "origin": "gpu_original",
+                        "origin_verified": True,
+                    }
+                ]
+            },
+            {"items": [{"output_id": "video", "delivery_state": "ready", "content_url": "https://x/v.mp4"}]},
+        ]
+    )
+    backend._client.download_output = AsyncMock()
+
+    await backend.generate(
+        VideoGenerationRequest(
+            prompt="continue the action",
+            output_path=tmp_path / "guided.mp4",
+            aspect_ratio="9:16",
+            resolution="720p",
+            reference_images=[tmp_path / "storyboard.png"],
+            continuation_guide=VideoContinuationGuide(source_job_id="job-source"),
+            manual_refine=True,
+        )
+    )
+
+    parameters = backend._client.submit_job.await_args.kwargs["parameters"]
+    assert parameters["mode"] == "r2v"
+    assert parameters["quality"] == "preview"
+    assert parameters["refine"] == {
+        "profile": "latent_upscale_2mp_v1",
+        "execution": "manual",
+    }
+    assert parameters["add_guide"]["source_job_id"] == "job-source"
+    assert parameters["add_guide"]["guide_frames"] == 22
+    assert parameters["add_guide"]["include_guide_audio"] is True
+    assert parameters["add_guide"]["source_media"] == "original_video"
+
+
+async def test_manual_refine_rejects_non_r2v_first_pass(tmp_path: Path):
+    backend = CrocoVideoBackend(api_key="test-token")
+    with pytest.raises(VideoCapabilityError) as exc_info:
+        await backend.generate(
+            VideoGenerationRequest(
+                prompt="move",
+                output_path=tmp_path / "result.mp4",
+                manual_refine=True,
+            )
+        )
+    assert exc_info.value.code == "video_h3_refine_mode_unsupported"
+
+
 async def test_guided_continuation_rejects_i2v_mode(tmp_path: Path):
     backend = CrocoVideoBackend(api_key="test-token")
     backend._client.upload_image = AsyncMock(return_value="asset-current")

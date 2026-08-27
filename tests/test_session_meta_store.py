@@ -41,14 +41,18 @@ class TestSessionMetaStore:
             await engine.dispose()
 
     async def test_session_lifecycle(self, store):
-        session = await store.create(project_name="demo", sdk_session_id="sdk-abc")
+        session = await store.create(project_name="demo", sdk_session_id="sdk-abc", episode=3)
         assert session.project_name == "demo"
+        assert session.episode == 3
         assert session.status == "idle"
         assert session.id == "sdk-abc"
 
         sessions = await store.list(project_name="demo")
         assert len(sessions) == 1
         assert sessions[0].id == session.id
+
+        assert await store.list(project_name="demo", scope="project") == []
+        assert [item.id for item in await store.list(project_name="demo", scope="episode", episode=3)] == [session.id]
 
         # Test status update
         updated = await store.update_status(session.id, "running")

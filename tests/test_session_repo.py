@@ -50,6 +50,23 @@ class TestSessionRepository:
         results = await repo.list(project_name="project_b")
         assert len(results) == 1
 
+    async def test_episode_scope_is_persisted_and_filtered(self, db_session):
+        repo = SessionRepository(db_session)
+        await repo.create("demo", "project-session")
+        await repo.create("demo", "episode-1-a", episode=1)
+        await repo.create("demo", "episode-1-b", episode=1)
+        await repo.create("demo", "episode-2", episode=2)
+
+        project_sessions = await repo.list(project_name="demo", scope="project")
+        episode_sessions = await repo.list(project_name="demo", scope="episode", episode=1)
+
+        assert [item["sdk_session_id"] for item in project_sessions] == ["project-session"]
+        assert {item["sdk_session_id"] for item in episode_sessions} == {"episode-1-a", "episode-1-b"}
+        assert all(item["episode"] == 1 for item in episode_sessions)
+
+        with pytest.raises(ValueError, match="requires an episode"):
+            await repo.list(project_name="demo", scope="episode")
+
     async def test_update_status(self, db_session):
         repo = SessionRepository(db_session)
         await repo.create("demo", "sdk-002", "Test")

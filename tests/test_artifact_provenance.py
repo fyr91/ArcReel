@@ -7,6 +7,8 @@ from lib.artifact_provenance import (
     build_ad_episode_script_basis,
     build_episode_script_basis,
     build_step1_basis,
+    project_episode_script_prompt_inputs,
+    project_step1_prompt_inputs,
 )
 
 pytestmark = pytest.mark.unit
@@ -120,6 +122,61 @@ def test_structured_content_basis_tracks_only_the_direct_formal_chain() -> None:
     assert same_script.digest == script.digest
     assert changed_step1.digest != script.digest
     assert changed_prompt_context.digest != script.digest
+
+
+def test_course_prompt_bases_use_only_the_selected_episode_overview() -> None:
+    project = {
+        "content_mode": "course",
+        "generation_mode": "reference_video",
+        "overview": {"synopsis": "legacy episode one mirror"},
+        "episodes": [
+            {
+                "episode": 1,
+                "overview": {"synopsis": "first unrelated topic"},
+                "outline": {"story_beats": ["must not cross"]},
+            },
+            {"episode": 2, "overview": {"synopsis": "second independent topic"}},
+        ],
+    }
+
+    step1_ep1 = build_step1_basis("same source", episode=1, project=project)
+    step1_ep2 = build_step1_basis("same source", episode=2, project=project)
+    script_ep1 = build_episode_script_basis({"units": []}, project=project, episode=1)
+    script_ep2 = build_episode_script_basis({"units": []}, project=project, episode=2)
+
+    assert project_step1_prompt_inputs(1, project=project)["project_overview"]["synopsis"] == (
+        "first unrelated topic"
+    )
+    assert project_step1_prompt_inputs(2, project=project)["project_overview"]["synopsis"] == (
+        "second independent topic"
+    )
+    assert project_step1_prompt_inputs(2, project=project)["episode_outline"] is None
+    assert project_step1_prompt_inputs(2, project=project)["next_episode_outline"] is None
+    assert project_episode_script_prompt_inputs(project, 1)["overview"]["synopsis"] == (
+        "first unrelated topic"
+    )
+    assert project_episode_script_prompt_inputs(project, 2)["overview"]["synopsis"] == (
+        "second independent topic"
+    )
+    assert step1_ep1.digest != step1_ep2.digest
+    assert script_ep1.digest != script_ep2.digest
+
+
+def test_course_prompt_basis_never_falls_back_to_project_overview() -> None:
+    project = {
+        "content_mode": "course",
+        "generation_mode": "reference_video",
+        "overview": {"synopsis": "episode one must not leak"},
+        "episodes": [{"episode": 2}],
+    }
+
+    step1 = build_step1_basis("episode two", episode=2, project=project)
+    script = build_episode_script_basis({"units": []}, project=project, episode=2)
+
+    assert project_step1_prompt_inputs(2, project=project)["project_overview"]["synopsis"] == ""
+    assert project_episode_script_prompt_inputs(project, 2)["overview"]["synopsis"] == ""
+    assert step1.digest
+    assert script.digest
 
 
 @pytest.mark.parametrize(

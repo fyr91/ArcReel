@@ -6,7 +6,6 @@ import { useProjectsStore } from "@/stores/projects-store";
 import { AspectFrame } from "@/components/ui/AspectFrame";
 import { ImageFlipReveal } from "@/components/ui/ImageFlipReveal";
 import { PreviewableImageFrame } from "@/components/ui/PreviewableImageFrame";
-import { PresentationPlayer } from "@/components/shared/PresentationPlayer";
 import {
   UPLOAD_IMAGE_ACCEPT,
   UPLOAD_VIDEO_ACCEPT,
@@ -89,7 +88,11 @@ export function MediaCard({
   const assetFp = useProjectsStore((s) =>
     assetPath ? s.getAssetFingerprint(assetPath) : null,
   );
+  const posterFp = useProjectsStore((s) =>
+    posterPath ? s.getAssetFingerprint(posterPath) : null,
+  );
   const assetUrl = assetPath ? API.getFileUrl(projectName, assetPath, assetFp) : null;
+  const posterUrl = posterPath ? API.getFileUrl(projectName, posterPath, posterFp) : undefined;
 
   const Icon = kind === "storyboard" ? ImageIcon : Film;
   const title =
@@ -177,12 +180,16 @@ export function MediaCard({
             }}
           >
             <AspectFrame ratio={aspectRatio}>
-              <PresentationPlayer
-                key={`${segmentId}:${assetFp ?? "current"}`}
-                projectName={projectName}
-                resourceType="videos"
-                resourceId={segmentId}
-                posterPath={posterPath}
+              {/* eslint-disable-next-line jsx-a11y/media-has-caption -- an existing video path is sufficient for preview; presentation materialization must not gate playback */}
+              <video
+                key={`${assetPath}:${assetFp ?? "current"}`}
+                src={assetUrl}
+                poster={posterUrl}
+                aria-label={`${segmentId} ${title}`}
+                controls
+                playsInline
+                preload="metadata"
+                className="h-full w-full object-contain"
               />
             </AspectFrame>
           </div>

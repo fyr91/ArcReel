@@ -7,7 +7,12 @@ from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 from lib.db.base import Base
 from lib.generation_admission import generation_admission_lock
-from lib.generation_queue import CompensableGenerationResult, GenerationQueue, reference_projection_for_queued_task
+from lib.generation_queue import (
+    ActiveTaskRequestConflict,
+    CompensableGenerationResult,
+    GenerationQueue,
+    reference_projection_for_queued_task,
+)
 from lib.task_failure import encode_failure
 
 pytestmark = pytest.mark.unit
@@ -164,6 +169,41 @@ class TestGenerationQueue:
                 script_file="episode_01.json",
                 provider_id="video-provider",
             )
+
+    async def test_reference_generation_and_hd_are_mutually_exclusive_per_unit(self, queue):
+        generation = await queue.enqueue_task(
+            project_name="demo",
+            task_type="reference_video",
+            media_type="video",
+            resource_id="E1U1",
+            script_file="episode_01.json",
+            provider_id="croco",
+        )
+
+        with pytest.raises(ActiveTaskRequestConflict) as exc_info:
+            await queue.enqueue_task(
+                project_name="demo",
+                task_type="reference_video_refine",
+                media_type="video",
+                resource_id="E1U1",
+                script_file="episode_01.json",
+                provider_id="croco",
+            )
+
+        assert exc_info.value.existing_task_id == generation["task_id"]
+
+        claimed = await queue.claim_next_task(media_type="video")
+        assert claimed is not None and claimed["task_id"] == generation["task_id"]
+        assert await queue.mark_task_succeeded(generation["task_id"], {}) == 1
+        hd = await queue.enqueue_task(
+            project_name="demo",
+            task_type="reference_video_refine",
+            media_type="video",
+            resource_id="E1U1",
+            script_file="episode_01.json",
+            provider_id="croco",
+        )
+        assert hd["deduped"] is False
 
     async def test_active_video_task_still_dedupes_the_same_narration_request(self, queue):
         payload = {

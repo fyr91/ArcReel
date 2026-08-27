@@ -218,6 +218,19 @@ async def test_build_append_prompt_carries_locale_language(tmp_path: Path) -> No
 
 
 @pytest.mark.asyncio
+async def test_build_append_prompt_binds_an_immutable_episode_focus(tmp_path: Path) -> None:
+    assembler = _make_assembler(tmp_path)
+
+    episode_prompt = assembler._build_append_prompt("demo", episode=4)
+    project_prompt = assembler._build_append_prompt("demo")
+
+    assert "当前分集焦点：第 4 集" in episode_prompt
+    assert "“本集”“这一集”默认指第 4 集" in episode_prompt
+    assert "写操作仍须向工具显式传入目标集号" in episode_prompt
+    assert "当前为全项目会话" in project_prompt
+
+
+@pytest.mark.asyncio
 async def test_build_sandbox_disabled_strips_bash(tmp_path: Path) -> None:
     """sandbox 关闭（Windows 回退）→ Bash 系列剥离出 allowed_tools。"""
 

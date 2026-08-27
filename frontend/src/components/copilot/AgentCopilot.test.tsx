@@ -2,6 +2,7 @@ import { act, fireEvent, render, screen, waitFor } from "@testing-library/react"
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { API } from "@/api";
 import { useAssistantSession } from "@/hooks/useAssistantSession";
+import { useCurrentEpisode } from "@/hooks/useCurrentEpisode";
 import { useAppStore } from "@/stores/app-store";
 import { useAssistantStore } from "@/stores/assistant-store";
 import { useProjectsStore } from "@/stores/projects-store";
@@ -15,8 +16,14 @@ vi.mock("@/hooks/useAssistantSession", () => ({
   useAssistantSession: vi.fn(),
 }));
 
+vi.mock("@/hooks/useCurrentEpisode", () => ({
+  useCurrentEpisode: vi.fn(),
+}));
+
 vi.mock("./ContextBanner", () => ({
-  ContextBanner: () => <div data-testid="context-banner" />,
+  ContextBanner: ({ episode }: { episode?: number }) => (
+    <div data-testid="context-banner">{episode ?? "project"}</div>
+  ),
 }));
 
 vi.mock("./SlashCommandMenu", () => ({
@@ -31,6 +38,7 @@ vi.mock("./chat/ChatMessage", () => ({
 }));
 
 const mockedUseAssistantSession = vi.mocked(useAssistantSession);
+const mockedUseCurrentEpisode = vi.mocked(useCurrentEpisode);
 
 function makePendingQuestion() {
   return {
@@ -67,6 +75,7 @@ describe("AgentCopilot", () => {
     useTasksStore.setState(useTasksStore.getInitialState(), true);
     useWorkflowStore.getState().resetTarget();
     vi.clearAllMocks();
+    mockedUseCurrentEpisode.mockReturnValue(undefined);
     vi.spyOn(API, "getWorkflowPlan").mockResolvedValue(makePlan({
       next_action: {
         type: "generate_asset_sheets",
@@ -222,6 +231,25 @@ describe("AgentCopilot", () => {
     await waitFor(() => {
       expect(useAssistantStore.getState().input).toBe("");
     });
+  });
+
+  it("binds the Agent to the selected episode and preserves a separate unsent text draft per scope", () => {
+    mockedUseCurrentEpisode.mockReturnValue(1);
+    const { rerender } = render(<AgentCopilot />);
+    const textarea = screen.getByLabelText("Agent 输入");
+    fireEvent.change(textarea, { target: { value: "第一集草稿" } });
+
+    mockedUseCurrentEpisode.mockReturnValue(2);
+    rerender(<AgentCopilot />);
+    expect(screen.getByLabelText("Agent 输入")).toHaveValue("");
+    fireEvent.change(screen.getByLabelText("Agent 输入"), { target: { value: "第二集草稿" } });
+
+    mockedUseCurrentEpisode.mockReturnValue(1);
+    rerender(<AgentCopilot />);
+
+    expect(screen.getByLabelText("Agent 输入")).toHaveValue("第一集草稿");
+    expect(mockedUseAssistantSession).toHaveBeenLastCalledWith("demo", 1);
+    expect(screen.getByTestId("context-banner")).toHaveTextContent("1");
   });
 
   it("sends a queued HyperFrames auto-edit through the same Agent session path", async () => {

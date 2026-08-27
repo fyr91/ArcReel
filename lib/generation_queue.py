@@ -398,12 +398,29 @@ class GenerationQueue:
         # Audio restoration observes active TTS/video consumers while holding the
         # same per-unit admission guard.  Keeping the guard here makes every Web,
         # Agent, and batch enqueue entry participate without duplicating checks.
-        if task_type in {"tts", "video", "reference_video"} and script_file:
+        if task_type in {"tts", "video", "reference_video", "reference_video_refine"} and script_file:
             async with generation_admission_lock(
                 project_name=project_name,
                 script_file=script_file,
                 resource_id=resource_id,
             ):
+                opposite_task_type = {
+                    "reference_video": "reference_video_refine",
+                    "reference_video_refine": "reference_video",
+                }.get(task_type)
+                if opposite_task_type is not None:
+                    conflicts = await self.get_active_tasks_for_resources(
+                        project_name=project_name,
+                        task_type=opposite_task_type,
+                        resource_ids=[resource_id],
+                        script_file=script_file,
+                        user_id=user_id,
+                    )
+                    if conflicts:
+                        raise ActiveTaskRequestConflict(
+                            resource_id=resource_id,
+                            existing_task_id=str(conflicts[0]["task_id"]),
+                        )
                 result = await _enqueue()
         else:
             result = await _enqueue()

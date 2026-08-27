@@ -11,6 +11,7 @@ from server.agent_runtime.sdk_tools._context import ToolContext
 from server.agent_runtime.sdk_tools.hyperframes import (
     generate_hyperframes_bgm_tool,
     inspect_hyperframes_episode_tool,
+    make_reference_video_hd_tool,
     prepare_hyperframes_episode_tool,
 )
 from server.services.hyperframes_editing import HyperframesEditingAnalysis
@@ -24,9 +25,30 @@ class _Service:
         self.workspace = workspace
         self.calls: list[tuple[str, int, str]] = []
 
-    async def prepare(self, project_name: str, episode: int, *, variant: str):
+    async def prepare(self, project_name: str, episode: int, *, variant: str, user_id: str):
+        assert user_id == "default"
         self.calls.append((project_name, episode, variant))
         return self.workspace
+
+
+async def test_make_reference_video_hd_tool_uses_shared_operation(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    calls = []
+
+    async def _enqueue(pm, project_name, episode, unit_id, *, source, user_id):
+        calls.append((pm, project_name, episode, unit_id, source, user_id))
+        return {"task_id": "hd-task", "status": "queued", "deduped": False}
+
+    monkeypatch.setattr("server.agent_runtime.sdk_tools.hyperframes.enqueue_h3_refine_task", _enqueue)
+    ctx = ToolContext("demo", tmp_path, user_id="u1", pm=ProjectManager(tmp_path))
+
+    result = await make_reference_video_hd_tool(ctx).handler({"episode": 1, "unit_id": "E1U01"})
+
+    assert result.get("is_error") is not True
+    assert result["task"]["task_id"] == "hd-task"
+    assert calls == [(ctx.pm, "demo", 1, "E1U01", "agent", "u1")]
 
 
 async def test_tool_returns_one_explicit_project_local_write_boundary(

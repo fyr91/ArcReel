@@ -27,6 +27,7 @@ from server.agent_runtime.sdk_tools.character_voice_references import (
     generate_character_voice_references_tool,
 )
 from server.agent_runtime.sdk_tools.confirm_asset_sheets import confirm_asset_sheets_tool
+from server.agent_runtime.sdk_tools.delete_course_episode import delete_course_episode_tool
 from server.agent_runtime.sdk_tools.delete_project_asset import delete_project_asset_tool
 from server.agent_runtime.sdk_tools.enqueue_assets import (
     generate_assets_tool,
@@ -42,6 +43,10 @@ from server.agent_runtime.sdk_tools.enqueue_videos import (
     generate_video_scene_tool,
     generate_video_selected_tool,
 )
+from server.agent_runtime.sdk_tools.episode_overview import (
+    confirm_episode_overview_tool,
+    generate_episode_overview_tool,
+)
 from server.agent_runtime.sdk_tools.episode_planning import (
     plan_episodes_tool,
     reset_episode_planning_tool,
@@ -55,6 +60,7 @@ from server.agent_runtime.sdk_tools.h3_prompt_optimization import (
 from server.agent_runtime.sdk_tools.hyperframes import (
     generate_hyperframes_bgm_tool,
     inspect_hyperframes_episode_tool,
+    make_reference_video_hd_tool,
     prepare_hyperframes_episode_tool,
 )
 from server.agent_runtime.sdk_tools.patch_episode_meta import patch_episode_meta_tool
@@ -108,6 +114,8 @@ __all__ = ["build_arcreel_mcp_server", "ToolContext", "ARCREEL_MCP_TOOL_IDS"]
 ARCREEL_MCP_TOOL_IDS: tuple[str, ...] = (
     "list_global_assets",
     "complete_asset_inventory",
+    "generate_episode_overview",
+    "confirm_episode_overview",
     "complete_step1_rebuild",
     "get_workflow_plan",
     "get_project_path_link",
@@ -136,6 +144,7 @@ ARCREEL_MCP_TOOL_IDS: tuple[str, ...] = (
     "prepare_hyperframes_episode",
     "inspect_hyperframes_episode",
     "generate_hyperframes_bgm",
+    "make_reference_video_hd",
     "generate_episode_script",
     "confirm_script_review",
     "normalize_drama_script",
@@ -156,6 +165,7 @@ ARCREEL_MCP_TOOL_IDS: tuple[str, ...] = (
     "rename_asset",
     "update_custom_style",
     "delete_project_asset",
+    "delete_course_episode",
     "manage_project_asset_link",
     "move_character_main_to_reference",
     "retry_project_migration",
@@ -168,6 +178,8 @@ ARCREEL_MCP_TOOL_IDS: tuple[str, ...] = (
 MIGRATION_BLOCKED_TOOL_IDS: frozenset[str] = frozenset(
     {
         "complete_asset_inventory",
+        "generate_episode_overview",
+        "confirm_episode_overview",
         "complete_step1_rebuild",
         "manage_project_asset_link",
         "move_character_main_to_reference",
@@ -194,6 +206,7 @@ MIGRATION_BLOCKED_TOOL_IDS: frozenset[str] = frozenset(
         "update_video_style",
         "prepare_hyperframes_episode",
         "generate_hyperframes_bgm",
+        "make_reference_video_hd",
         "generate_episode_script",
         "confirm_script_review",
         "normalize_drama_script",
@@ -203,6 +216,7 @@ MIGRATION_BLOCKED_TOOL_IDS: frozenset[str] = frozenset(
         "split_narration_segments",
         "plan_episodes",
         "reset_episode_planning",
+        "delete_course_episode",
     }
 )
 
@@ -239,6 +253,8 @@ def build_arcreel_mcp_server(
     tools = [
         list_global_assets_tool(ctx),
         complete_asset_inventory_tool(ctx),
+        generate_episode_overview_tool(ctx),
+        confirm_episode_overview_tool(ctx),
         complete_step1_rebuild_tool(ctx),
         get_workflow_plan_tool(ctx),
         get_project_path_link_tool(ctx),
@@ -267,6 +283,7 @@ def build_arcreel_mcp_server(
         prepare_hyperframes_episode_tool(ctx),
         inspect_hyperframes_episode_tool(ctx),
         generate_hyperframes_bgm_tool(ctx),
+        make_reference_video_hd_tool(ctx),
         generate_episode_script_tool(ctx),
         confirm_script_review_tool(ctx),
         normalize_drama_script_tool(ctx),
@@ -287,6 +304,7 @@ def build_arcreel_mcp_server(
         rename_asset_tool(ctx),
         update_custom_style_tool(ctx),
         delete_project_asset_tool(ctx),
+        delete_course_episode_tool(ctx),
         manage_project_asset_link_tool(ctx),
         move_character_main_to_reference_tool(ctx),
         retry_project_migration_tool(ctx),

@@ -83,6 +83,36 @@ def test_ark_agent_plan_deepseek_v4_pro_supports_structured_output() -> None:
     assert "structured_output" in p.models["deepseek-v4-pro"].capabilities
 
 
+def test_ark_agent_plan_deepseek_uses_peak_cny_pricing() -> None:
+    from lib.pricing.types import PerToken
+
+    p = PROVIDER_REGISTRY["ark-agent-plan"]
+    expected = {
+        "deepseek-v4-flash": {"input": 3.0, "output": 9.0},
+        "deepseek-v4-pro": {"input": 9.0, "output": 27.0},
+    }
+    for model_id, rates in expected.items():
+        pricing = p.models[model_id].pricing
+        assert isinstance(pricing, PerToken)
+        assert pricing.currency == "CNY"
+        assert pricing.rates[model_id] == rates
+
+
+def test_runware_image_models_use_flat_cny_pricing() -> None:
+    from lib.pricing.types import PerImageFlat
+
+    p = PROVIDER_REGISTRY["runware"]
+    expected = {
+        "google:nano-banana@2-lite": 0.18,
+        "openai:gpt-image@2": 0.25,
+    }
+    for model_id, per_image in expected.items():
+        pricing = p.models[model_id].pricing
+        assert isinstance(pricing, PerImageFlat)
+        assert pricing.currency == "CNY"
+        assert pricing.rates[model_id] == per_image
+
+
 def test_ark_agent_plan_fast_has_no_1080p() -> None:
     p = PROVIDER_REGISTRY["ark-agent-plan"]
     assert p.models["doubao-seedance-2.0-fast"].resolutions == ["480p", "720p"]

@@ -1945,6 +1945,36 @@ class TestGenerationWorker:
 
     @pytest.mark.unit
     @pytest.mark.asyncio
+    @pytest.mark.parametrize("provider_job_id", [None, "hd-child-job"])
+    async def test_handle_orphan_h3_refine_requeues_idempotently(self, monkeypatch, provider_job_id):
+        queue = _FakeQueue()
+        queue._orphans = [
+            {
+                "task_id": "hd-orphan",
+                "status": "running",
+                "provider_id": "croco",
+                "provider_job_id": provider_job_id,
+                "media_type": "video",
+                "task_type": "reference_video_refine",
+                "payload": {"source_job_id": "first-pass-job"},
+                "project_name": "demo",
+            }
+        ]
+        worker = GenerationWorker(queue=queue)
+        requeued: list[str] = []
+
+        async def _capture_requeue(self, task_id):
+            requeued.append(task_id)
+
+        monkeypatch.setattr(GenerationWorker, "_requeue_single_task", _capture_requeue)
+
+        await worker._handle_orphan_tasks_on_start()
+
+        assert requeued == ["hd-orphan"]
+        assert queue.failed == []
+
+    @pytest.mark.unit
+    @pytest.mark.asyncio
     async def test_handle_orphan_non_resumable_video_marks_resume_unsupported(self, monkeypatch):
         """Grok/Vidu video 孤儿 → [resume_unsupported]（backend 无 resume，绝不重跑）。"""
         from lib.providers import PROVIDER_GROK

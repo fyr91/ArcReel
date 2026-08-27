@@ -273,6 +273,91 @@ def test_narration_empty_inventory_completes_and_advances_to_episode_plan(tmp_pa
 
 
 @pytest.mark.integration
+def test_course_workflow_scopes_overview_and_inventory_to_selected_episode(tmp_path: Path) -> None:
+    pm, project_path = _make_project(tmp_path, "course", generation_mode="reference_video")
+    (project_path / "source" / "first.md").write_text("第一集完全无关", encoding="utf-8")
+    (project_path / "source" / "second.md").write_text("第二集独立主题", encoding="utf-8")
+
+    def _bind(project: dict) -> None:
+        project["source_language"] = "zh"
+        project["episodes"] = [
+            {
+                "episode": 1,
+                "title": "第一集",
+                "script_file": "scripts/episode_1.json",
+                "source_file": "source/first.md",
+            },
+            {
+                "episode": 2,
+                "title": "第二集",
+                "script_file": "scripts/episode_2.json",
+                "source_file": "source/second.md",
+            },
+        ]
+
+    pm.update_project("demo", _bind)
+    service = WorkflowStateService(pm)
+
+    missing = service.get_status("demo", episode=2)
+    assert missing.next_action.type == "analyze_episode"
+    assert missing.target is not None and missing.target.source == "source/second.md"
+    assert missing.next_action.args["episode"] == 2
+
+    scope = SourceScope(kind="files", files=["source/second.md"])
+    revision = compute_source_revision(project_path, pm.load_project("demo"), scope).revision
+    assert revision is not None
+    pm.update_project(
+        "demo",
+        lambda project: project["episodes"][1].update(
+            {
+                "overview": {"synopsis": "第二集独立主题"},
+                "overview_status": "draft",
+                "source_revision": revision,
+            }
+        ),
+    )
+
+    needs_confirmation = service.get_status("demo", episode=2)
+    assert needs_confirmation.next_action.type == "confirm_episode_overview"
+    assert needs_confirmation.next_action.args["episode"] == 2
+    assert needs_confirmation.next_action.args["expected_source_revision"] == revision
+
+    pm.update_project(
+        "demo",
+        lambda project: project["episodes"][1].update({"overview_status": "confirmed"}),
+    )
+
+    needs_inventory = service.get_status("demo", episode=2)
+    assert needs_inventory.next_action.type == "analyze_assets"
+    assert needs_inventory.next_action.args["episode"] == 2
+    assert needs_inventory.next_action.args["scope"] == {
+        "kind": "files",
+        "files": ["source/second.md"],
+    }
+
+    complete_asset_inventory(
+        pm,
+        "demo",
+        scope,
+        revision,
+        entries={
+            "characters": {
+                "讲师": {
+                    "description": "课程讲师",
+                    "voice_style": "清晰",
+                    "course_role": "main_lecturer",
+                }
+            }
+        },
+        episode=2,
+    )
+    saved = pm.load_project("demo")
+    assert "asset_inventory" not in saved["workflow"]
+    assert "2" in saved["workflow"]["asset_inventory_by_episode"]
+    assert "1" not in saved["workflow"]["asset_inventory_by_episode"]
+
+
+@pytest.mark.integration
 @pytest.mark.parametrize("mode", ["narration", "drama"])
 def test_episodic_inventory_generates_missing_asset_sheets_before_episode_plan(
     tmp_path: Path,
@@ -280,9 +365,17 @@ def test_episodic_inventory_generates_missing_asset_sheets_before_episode_plan(
 ) -> None:
     pm, project_path = _make_project(tmp_path, mode)
     _write_source_and_complete(pm, project_path)
+    character_reference = "characters/refs/阿离.png"
+    _write_artifact(project_path, character_reference)
 
     def _add_assets(project: dict) -> None:
-        project["characters"] = {"阿离": {"description": "白衣少年"}}
+        project["characters"] = {
+            "阿离": {
+                "description": "白衣少年",
+                "character_sheet": "",
+                "reference_image": character_reference,
+            }
+        }
         project["scenes"] = {"庭院": {"description": "青砖庭院"}}
         project["props"] = {"玉佩": {"description": "白玉挂件"}}
         # 商品图不属于剧集型项目的必需资产设计阶段。
@@ -1528,7 +1621,7 @@ def test_schema8_manifest_reports_current_stale_missing_and_blocked_without_file
 
 
 @pytest.mark.integration
-def test_character_reference_image_satisfies_asset_sheet_stage_without_generated_sheet(tmp_path: Path) -> None:
+def test_character_reference_image_does_not_replace_required_asset_sheet(tmp_path: Path) -> None:
     pm, project_path = _make_project(tmp_path, "ad")
     reference_path = "characters/refs/Alice.png"
     _write_artifact(project_path, reference_path)
@@ -1549,8 +1642,8 @@ def test_character_reference_image_satisfies_asset_sheet_stage_without_generated
     status = WorkflowStateService(pm).get_status("demo")
 
     assert status.artifacts["asset_sheets"]["character"] == {
-        "current_ids": ["Alice"],
-        "missing_ids": [],
+        "current_ids": [],
+        "missing_ids": ["Alice"],
         "stale_ids": [],
     }
 

@@ -47,6 +47,7 @@ describe("ProjectsPage", () => {
 
     // 0 项目时仅渲染 NewProjectTile 占位卡（lobby_new_project_title）
     expect(await screen.findByText("新建项目")).toBeInTheDocument();
+    expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent("让好故事动起来。");
   });
 
   it("renders project cards when data exists", async () => {
@@ -55,6 +56,7 @@ describe("ProjectsPage", () => {
         {
           name: "demo",
           title: "Demo Project",
+          content_mode: "course",
           style: "Anime",
           style_template_id: "anim_kyoto",
           thumbnail: null,
@@ -80,6 +82,8 @@ describe("ProjectsPage", () => {
     // featured "Now Editing" card — see ProjectsPage.tsx Darkroom design.
     expect((await screen.findAllByText("Demo Project")).length).toBeGreaterThan(0);
     expect(screen.getAllByText("商业动画 京都").length).toBeGreaterThan(0);
+    expect(screen.getByText("课程视频")).toBeInTheDocument();
+    expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent("让好故事动起来。");
     // 阶段名与工作台同一套词：卡片胶囊、筛选胶囊、Hero 计数格都读「制作」
     expect(screen.getAllByText("制作").length).toBeGreaterThan(0);
     expect(screen.getByText("50%")).toBeInTheDocument();
@@ -91,6 +95,7 @@ describe("ProjectsPage", () => {
         {
           name: "writing",
           title: "Writing Project",
+          content_mode: "drama",
           style: "Anime",
           style_template_id: "anim_kyoto",
           thumbnail: null,
@@ -106,6 +111,7 @@ describe("ProjectsPage", () => {
         {
           name: "shooting",
           title: "Shooting Project",
+          content_mode: "course",
           style: "Anime",
           style_template_id: "anim_kyoto",
           thumbnail: null,
@@ -123,6 +129,10 @@ describe("ProjectsPage", () => {
 
     renderPage();
 
+    // production 项目进入「接着上一次」大卡，script 项目留在普通卡；两种卡都显示类型。
+    expect(await screen.findByText("课程视频")).toBeInTheDocument();
+    expect(screen.getByText("剧情演绎")).toBeInTheDocument();
+
     const scriptPill = await screen.findByRole("button", { name: /脚本/ });
     fireEvent.click(scriptPill);
 
@@ -138,6 +148,7 @@ describe("ProjectsPage", () => {
         {
           name: "aged",
           title: "Aged Project",
+          content_mode: "drama",
           style: "Anime",
           style_template_id: "anim_kyoto",
           thumbnail: null,
@@ -172,6 +183,7 @@ describe("ProjectsPage", () => {
         {
           name: "broken",
           title: "Broken Project",
+          content_mode: "drama",
           style: "Anime",
           style_template_id: "anim_kyoto",
           thumbnail: null,
@@ -219,6 +231,7 @@ describe("ProjectsPage", () => {
         {
           name: "healthy",
           title: "Healthy Project",
+          content_mode: "course",
           style: "Anime",
           style_template_id: "anim_kyoto",
           thumbnail: null,
@@ -227,6 +240,7 @@ describe("ProjectsPage", () => {
         {
           name: "broken",
           title: "Broken Project",
+          content_mode: "drama",
           style: "Anime",
           style_template_id: "anim_kyoto",
           thumbnail: null,
@@ -251,6 +265,7 @@ describe("ProjectsPage", () => {
         {
           name: "demo",
           title: "Custom Demo",
+          content_mode: "drama",
           style: "",
           style_template_id: null,
           style_image: "style_reference.png",
@@ -304,6 +319,7 @@ describe("ProjectsPage", () => {
         {
           name: "demo",
           title: "Empty Style Demo",
+          content_mode: "drama",
           style: "",
           style_template_id: null,
           style_image: null,
@@ -352,6 +368,7 @@ describe("ProjectsPage", () => {
           {
             name: "imported-demo",
             title: "Imported Demo",
+            content_mode: "drama",
             style: "Anime",
             thumbnail: null,
             status: {
@@ -461,6 +478,7 @@ describe("ProjectsPage", () => {
           {
             name: "demo",
             title: "Demo",
+            content_mode: "drama",
             style: "Anime",
             thumbnail: null,
             status: {
@@ -536,6 +554,7 @@ describe("ProjectsPage", () => {
     const project = (name: string, phase: Phase) => ({
       name,
       title: name,
+      content_mode: "drama" as const,
       style: "Anime",
       thumbnail: null,
       status: {

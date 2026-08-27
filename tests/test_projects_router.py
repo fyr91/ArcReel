@@ -287,6 +287,11 @@ class _FakePM:
             _OverviewProbe.model_validate({})
         raise EmptySourceError("source missing")
 
+    async def generate_episode_overview(self, name, episode):
+        if name == "ready" and episode == 2:
+            return {"synopsis": "episode two only", "source_revision": "sha256-v1:" + "a" * 64}
+        raise EmptySourceError("episode source missing")
+
 
 class _RejectedFakeEdit(Exception):
     def __init__(self, result: ScriptBatchEditResult):
@@ -2466,6 +2471,26 @@ class TestProjectsRouter:
         assert "episodes" not in status
 
     @pytest.mark.unit
+    def test_list_projects_returns_content_mode_for_project_cards(self, tmp_path, monkeypatch):
+        """列表端点直接给出项目类型；旧项目缺字段时按 drama 兼容，损坏行不猜测。"""
+        fake_pm = _FakePM(tmp_path)
+        client = _client(monkeypatch, fake_pm)
+
+        with client:
+            legacy_resp = client.get("/api/v1/projects")
+            fake_pm.project_data["ready"]["content_mode"] = "course"
+            course_resp = client.get("/api/v1/projects")
+
+        assert legacy_resp.status_code == 200
+        assert course_resp.status_code == 200
+        legacy_by_name = {item["name"]: item for item in legacy_resp.json()["projects"]}
+        course_by_name = {item["name"]: item for item in course_resp.json()["projects"]}
+        assert legacy_by_name["ready"]["content_mode"] == "drama"
+        assert course_by_name["ready"]["content_mode"] == "course"
+        assert course_by_name["empty"]["content_mode"] is None
+        assert course_by_name["broken"]["content_mode"] is None
+
+    @pytest.mark.unit
     def test_get_project_status_comes_from_the_project_summary(self, tmp_path, monkeypatch):
         """全局头读的项目级状态与列表同源。"""
         client = _client(monkeypatch, _FakePM(tmp_path))
@@ -2762,6 +2787,28 @@ class TestProjectsRouter:
             # project.json 镜像同步
             ep = next(e for e in fake_pm.project_data["ready"]["episodes"] if e["episode"] == 1)
             assert ep["title"] == "新集名"
+
+    @pytest.mark.unit
+    def test_update_course_episode_title_before_formal_script_exists(self, tmp_path, monkeypatch):
+        manager = ProjectManager(tmp_path / "projects")
+        manager.create_project("course")
+        manager.create_project_metadata(
+            "course",
+            "Course",
+            content_mode="course",
+            extras={"generation_mode": "reference_video"},
+        )
+
+        with _client(monkeypatch, manager) as client:
+            response = client.patch(
+                "/api/v1/projects/course/episodes/1",
+                json={"title": "  景泰蓝制作工艺  "},
+            )
+
+        assert response.status_code == 200
+        assert response.json()["episode"] == {"episode": 1, "title": "景泰蓝制作工艺"}
+        assert manager.load_project("course")["episodes"][0]["title"] == "景泰蓝制作工艺"
+        assert not (manager.get_project_path("course") / "scripts" / "episode_1.json").exists()
 
     @pytest.mark.unit
     def test_update_episode_title_empty_rejected(self, tmp_path, monkeypatch):
@@ -3309,6 +3356,14 @@ class TestUnexpectedErrorsDoNotLeak:
             resp = client.post("/api/v1/projects/ready/generate-overview")
             assert resp.status_code == 500
             assert sentinel not in self._body(resp)
+
+    @pytest.mark.unit
+    def test_generate_episode_overview_uses_episode_route(self, tmp_path, monkeypatch):
+        client = _client(monkeypatch, _FakePM(tmp_path))
+        with client:
+            resp = client.post("/api/v1/projects/ready/episodes/2/generate-overview")
+        assert resp.status_code == 200
+        assert resp.json()["overview"]["synopsis"] == "episode two only"
 
     @pytest.mark.unit
     def test_generate_overview_corrupted_project_maps_to_500_not_provider_error(self, tmp_path, monkeypatch):

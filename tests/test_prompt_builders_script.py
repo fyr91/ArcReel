@@ -3,6 +3,7 @@ import pytest
 from lib.prompt_builders_ad import build_ad_prompt
 from lib.prompt_builders_script import (
     _format_names,
+    build_course_episode_overview_prompt,
     build_drama_prompt,
     build_narration_prompt,
     build_narration_split_prompt,
@@ -274,6 +275,14 @@ class TestOverviewPrompt:
         assert "剧本正文" in prompt
         assert "成品剧本" in prompt
         assert "优先" in prompt
+
+    def test_course_episode_prompt_requests_a_content_based_title(self):
+        prompt = build_course_episode_overview_prompt("景泰蓝的掐丝与点蓝工艺")
+
+        assert "单集课程文档" in prompt
+        assert "教学主题" in prompt
+        assert "不要照抄文件名" in prompt
+        assert "景泰蓝的掐丝与点蓝工艺" in prompt
 
 
 class TestDramaDurationSpeechLowerBound:

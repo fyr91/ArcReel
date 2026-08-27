@@ -40,6 +40,7 @@ FIXED_TASK_TYPES = frozenset(
         "storyboard",
         "video",
         "reference_video",
+        "reference_video_refine",
         "tts",
         "voice_sample",
         "grid",

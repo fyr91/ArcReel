@@ -122,6 +122,12 @@ export interface EpisodeMeta {
   script_file: string;
   /** 课程项目中一份文档对应本集的规范化源文件。 */
   source_file?: string | null;
+  /** 课程模式中只由本集 source_file 生成的独立内容概述。 */
+  overview?: ProjectOverview;
+  /** overview 与本集源文件绑定时的正式修订号。 */
+  source_revision?: string | null;
+  /** AI 解析后先待确认；缺失表示兼容历史项目的已确认状态。 */
+  overview_status?: "draft" | "confirmed";
   /** Written by episode_planner at split time: ending hook / suspense */
   hook?: string;
   /** Written by episode_planner at split time: slice boundary in the source file (char offsets) */
@@ -145,6 +151,34 @@ export interface EpisodeMeta {
   videos?: ArtifactCount;
 }
 
+export interface CourseEpisodeDeletionEffects {
+  source_files: number;
+  scripts: number;
+  drafts: number;
+  generated_artifacts: number;
+  workspace_files: number;
+}
+
+/** Exact, short-lived scope returned before a destructive course episode deletion. */
+export interface CourseEpisodeDeletionPreview {
+  episode: number;
+  title: string;
+  effects: CourseEpisodeDeletionEffects;
+  total_files: number;
+  artifact_claims: number;
+  confirmation_token: string;
+  expires_in: number;
+}
+
+export interface CourseEpisodeDeletionResult {
+  success: true;
+  episode: number;
+  title: string;
+  deleted_files: string[];
+  deleted_file_count: number;
+  removed_artifact_claims: number;
+}
+
 export interface ModelSettingEntry {
   resolution?: string | null;
 }
@@ -158,10 +192,13 @@ export interface UnifiedVideoStyle extends UnifiedVideoStyleDraft {
   updated_at: string;
 }
 
+/** 用户创建项目时可选择、并在项目级 UI 中展示的内容类型。 */
+export type ProjectContentMode = "drama" | "course" | "ad";
+
 export interface ProjectData {
   title: string;
   /** Creation/API runtime only accepts drama/course/ad; narration remains an internal script-shape discriminator. */
-  content_mode: "drama" | "course" | "ad" | "narration";
+  content_mode: ProjectContentMode | "narration";
   style: string;
   style_template_id?: string | null;
   style_image?: string;
@@ -234,6 +271,8 @@ export interface ProjectData {
 export interface ProjectSummary {
   name: string;
   title: string;
+  /** 元数据损坏或 project.json 缺失的降级行无法确定类型。 */
+  content_mode: ProjectContentMode | null;
   style: string;
   style_template_id?: string | null;
   style_image?: string | null;

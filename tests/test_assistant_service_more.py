@@ -7,7 +7,11 @@ import pytest
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 from lib.db.base import Base
-from server.agent_runtime.service import AssistantService
+from server.agent_runtime.service import (
+    AssistantService,
+    EpisodeScopeNotFoundError,
+    SessionScopeMismatchError,
+)
 from server.agent_runtime.session_store import SessionMetaStore
 from tests.factories import make_session_meta
 
@@ -15,13 +19,18 @@ pytestmark = pytest.mark.unit
 
 
 class _FakePM:
-    def __init__(self, valid_project="demo"):
+    def __init__(self, valid_project="demo", episodes=(1, 2, 3)):
         self.valid_project = valid_project
+        self.episodes = episodes
 
     def get_project_path(self, project_name):
         if project_name != self.valid_project:
             raise FileNotFoundError(project_name)
         return Path("/tmp") / project_name
+
+    def load_project_readonly(self, project_name):
+        self.get_project_path(project_name)
+        return {"episodes": [{"episode": episode} for episode in self.episodes]}
 
 
 class _MultiProjectPM:
@@ -43,7 +52,7 @@ class _FakeMetaStore:
     async def get(self, session_id):
         return self.metas.get(session_id)
 
-    async def list(self, project_name=None, status=None, limit=50, offset=0):
+    async def list(self, project_name=None, status=None, scope="all", episode=None, limit=50, offset=0):
         return list(self.metas.values())
 
     async def delete(self, session_id):
@@ -64,6 +73,7 @@ class _FakeSessionManager:
     def __init__(self):
         self.sessions = {}
         self.new_sessions = []
+        self.new_session_kwargs = []
         self.sent = []
         self.sent_kwargs = []
         self.answered = []
@@ -78,6 +88,7 @@ class _FakeSessionManager:
 
     async def send_new_session(self, project_name, prompt, **kwargs):
         self.new_sessions.append((project_name, prompt))
+        self.new_session_kwargs.append(kwargs)
         return "sdk-new-id"
 
     async def get_status(self, session_id):
@@ -241,6 +252,30 @@ class TestAssistantServiceMore:
 
         assert sm.sent == [("s1", "world")]
         assert sm.sent_kwargs[0]["locale"] == "en"
+
+    @pytest.mark.asyncio
+    async def test_send_or_create_enforces_and_propagates_episode_scope(self, tmp_path):
+        service = AssistantService(project_root=tmp_path)
+        scoped = make_session_meta(id="episode-session", status="idle", episode=2)
+        sm = _FakeSessionManager()
+        service.pm = _FakePM(valid_project="demo", episodes=(1, 2))
+        service.session_manager = sm
+        service.meta_store = _FakeMetaStore([scoped])
+        service.event_log = _FakeEventLogService()
+
+        created = await service.send_or_create("demo", "new", episode=1)
+        assert created["session_id"] == "sdk-new-id"
+        assert sm.new_session_kwargs[0]["episode"] == 1
+
+        await service.send_or_create("demo", "continue", session_id="episode-session", episode=2)
+        assert sm.sent == [("episode-session", "continue")]
+
+        with pytest.raises(SessionScopeMismatchError):
+            await service.send_or_create("demo", "wrong", session_id="episode-session", episode=1)
+        with pytest.raises(SessionScopeMismatchError):
+            await service.send_or_create("demo", "missing", session_id="episode-session")
+        with pytest.raises(EpisodeScopeNotFoundError):
+            await service.send_or_create("demo", "gone", episode=9)
 
     @pytest.mark.asyncio
     async def test_send_or_create_threads_locale_into_multimodal_continuation(self, tmp_path):

@@ -13,7 +13,8 @@ from server.services.episode_metadata import EDITABLE_EPISODE_METADATA_FIELDS, u
 def patch_episode_meta_tool(ctx: ToolContext):
     @tool(
         "patch_episode_meta",
-        "批量编辑正式文稿顶层的分集元数据，并原子镜像到 project.json 的 episodes[]，与 Web API 共用同一业务操作。"
+        "批量编辑分集元数据，与 Web API 共用同一业务操作；正式文稿存在时原子镜像到 episodes[]，"
+        "课程分集尚无正式文稿时也可单独修改 title。"
         f"updates 白名单字段 {list(EDITABLE_EPISODE_METADATA_FIELDS)}：title 为非空字符串；hook 为字符串或 null；"
         "outline 为 {story_beats: string[], next_episode_teaser: string} 或 null。一次调用可同时修改多个字段；"
         "分镜内部字段仍使用 patch_episode_script。",

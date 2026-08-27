@@ -383,6 +383,8 @@ describe("API", () => {
       await API.getProject("a b");
       await API.updateProject("demo", { style: "Anime" });
       await API.deleteProject("demo");
+      await API.previewCourseEpisodeDeletion("course demo", 2);
+      await API.deleteCourseEpisode("course demo", 2, "confirmed-snapshot");
 
       await API.addCharacter("demo", "Hero", "brave");
       await API.updateCharacter("demo", "Hero", { description: "updated" });
@@ -424,6 +426,13 @@ describe("API", () => {
       await API.listFiles("demo");
       await API.deleteDraft("demo", 1, 2);
       await API.generateOverview("demo");
+      await API.generateEpisodeOverview("demo", 2);
+      await API.confirmEpisodeOverview(
+        "demo",
+        2,
+        { synopsis: "概述", genre: "课程", theme: "学习", world_setting: "课堂" },
+        "sha256-v1:revision",
+      );
       await API.updateOverview("demo", { synopsis: "new" });
 
       await API.generateStoryboard("demo", "seg-1", "img", "episode_1.json");
@@ -451,6 +460,14 @@ describe("API", () => {
       });
       expect(requestSpy).toHaveBeenCalledWith("/projects/demo", {
         method: "DELETE",
+      });
+      expect(requestSpy).toHaveBeenCalledWith(
+        "/projects/course%20demo/course/episodes/2/delete-preview",
+        { method: "POST" },
+      );
+      expect(requestSpy).toHaveBeenCalledWith("/projects/course%20demo/course/episodes/2", {
+        method: "DELETE",
+        body: JSON.stringify({ confirmation_token: "confirmed-snapshot" }),
       });
       expect(requestSpy).toHaveBeenCalledWith("/projects/demo/characters", {
         method: "POST",
@@ -530,6 +547,16 @@ describe("API", () => {
       expect(requestSpy).toHaveBeenCalledWith("/projects/demo/episodes/3", {
         method: "PATCH",
         body: JSON.stringify({ title: "新标题" }),
+      });
+      expect(requestSpy).toHaveBeenCalledWith("/projects/demo/episodes/2/overview", {
+        method: "PATCH",
+        body: JSON.stringify({
+          synopsis: "概述",
+          genre: "课程",
+          theme: "学习",
+          world_setting: "课堂",
+          expected_source_revision: "sha256-v1:revision",
+        }),
       });
       expect(requestSpy).toHaveBeenCalledWith("/system/config");
       expect(requestSpy).toHaveBeenCalledWith("/system/version");
@@ -767,6 +794,35 @@ describe("API", () => {
       );
       expect(API.getAssistantEntriesStreamUrl("demo", "session-1", 7)).toBe(
         "/api/v1/projects/demo/assistant/sessions/session-1/entries/stream?after=7",
+      );
+    });
+
+    it("encodes project and episode Agent session scopes explicitly", async () => {
+      const requestSpy = vi.spyOn(API, "request").mockResolvedValue({ sessions: [] } as never);
+
+      await API.listAssistantSessions("demo", null, { episode: null });
+      await API.listAssistantSessions("demo", null, { episode: 3 });
+      await API.sendAssistantMessage("demo", "hello", null, undefined, "client-1", 3);
+
+      expect(requestSpy).toHaveBeenCalledWith(
+        "/projects/demo/assistant/sessions?scope=project",
+        { signal: undefined },
+      );
+      expect(requestSpy).toHaveBeenCalledWith(
+        "/projects/demo/assistant/sessions?scope=episode&episode=3",
+        { signal: undefined },
+      );
+      expect(requestSpy).toHaveBeenCalledWith(
+        "/projects/demo/assistant/sessions/send",
+        expect.objectContaining({
+          method: "POST",
+          body: JSON.stringify({
+            content: "hello",
+            images: [],
+            client_key: "client-1",
+            episode: 3,
+          }),
+        }),
       );
     });
 
@@ -1304,43 +1360,7 @@ describe("API", () => {
       });
     });
 
-    describe("presentations", () => {
-      it("requests the selected immutable versions and rendition", async () => {
-        const fetchMock = vi.fn().mockResolvedValue(mockResponse({ jsonData: { unit_id: "E1S01" } }));
-        vi.stubGlobal("fetch", fetchMock);
-
-        await API.getPresentation("demo", "videos", "E1S01", {
-          variant: "use_tts",
-          videoVersion: 3,
-          audioVersion: 2,
-        });
-
-        expect(fetchMock.mock.calls[0][0]).toBe(
-          "/api/v1/projects/demo/presentations/videos/E1S01?variant=use_tts&video_version=3&audio_version=2",
-        );
-      });
-
-      it("downloads the editable bundle through the authenticated API path", async () => {
-        const blob = new Blob(["zip"]);
-        const fetchMock = vi.fn().mockResolvedValue(
-          mockResponse({
-            blobData: blob,
-            headers: { "Content-Disposition": 'attachment; filename="E1S01_presentation.zip"' },
-          }),
-        );
-        vi.stubGlobal("fetch", fetchMock);
-
-        const result = await API.downloadPresentationBundle("demo", "reference_videos", "E1U01", {
-          variant: "post_production",
-          videoVersion: 7,
-        });
-
-        expect(result).toEqual({ blob, filename: "E1S01_presentation.zip" });
-        expect(fetchMock.mock.calls[0][0]).toBe(
-          "/api/v1/projects/demo/presentations/reference_videos/E1U01/bundle?variant=post_production&video_version=7",
-        );
-      });
-
+    describe("exports", () => {
       it("includes the selected presentation variant in Jianying download URLs", () => {
         expect(API.getJianyingDraftDownloadUrl("demo", 1, "/drafts", "token", "6", "use_tts"))
           .toContain("narration_delivery=use_tts");

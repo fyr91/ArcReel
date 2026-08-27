@@ -41,6 +41,7 @@ CAPABILITY_FAILURE_CODES: frozenset[str] = frozenset(
         "video_guided_continuation_mode_unsupported",
         "video_guided_continuation_unsupported",
         "video_guided_source_unavailable",
+        "video_h3_refine_mode_unsupported",
         "video_last_frame_requires_pro",
         "video_last_frame_unsupported",
         "video_output_profile_unsupported",
@@ -60,6 +61,18 @@ CAPABILITY_FAILURE_CODES: frozenset[str] = frozenset(
         "video_resolution_duration_unsupported",
         "video_start_image_unreadable",
         "voice_sample_video_audio_unavailable",
+    }
+)
+
+H3_REFINE_FAILURE_CODES: frozenset[str] = frozenset(
+    {
+        "video_hd_already_completed",
+        "video_hd_backend_unavailable",
+        "video_hd_checkpoint_unavailable",
+        "video_hd_confirm_first",
+        "video_hd_failed",
+        "video_hd_project_unsupported",
+        "video_hd_source_changed",
     }
 )
 
@@ -104,6 +117,7 @@ NARRATION_DELIVERY_FAILURE_CODES: frozenset[str] = frozenset(
 # in the DB; the key resolves to zh/en/vi templates rendered at read time.
 FAILURE_CODE_KEYS: dict[str, str] = {
     **{code: code for code in CAPABILITY_FAILURE_CODES},
+    **{code: code for code in H3_REFINE_FAILURE_CODES},
     **{code: code for code in REFERENCE_PROJECTION_FAILURE_CODES},
     **{code: code for code in NARRATION_DELIVERY_FAILURE_CODES},
     "provider_unsupported_media": "task_fail_provider_unsupported_media",

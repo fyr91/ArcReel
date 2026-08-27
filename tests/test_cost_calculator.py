@@ -36,6 +36,34 @@ class TestImageCost:
             "USD",
         )
 
+    @pytest.mark.parametrize(
+        ("model", "expected_amount"),
+        [
+            ("google:nano-banana@2-lite", 0.18),
+            ("openai:gpt-image@2", 0.25),
+        ],
+    )
+    def test_runware_image_cost_uses_rmb(self, model: str, expected_amount: float):
+        assert _cost("runware", "image", model=model) == (expected_amount, "CNY")
+
+
+class TestArkAgentPlanTextCost:
+    @pytest.mark.parametrize(
+        ("model", "expected_amount"),
+        [
+            ("deepseek-v4-flash", 12.0),
+            ("deepseek-v4-pro", 36.0),
+        ],
+    )
+    def test_deepseek_peak_cost_uses_rmb(self, model: str, expected_amount: float):
+        assert _cost(
+            "ark-agent-plan",
+            "text",
+            model=model,
+            input_tokens=1_000_000,
+            output_tokens=1_000_000,
+        ) == (expected_amount, "CNY")
+
 
 class TestVideoCost:
     def test_calculate_video_cost_known_and_default(self):

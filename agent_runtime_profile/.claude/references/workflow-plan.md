@@ -80,6 +80,8 @@ mcp__arcreel__get_workflow_plan({
 |---|---|
 | `collect_project_input` | 引导用户在 Web 端补齐项目输入 |
 | `draft_selling_points` | 起草卖点后经 `mcp__arcreel__patch_project` 写回（ad） |
+| `analyze_episode` | `mcp__arcreel__generate_episode_overview`，只分析 `target.episode` 绑定的课程文档 |
+| `confirm_episode_overview` | 向用户展示当前集解析草稿并允许修改；得到明确确认后调用 `mcp__arcreel__confirm_episode_overview`，完整传入四个概述字段与原样 `expected_source_revision` |
 | `analyze_assets` | dispatch `analyze-assets` 子任务 |
 | `reset_episode_planning` | `mcp__arcreel__reset_episode_planning`，按 `next_action.args` 传参 |
 | `plan_episodes` | `mcp__arcreel__plan_episodes` |

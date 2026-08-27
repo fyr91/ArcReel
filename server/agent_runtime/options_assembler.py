@@ -122,7 +122,12 @@ class OptionsAssembler:
             return await self._provider_env_loader()
         return await load_provider_env_overrides(user_id=self._user_id_provider())
 
-    def _build_append_prompt(self, project_name: str, locale: str = DEFAULT_LOCALE) -> str:
+    def _build_append_prompt(
+        self,
+        project_name: str,
+        locale: str = DEFAULT_LOCALE,
+        episode: int | None = None,
+    ) -> str:
         """Build the append portion for SystemPromptPreset.
 
         Combines the ArcReel persona, the locale language regulation, and the
@@ -142,13 +147,13 @@ class OptionsAssembler:
             f"- **Prompt 使用{lang}**：图片生成/视频生成使用的 prompt 应使用{lang}编写"
         )
 
-        project_context = self._build_project_context(project_name)
+        project_context = self._build_project_context(project_name, episode=episode)
         if project_context:
             parts.append(project_context)
 
         return "\n".join(parts)
 
-    def _build_project_context(self, project_name: str) -> str:
+    def _build_project_context(self, project_name: str, *, episode: int | None = None) -> str:
         """Build session-invariant project context for the system prompt.
 
         Holds only facts that cannot change within a session: project identity,
@@ -169,6 +174,16 @@ class OptionsAssembler:
             "- 项目元数据（标题、风格、概述等）存于 project.json，需要时读取。",
             "- Bash 命令必须写在单行，禁止使用 `\\` 换行，JSON 参数使用紧凑格式。",
         ]
+        if episode is not None:
+            parts.extend(
+                [
+                    f"- 当前分集焦点：第 {episode} 集。该集号在本会话内固定不变。",
+                    f"- 用户所说的“本集”“这一集”默认指第 {episode} 集；需要时读取 project.json 中该集账本以及对应源文、草稿和正式剧本的最新内容。",
+                    "- 可以读取项目级设定与其他分集作参考，但任何写操作仍须向工具显式传入目标集号；用户明确要求修改其他分集时先说明作用域变化。",
+                ]
+            )
+        else:
+            parts.append("- 当前为全项目会话；跨分集操作必须根据用户指明的集号调用工具，不得猜测目标分集。")
         return "\n".join(parts)
 
     def build_session_store(self) -> DbSessionStore | None:
@@ -203,6 +218,7 @@ class OptionsAssembler:
         locale: str = DEFAULT_LOCALE,
         stderr: Callable[[str], None] | None = None,
         session_id: str | None = None,
+        episode: int | None = None,
     ) -> Any:
         """Build ClaudeAgentOptions for a session.
 
@@ -323,7 +339,7 @@ class OptionsAssembler:
             system_prompt=SystemPromptPreset(
                 type="preset",
                 preset="claude_code",
-                append=self._build_append_prompt(project_name, locale=locale),
+                append=self._build_append_prompt(project_name, locale=locale, episode=episode),
             ),
             include_partial_messages=True,
             # CLI 只在该开关下把 stdin 收到的用户消息带 uuid 回放到 stdout。

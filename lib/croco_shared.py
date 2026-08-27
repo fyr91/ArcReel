@@ -193,6 +193,34 @@ class CrocoClient:
 
         return await _post()
 
+    async def refine_job(self, source_job_id: str, *, idempotency_key: str) -> dict:
+        """Continue one H3 preview job from its retained latent checkpoint.
+
+        The V2 endpoint accepts no JSON body.  ArcReel uses the owning queue
+        task id as the idempotency key, so a crash between the remote response
+        and local job-id persistence can safely replay the same child job.
+        """
+        source_job_id = source_job_id.strip()
+        idempotency_key = idempotency_key.strip()
+        if not source_job_id:
+            raise ValueError("source_job_id must not be empty")
+        if not idempotency_key:
+            raise ValueError("idempotency_key must not be empty")
+        url = f"{self._base_url}{_JOBS_ENDPOINT}/{source_job_id}/refine"
+        headers = {
+            "Authorization": f"Bearer {self._token}",
+            "Idempotency-Key": idempotency_key,
+        }
+
+        @with_retry_async(retry_if=_should_retry)
+        async def _post() -> dict:
+            async with httpx.AsyncClient(timeout=self._http_timeout) as client:
+                resp = await client.post(url, headers=headers)
+                resp.raise_for_status()
+                return resp.json()
+
+        return await _post()
+
     async def get_job(self, job_id: str) -> dict:
         """查询统一任务状态。"""
         url = f"{self._base_url}{_JOBS_ENDPOINT}/{job_id}"

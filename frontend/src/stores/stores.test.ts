@@ -166,7 +166,16 @@ describe("stores", () => {
   it("updates projects store fields", () => {
     const projects = useProjectsStore.getState();
 
-    projects.setProjects([{ name: "demo", title: "Demo", style: "Anime", thumbnail: null, status: {} }]);
+    projects.setProjects([
+      {
+        name: "demo",
+        title: "Demo",
+        content_mode: "drama",
+        style: "Anime",
+        thumbnail: null,
+        status: {},
+      },
+    ]);
     expect(useProjectsStore.getState().projects).toHaveLength(1);
 
     projects.setProjectsLoading(true);

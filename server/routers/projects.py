@@ -71,6 +71,11 @@ from server.routers._script_edits import (
 from server.routers._validators import validate_backend_value
 from server.services import workflow_planner as workflow_plan_service
 from server.services.episode_metadata import EpisodeMetadataNotFoundError, update_episode_metadata
+from server.services.episode_overview_review import (
+    EpisodeOverviewNotFoundError,
+    EpisodeOverviewRevisionConflictError,
+    confirm_episode_overview,
+)
 from server.services.project_archive import (
     ProjectArchiveService,
     ProjectArchiveValidationError,
@@ -599,12 +604,21 @@ async def list_projects():
                     )
 
                     raw_title = project.get("title")
+                    raw_content_mode = project.get("content_mode") or "drama"
+                    content_mode = (
+                        raw_content_mode
+                        if isinstance(raw_content_mode, str) and raw_content_mode in {"drama", "course", "ad"}
+                        else None
+                    )
                     projects.append(
                         {
                             "name": name,
                             # title 缺失/为 None/类型异常时统一归一为空串,前端 i18n
                             # 兜底显示「未命名项目」,确保接口契约始终返回 str。
                             "title": raw_title if isinstance(raw_title, str) else "",
+                            # 早期项目没有显式 content_mode，系统其它读取路径均按 drama
+                            # 兼容；列表端点在边界处归一，卡片无需自行猜测项目类型。
+                            "content_mode": content_mode,
                             "style": project.get("style", ""),
                             "style_template_id": project.get("style_template_id"),
                             "style_image": project.get("style_image"),
@@ -619,6 +633,7 @@ async def list_projects():
                         {
                             "name": name,
                             "title": "",
+                            "content_mode": None,
                             "style": "",
                             "thumbnail": None,
                             "status": {},
@@ -627,7 +642,16 @@ async def list_projects():
             except Exception as e:
                 # 出错时返回基本信息
                 logger.warning("加载项目 '%s' 元数据失败: %s", name, e)
-                projects.append({"name": name, "title": "", "style": "", "thumbnail": None, "status": {}})
+                projects.append(
+                    {
+                        "name": name,
+                        "title": "",
+                        "content_mode": None,
+                        "style": "",
+                        "thumbnail": None,
+                        "status": {},
+                    }
+                )
 
         return {"projects": projects}
 
@@ -1467,6 +1491,18 @@ class UpdateOverviewRequest(BaseModel):
     world_setting: str | None = None
 
 
+class ConfirmEpisodeOverviewRequest(BaseModel):
+    """Complete editable analysis fields plus the source revision being reviewed."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    synopsis: str
+    genre: str
+    theme: str
+    world_setting: str
+    expected_source_revision: str
+
+
 class UpdateEpisodeRequest(BaseModel):
     """Editable formal-script metadata mirrored into project.json episodes[]."""
 
@@ -1834,6 +1870,77 @@ async def generate_overview(name: str, _t: Translator):
         raise
     except Exception:
         logger.exception("请求处理失败")
+        raise HTTPException(status_code=500, detail=_t("internal_server_error"))
+
+
+@router.post(
+    "/projects/{name}/episodes/{episode}/generate-overview",
+    dependencies=[Depends(require_project_migration_ok)],
+)
+async def generate_episode_overview(name: str, episode: int, _t: Translator):
+    """Generate story context from one course episode's bound source file only."""
+
+    if episode < 1:
+        raise BadRequestError("invalid_episode", episode=episode)
+    try:
+        manager = get_project_manager()
+        manager.get_project_path(name)
+        with project_change_source("webui"):
+            overview = await manager.generate_episode_overview(name, episode)
+        return {"success": True, "overview": overview}
+    except FileNotFoundError as exc:
+        raise NotFoundError("project_not_found", name=name) from exc
+    except PydanticValidationError:
+        logger.exception("课程分集概述生成响应解析失败")
+        raise HTTPException(status_code=400, detail=_t("overview_ai_response_invalid"))
+    except EmptySourceError as exc:
+        raise BadRequestError("overview_source_empty") from exc
+    except ValueError as exc:
+        logger.warning("课程分集概述生成参数或配置错误: name=%s episode=%s (%s)", name, episode, exc)
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except (HTTPException, ApiError):
+        raise
+    except Exception:
+        logger.exception("课程分集概述生成失败")
+        raise HTTPException(status_code=500, detail=_t("internal_server_error"))
+
+
+@router.patch("/projects/{name}/episodes/{episode}/overview")
+async def confirm_course_episode_overview(
+    name: str,
+    episode: int,
+    req: ConfirmEpisodeOverviewRequest,
+    _t: Translator,
+):
+    """Save the reviewed episode overview and mark it confirmed."""
+
+    try:
+
+        def _sync():
+            manager = get_project_manager()
+            with project_change_source("webui"):
+                return confirm_episode_overview(
+                    manager,
+                    name,
+                    episode,
+                    req.model_dump(exclude={"expected_source_revision"}),
+                    expected_source_revision=req.expected_source_revision,
+                )
+
+        updated = await asyncio.to_thread(_sync)
+        return {"success": True, **updated}
+    except EpisodeOverviewNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=_t("episode_overview_not_found", episode=episode)) from exc
+    except EpisodeOverviewRevisionConflictError as exc:
+        raise HTTPException(status_code=409, detail=_t("episode_overview_revision_conflict")) from exc
+    except FileNotFoundError as exc:
+        raise NotFoundError("project_not_found", name=name) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    except (HTTPException, ApiError):
+        raise
+    except Exception:
+        logger.exception("确认课程分集概述失败")
         raise HTTPException(status_code=500, detail=_t("internal_server_error"))
 
 

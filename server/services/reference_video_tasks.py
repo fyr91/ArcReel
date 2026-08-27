@@ -35,6 +35,7 @@ from lib.generation_queue import (
 from lib.minimax_h3_prompt import is_minimax_h3_model
 from lib.narration_delivery import POST_PRODUCTION, USE_TTS, narration_delivery_for_video_workflow
 from lib.path_safety import safe_join
+from lib.providers import PROVIDER_CROCO
 from lib.reference_video.artifact_selection import CurrentReferenceAssets
 from lib.reference_video.execution_checkpoint import (
     NarrationExecutionFacts,
@@ -416,6 +417,9 @@ async def execute_reference_video_task(
             resource_type="reference_videos",
             user_id=user_id,
         )
+        if h3_manual_refine and latest_guide is not None:
+            latest_guide = replace(latest_guide, include_guide_audio=True)
+            latest_evidence = {**(latest_evidence or {}), "audio_policy": "continue"}
         if latest_guide != continuation_guide or latest_evidence != dependency_evidence:
             raise ValueError(f"video dependency changed before submission: {resource_id}")
 
@@ -478,6 +482,17 @@ async def execute_reference_video_task(
     # 参考视频是唯一需要非空 resolution 档位的调用方：lane 已按 registry provider_id
     # 兜底（resolution 命中空档位时取 provider fallback），executor 直接取非空档位。
     resolution = video.resolution_or_fallback
+    h3_manual_refine = (
+        (project.get("content_mode") or script.get("content_mode")) in {"drama", "course"}
+        and execution_capability == "r2v"
+        and actual_provider_id == PROVIDER_CROCO
+        and is_minimax_h3_model(model_name)
+    )
+    if h3_manual_refine:
+        resolution = "480p"
+        if continuation_guide is not None:
+            continuation_guide = replace(continuation_guide, include_guide_audio=True)
+            dependency_evidence = {**(dependency_evidence or {}), "audio_policy": "continue"}
 
     # 当前执行 lane 适配成公共投影候选；引用展开、实际文件存在、产品优先裁剪、时长取档与
     # 音频冲突都由同一 projector 给出。payload 未声明请求选项时按直接入队兼容语义视为
@@ -929,6 +944,7 @@ async def execute_reference_video_task(
             reference_audio_files=provider_audio,
             reference_audio_targets=reference_audio_targets,
             continuation_guide=continuation_guide,
+            manual_refine=h3_manual_refine,
             aspect_ratio=aspect_ratio,
             duration_seconds=effective_duration,
             resolution=resolution,
@@ -939,6 +955,8 @@ async def execute_reference_video_task(
             commit_formal_output=artifact_committer,
             visual_basis_digest=visual_basis_digest,
             generate_audio=video.requested_generate_audio,
+            h3_manual_refine=h3_manual_refine,
+            h3_refine_profile=("latent_upscale_2mp_v1" if h3_manual_refine else None),
         )
 
         async def _finalize() -> dict[str, Any]:

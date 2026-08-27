@@ -11,13 +11,14 @@ description: 从剧本中提取角色 / 场景 / 道具三类资产定义，并�
 - 项目名称（如 `my_project`）
 - 计划授权的分析范围
 - 计划给出的 `scope` 与 `expected_source_revision`
+- 课程项目还会给出 `episode`；该值必须原样传给完成工具
 - 已有角色/场景/道具名称列表（如有）
 
 **输出**：完成角色/场景/道具写入后，返回精炼的结构化摘要（不包含原始小说文本）
 
 ## 核心原则
 
-1. **只提取视觉信息**：description 字段只包含外貌、服装、标志物、色彩关键词——不包含性格、关系、剧情
+1. **只提取视觉信息**：description 字段只包含外貌、服装、标志物、视觉结构、色彩关键词——不包含性格、关系、剧情、名称等
 2. **严格增量追加**：已存在的角色/场景/道具**不发给 patch_project 工具**（在调用前过滤掉），在摘要中标注「已存在，跳过」。若需要修订已有资产描述，由主 agent 显式指示后再做，不能自行覆盖人工编辑过的字段
 3. **完成即返回**：独立完成全部工作后返回，不在中间步骤等待用户确认
 
@@ -27,7 +28,8 @@ description: 从剧本中提取角色 / 场景 / 道具三类资产定义，并�
 
 使用 Read 工具读取 `project.json`（相对 session cwd），记录：
 - 已有的 characters、scenes 和 props 名称（后续跳过这些）
-- overview、style 字段（理解项目背景）
+- style 字段（理解项目视觉风格）
+- 非课程项目读取顶层 overview；课程项目只读取主 agent 指定 `episode` 条目里的 overview，禁止回退到顶层 overview 或其他集
 - `source_kind` 字段（`novel` / `screenplay`，缺失按 `novel`）——决定 Step 3 角色提取走「推断」还是「提取」分支
 
 随后调用一次 `mcp__arcreel__list_global_assets`，读取全局角色、场景和道具的名称与描述 Context。
@@ -117,7 +119,8 @@ description: 从剧本中提取角色 / 场景 / 道具三类资产定义，并�
 mcp__arcreel__complete_asset_inventory({
   "entries": {Step 4 整理的 characters / scenes / props；全空时传三个空对象},
   "scope": {主 agent 传入的 scope},
-  "expected_source_revision": "{主 agent 传入的 expected_source_revision}"
+  "expected_source_revision": "{主 agent 传入的 expected_source_revision}",
+  "episode": "{课程项目传主 agent 给出的 episode；非课程项目省略}"
 })
 ```
 
