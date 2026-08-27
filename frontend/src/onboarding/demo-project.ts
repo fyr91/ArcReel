@@ -161,6 +161,7 @@ export function buildDemoProject(t: DemoT): ProjectSummary {
   return {
     name: DEMO_PROJECT_NAME,
     title: t("demo_project_title"),
+    content_mode: "drama",
     style: t("demo_project_style"),
     style_template_id: null,
     style_image: null,

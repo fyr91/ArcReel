@@ -190,10 +190,13 @@ export interface UnifiedVideoStyle extends UnifiedVideoStyleDraft {
   updated_at: string;
 }
 
+/** 用户创建项目时可选择、并在项目级 UI 中展示的内容类型。 */
+export type ProjectContentMode = "drama" | "course" | "ad";
+
 export interface ProjectData {
   title: string;
   /** Creation/API runtime only accepts drama/course/ad; narration remains an internal script-shape discriminator. */
-  content_mode: "drama" | "course" | "ad" | "narration";
+  content_mode: ProjectContentMode | "narration";
   style: string;
   style_template_id?: string | null;
   style_image?: string;
@@ -266,6 +269,8 @@ export interface ProjectData {
 export interface ProjectSummary {
   name: string;
   title: string;
+  /** 元数据损坏或 project.json 缺失的降级行无法确定类型。 */
+  content_mode: ProjectContentMode | null;
   style: string;
   style_template_id?: string | null;
   style_image?: string | null;

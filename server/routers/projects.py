@@ -599,12 +599,21 @@ async def list_projects():
                     )
 
                     raw_title = project.get("title")
+                    raw_content_mode = project.get("content_mode") or "drama"
+                    content_mode = (
+                        raw_content_mode
+                        if isinstance(raw_content_mode, str) and raw_content_mode in {"drama", "course", "ad"}
+                        else None
+                    )
                     projects.append(
                         {
                             "name": name,
                             # title 缺失/为 None/类型异常时统一归一为空串,前端 i18n
                             # 兜底显示「未命名项目」,确保接口契约始终返回 str。
                             "title": raw_title if isinstance(raw_title, str) else "",
+                            # 早期项目没有显式 content_mode，系统其它读取路径均按 drama
+                            # 兼容；列表端点在边界处归一，卡片无需自行猜测项目类型。
+                            "content_mode": content_mode,
                             "style": project.get("style", ""),
                             "style_template_id": project.get("style_template_id"),
                             "style_image": project.get("style_image"),
@@ -619,6 +628,7 @@ async def list_projects():
                         {
                             "name": name,
                             "title": "",
+                            "content_mode": None,
                             "style": "",
                             "thumbnail": None,
                             "status": {},
@@ -627,7 +637,16 @@ async def list_projects():
             except Exception as e:
                 # 出错时返回基本信息
                 logger.warning("加载项目 '%s' 元数据失败: %s", name, e)
-                projects.append({"name": name, "title": "", "style": "", "thumbnail": None, "status": {}})
+                projects.append(
+                    {
+                        "name": name,
+                        "title": "",
+                        "content_mode": None,
+                        "style": "",
+                        "thumbnail": None,
+                        "status": {},
+                    }
+                )
 
         return {"projects": projects}
 

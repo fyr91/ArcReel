@@ -32,12 +32,14 @@ import { ICON_BTN_FILLED_CLS } from "@/components/ui/darkroom-tokens";
 import {
   ProjectCard,
   Poster,
+  ContentModePill,
   PhasePill,
   NeedsRepairPill,
   RepairReasonLine,
   StaleAssetsLine,
   asProjectStatus,
   assetCount,
+  contentModeLabelOf,
   gradientProgressStyles,
   repairReasonOf,
   staleAssetTotal,
@@ -133,6 +135,7 @@ function NowEditingCard({ project, styleLabel, phaseLabels, t }: NowEditingCardP
   const scenes = assetCount(status, "scene");
   const propsStat = assetCount(status, "prop");
   const repairReason = repairReasonOf(status);
+  const contentModeLabel = contentModeLabelOf(project.content_mode, t);
 
   const { trackStyle, barStyle } = gradientProgressStyles(
     phase === "completed" ? "good" : "accent",
@@ -158,7 +161,7 @@ function NowEditingCard({ project, styleLabel, phaseLabels, t }: NowEditingCardP
         >
           now
         </span>
-        <div className="relative flex items-center gap-2.5">
+        <div className="relative flex flex-wrap items-center gap-2.5">
           <span className="inline-flex items-center gap-1.5 font-mono text-[10px] font-bold tracking-[0.14em] text-accent-2">
             <span
               aria-hidden
@@ -186,8 +189,11 @@ function NowEditingCard({ project, styleLabel, phaseLabels, t }: NowEditingCardP
         >
           {getProjectDisplayName(project.title, t("dashboard:untitled_project"))}
         </h3>
-        <div className="font-editorial relative italic text-text-3" style={{ fontSize: 15 }}>
-          {styleLabel}
+        <div className="relative flex flex-wrap items-center gap-2.5">
+          <ContentModePill label={contentModeLabel} />
+          <span className="font-editorial italic text-text-3" style={{ fontSize: 15 }}>
+            {styleLabel}
+          </span>
         </div>
 
         <div aria-hidden className="relative my-4 h-px bg-hairline-soft" />
@@ -546,14 +552,7 @@ function HeroStrip({ totals, t }: HeroStripProps) {
     [i18n.language],
   );
 
-  let subtitle: string;
-  if (totals.production > 0) {
-    subtitle = t("dashboard:lobby_hero_subtitle_active", { count: totals.production });
-  } else if (totals.total > 0) {
-    subtitle = t("dashboard:lobby_hero_subtitle_quiet");
-  } else {
-    subtitle = t("dashboard:lobby_hero_subtitle_idle");
-  }
+  const subtitle = t("dashboard:lobby_hero_subtitle_cheerup");
   const summaryLine =
     totals.total === 0
       ? t("dashboard:lobby_hero_summary_idle")

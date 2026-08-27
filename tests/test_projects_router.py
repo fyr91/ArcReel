@@ -2467,6 +2467,26 @@ class TestProjectsRouter:
         assert "episodes" not in status
 
     @pytest.mark.unit
+    def test_list_projects_returns_content_mode_for_project_cards(self, tmp_path, monkeypatch):
+        """列表端点直接给出项目类型；旧项目缺字段时按 drama 兼容，损坏行不猜测。"""
+        fake_pm = _FakePM(tmp_path)
+        client = _client(monkeypatch, fake_pm)
+
+        with client:
+            legacy_resp = client.get("/api/v1/projects")
+            fake_pm.project_data["ready"]["content_mode"] = "course"
+            course_resp = client.get("/api/v1/projects")
+
+        assert legacy_resp.status_code == 200
+        assert course_resp.status_code == 200
+        legacy_by_name = {item["name"]: item for item in legacy_resp.json()["projects"]}
+        course_by_name = {item["name"]: item for item in course_resp.json()["projects"]}
+        assert legacy_by_name["ready"]["content_mode"] == "drama"
+        assert course_by_name["ready"]["content_mode"] == "course"
+        assert course_by_name["empty"]["content_mode"] is None
+        assert course_by_name["broken"]["content_mode"] is None
+
+    @pytest.mark.unit
     def test_get_project_status_comes_from_the_project_summary(self, tmp_path, monkeypatch):
         """全局头读的项目级状态与列表同源。"""
         client = _client(monkeypatch, _FakePM(tmp_path))
