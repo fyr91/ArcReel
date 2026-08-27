@@ -55,6 +55,7 @@ from lib.episode_paths import (
     REFERENCE_VIDEO_STEP1_QUARANTINE_FILENAME,
     REFERENCE_VIDEO_STEP2_QUARANTINE_FILENAME,
     STEP1_FILENAMES,
+    episode_drafts_dir,
     episode_script_relpath,
 )
 from lib.formal_write import formal_write_transaction, project_metadata_lock
@@ -90,6 +91,14 @@ PROJECT_SLUG_SANITIZER = re.compile(r"[^a-zA-Z0-9]+")
 # 存量三值 "grid" 已由 v4→v5 迁移重编码为 storyboard + grid_storyboard=true。
 VALID_GENERATION_MODES: frozenset[str] = frozenset({"storyboard", "reference_video"})
 _DEFAULT_GENERATION_MODE = "storyboard"
+
+
+class CourseSourceInUseError(RuntimeError):
+    """课程源文已产生下游草稿或剧本，不能再从源文件入口删除。"""
+
+    def __init__(self, episode: int):
+        self.episode = episode
+        super().__init__(f"course episode {episode} source already has downstream artifacts")
 
 
 class _Unset:
@@ -1807,6 +1816,80 @@ class ProjectManager:
             source_dir = project_path / "source"
             source_dir.mkdir(parents=True, exist_ok=True)
             yield source_dir
+
+    def delete_source_file(self, project_name: str, filename: str) -> None:
+        """删除源文件，并维护课程项目的单文档单集绑定。
+
+        课程欢迎页允许用户在解析前撤回刚上传的文档。Episode 1 是固定占位条目，
+        删除时恢复为空占位；后续尚未解析的 Episode 则整体移除。已有 step1 或正式
+        剧本时拒绝删除，避免制造指向不存在源文的在制 Episode。
+        """
+
+        project_dir = self.get_project_path(project_name)
+        project_file = self._get_project_file_path(project_name)
+        source_path = safe_join(project_dir / "source", filename)
+        raw_dir = project_dir / "source" / "raw"
+
+        metadata_changed = False
+        changed_paths: list[str] = [source_path.relative_to(project_dir).as_posix()]
+
+        with self._project_lock(project_name):
+            if not source_path.exists():
+                raise FileNotFoundError(source_path)
+
+            raw_files = (
+                [path for path in raw_dir.iterdir() if path.is_file() and path.stem == source_path.stem]
+                if raw_dir.exists()
+                else []
+            )
+            with formal_write_transaction(project_file, source_path, *raw_files):
+                with open(project_file, encoding="utf-8") as f:  # noqa: PTH123
+                    project = json.load(f)
+
+                if project.get("content_mode") == "course":
+                    relative_source = source_path.relative_to(project_dir).as_posix()
+                    episodes = project.get("episodes")
+                    if isinstance(episodes, list):
+                        matched = [
+                            episode
+                            for episode in episodes
+                            if isinstance(episode, dict) and episode.get("source_file") == relative_source
+                        ]
+                        for episode in matched:
+                            episode_num = episode.get("episode")
+                            if type(episode_num) is not int or episode_num < 1:
+                                continue
+                            script_file = episode.get("script_file")
+                            script_exists = (
+                                isinstance(script_file, str)
+                                and bool(script_file)
+                                and safe_join(project_dir, script_file).exists()
+                            )
+                            drafts_dir = episode_drafts_dir(project_dir, episode_num)
+                            draft_exists = drafts_dir.exists() and any(
+                                path.is_file() and not path.name.startswith(".") for path in drafts_dir.iterdir()
+                            )
+                            if script_exists or draft_exists:
+                                raise CourseSourceInUseError(episode_num)
+
+                            if episode_num == 1:
+                                episode["source_file"] = None
+                                episode["source_revision"] = None
+                                episode["title"] = ""
+                            else:
+                                episodes.remove(episode)
+                            metadata_changed = True
+
+                if metadata_changed:
+                    self._apply_project_mutation_unlocked(project, lambda _project: None)
+                    atomic_write_json(project_file, project)
+                    changed_paths.append(self.PROJECT_FILE)
+
+                source_path.unlink()
+                for raw_file in raw_files:
+                    raw_file.unlink()
+
+        emit_project_change_hint(project_name, changed_paths=changed_paths)
 
     @contextmanager
     def file_lock(self, path: Path):

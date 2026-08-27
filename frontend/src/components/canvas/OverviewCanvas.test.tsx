@@ -9,10 +9,21 @@ import { useCostStore } from "@/stores/cost-store";
 import type { ProjectData } from "@/types";
 
 vi.mock("./WelcomeCanvas", () => ({
-  WelcomeCanvas: ({ onUpload }: { onUpload: (file: File) => void }) => (
-    <button data-testid="welcome-canvas" onClick={() => onUpload(new File(["x"], "source.txt"))}>
-      welcome
-    </button>
+  WelcomeCanvas: ({
+    onUpload,
+    onAnalyze,
+  }: {
+    onUpload: (file: File) => void;
+    onAnalyze: () => void;
+  }) => (
+    <div data-testid="welcome-canvas">
+      <button data-testid="welcome-upload" onClick={() => onUpload(new File(["x"], "source.txt"))}>
+        upload
+      </button>
+      <button data-testid="welcome-analyze" onClick={() => onAnalyze()}>
+        analyze
+      </button>
+    </div>
   ),
 }));
 
@@ -101,6 +112,105 @@ describe("OverviewCanvas", () => {
     expect(screen.getByTestId("welcome-canvas")).toBeInTheDocument();
   });
 
+  it("shows the shared upload-and-analyze welcome canvas for an empty course placeholder episode", () => {
+    render(
+      <OverviewCanvas
+        projectName="course-demo"
+        projectData={makeProjectData({
+          content_mode: "course",
+          overview: undefined,
+          episodes: [
+            {
+              episode: 1,
+              title: "",
+              script_file: "scripts/episode_1.json",
+              source_file: null,
+              script_status: "none",
+            },
+          ],
+        })}
+      />,
+    );
+
+    expect(screen.getByTestId("welcome-canvas")).toBeInTheDocument();
+  });
+
+  it("keeps the course welcome canvas after upload until analysis creates the overview", () => {
+    render(
+      <OverviewCanvas
+        projectName="course-demo"
+        projectData={makeProjectData({
+          content_mode: "course",
+          overview: undefined,
+          episodes: [
+            {
+              episode: 1,
+              title: "source",
+              script_file: "scripts/episode_1.json",
+              source_file: "source/source.txt",
+              script_status: "none",
+            },
+          ],
+        })}
+      />,
+    );
+
+    expect(screen.getByTestId("welcome-canvas")).toBeInTheDocument();
+  });
+
+  it("binds a course upload to its episode and waits for explicit analysis", async () => {
+    const initial = makeProjectData({
+      content_mode: "course",
+      overview: undefined,
+      episodes: [
+        {
+          episode: 1,
+          title: "",
+          script_file: "scripts/episode_1.json",
+          source_file: null,
+          script_status: "none",
+        },
+      ],
+    });
+    const uploaded = makeProjectData({
+      ...initial,
+      episodes: [
+        {
+          episode: 1,
+          title: "source",
+          script_file: "scripts/episode_1.json",
+          source_file: "source/source.txt",
+          script_status: "none",
+        },
+      ],
+    });
+    useProjectsStore.setState({ currentProjectName: "course-demo", currentProjectData: initial });
+    const addCourseEpisode = vi.spyOn(API, "addCourseEpisode").mockResolvedValue({
+      success: true,
+      path: "source/source.txt",
+      filename: "source.txt",
+      episode: uploaded.episodes[0] as {
+        episode: number;
+        title: string;
+        script_file: string;
+        source_file: string;
+      },
+    });
+    const genericUpload = vi.spyOn(API, "uploadFile");
+    const generateOverview = vi.spyOn(API, "generateOverview").mockResolvedValue(undefined as never);
+    vi.spyOn(API, "getProject").mockResolvedValue({ project: uploaded, scripts: {} });
+
+    render(<OverviewCanvas projectName="course-demo" projectData={initial} />);
+    fireEvent.click(screen.getByTestId("welcome-upload"));
+
+    await waitFor(() => expect(addCourseEpisode).toHaveBeenCalledWith("course-demo", expect.any(File)));
+    expect(genericUpload).not.toHaveBeenCalled();
+    expect(generateOverview).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByTestId("welcome-analyze"));
+    await waitFor(() => expect(generateOverview).toHaveBeenCalledWith("course-demo"));
+  });
+
   it("regenerates overview on button click", async () => {
     vi.spyOn(API, "generateOverview").mockResolvedValue(undefined as never);
     vi.spyOn(API, "getProject").mockResolvedValue({
@@ -172,7 +282,7 @@ describe("OverviewCanvas", () => {
       />,
     );
 
-    fireEvent.click(screen.getByTestId("welcome-canvas"));
+    fireEvent.click(screen.getByTestId("welcome-upload"));
     expect(await screen.findByText("同名文件已存在")).toBeInTheDocument();
 
     // 切到只读态（如工作台切到演示项目复用同一路由实例）——悬挂的冲突弹窗须一并清空，
@@ -303,7 +413,7 @@ describe("OverviewCanvas", () => {
       />,
     );
 
-    fireEvent.click(screen.getByTestId("welcome-canvas"));
+    fireEvent.click(screen.getByTestId("welcome-upload"));
 
     // 上传仍在途时切到只读态（如导航到演示项目复用同一路由实例）
     rerender(
@@ -339,7 +449,7 @@ describe("OverviewCanvas", () => {
       />,
     );
 
-    fireEvent.click(screen.getByTestId("welcome-canvas"));
+    fireEvent.click(screen.getByTestId("welcome-upload"));
     await waitFor(() => expect(resolveUpload).toBeDefined());
 
     // 上传仍在途时切到只读态（如导航到演示项目复用同一路由实例）
@@ -376,7 +486,7 @@ describe("OverviewCanvas", () => {
       />,
     );
 
-    fireEvent.click(screen.getByTestId("welcome-canvas"));
+    fireEvent.click(screen.getByTestId("welcome-upload"));
     await waitFor(() => expect(resolveUpload).toBeDefined());
 
     // 用户经由历史记录跳转到非概览深链，整个组件实例被卸载——readOnlyRef 不会再更新
@@ -402,7 +512,7 @@ describe("OverviewCanvas", () => {
       />,
     );
 
-    fireEvent.click(screen.getByTestId("welcome-canvas"));
+    fireEvent.click(screen.getByTestId("welcome-upload"));
     await screen.findByText("同名文件已存在");
 
     // 冲突弹窗等待用户决策期间组件被卸载——不该让 handleUpload 里的 Promise 永久悬空

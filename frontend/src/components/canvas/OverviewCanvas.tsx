@@ -43,6 +43,23 @@ interface OverviewDraft {
   world_setting: string;
 }
 
+function shouldShowWelcome(projectData: ProjectData): boolean {
+  if (projectData.overview) return false;
+
+  const episodes = projectData.episodes ?? [];
+  if (episodes.length === 0) return true;
+
+  // 课程项目会预建一个空的 Episode 1，并在首份文档上传后继续保持“尚未解析”的
+  // script_status。这个占位集不代表初始化已经完成；在生成 step1 / 正式剧本前，
+  // 课程与 drama 共用同一套“上传源文 → 显式开始分析”入口。
+  return (
+    projectData.content_mode === "course" &&
+    episodes.every(
+      (episode) => episode.script_status == null || episode.script_status === "none",
+    )
+  );
+}
+
 export function OverviewCanvas({
   projectName,
   projectData,
@@ -99,7 +116,7 @@ export function OverviewCanvas({
       return;
     }
     if (!projectData) return;
-    const isWelcome = !projectData.overview && (projectData.episodes?.length ?? 0) === 0;
+    const isWelcome = shouldShowWelcome(projectData);
     if (wasWelcomeRef.current === true && !isWelcome) {
       setHandoffTrigger((k) => k + 1);
     }
@@ -134,6 +151,17 @@ export function OverviewCanvas({
 
   const handleUpload = useCallback(
     async (file: File) => {
+      if (projectData?.content_mode === "course") {
+        const result = await API.addCourseEpisode(projectName, file);
+        useAppStore.getState().invalidateSourceFiles();
+        await refreshProject();
+        useAppStore.getState().pushToast(
+          tRef.current("course_episode_added", { episode: result.episode.episode }),
+          "success",
+        );
+        return;
+      }
+
       const tryUpload = async (
         onConflict?: "fail" | "replace" | "rename"
       ): Promise<void> => {
@@ -188,7 +216,7 @@ export function OverviewCanvas({
         }
       }
     },
-    [projectName],
+    [projectData?.content_mode, projectName, refreshProject],
   );
 
   const handleAnalyze = useCallback(async () => {
@@ -280,7 +308,7 @@ export function OverviewCanvas({
 
   const status = projectData.status;
   const overview = projectData.overview;
-  const showWelcome = !overview && (projectData.episodes?.length ?? 0) === 0;
+  const showWelcome = shouldShowWelcome(projectData);
   // ad 项目恒单集（episodes 非空），不会落入 showWelcome；建项后素材全空时进入初始化页：
   // 上传商品图 + 商品描述 + brief + 可选 sheet 生成。任一素材就绪即切回概览。
   const showAdInit =

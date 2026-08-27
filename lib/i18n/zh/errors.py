@@ -132,6 +132,7 @@ MESSAGES = {
     "product_task_submitted": "商品「{name}」资产图生成任务已提交",
     # Files
     "file_not_found": "文件不存在: {path}",
+    "course_source_in_use": "课程 Episode {episode} 已开始解析，不能删除其源文件",
     "forbidden_access": "禁止访问项目目录外的文件",
     "invalid_upload_type": "无效的上传类型: {upload_type}",
     "missing_filename": "上传的文件缺少文件名",

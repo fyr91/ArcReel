@@ -137,6 +137,7 @@ MESSAGES = {
     "product_task_submitted": "Đã gửi tác vụ tạo hình tài sản hàng hóa cho '{name}'",
     # Files
     "file_not_found": "Tệp không tồn tại: {path}",
+    "course_source_in_use": "Tập khóa học {episode} đã bắt đầu được phân tích nên không thể xóa tệp nguồn",
     "forbidden_access": "Cấm truy cập tệp ngoài thư mục dự án",
     "invalid_upload_type": "Loại tải lên không hợp lệ: {upload_type}",
     "missing_filename": "Tệp tải lên thiếu tên tệp",

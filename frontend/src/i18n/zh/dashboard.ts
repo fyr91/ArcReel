@@ -34,7 +34,7 @@ export default {
   'content_mode_course_desc': '单文档单集——由引子、故事演绎、知识解说和总结组成，讲师以右下角方形画中画出镜。',
   'add_course_episode': '添加课程 Episode',
   'course_episode_drop_hint': '拖入一份新课程文档，或点击选择文件',
-  'course_episode_added': 'Episode {{episode}} 已添加，开始解析本集文档',
+  'course_episode_added': 'Episode {{episode}} 已上传，等待解析',
   'course_episode_add_failed': '添加 Episode 失败：{{message}}',
   'content_mode_drama_desc': '内容驱动——角色对话与剧情推动画面，适合剧情演绎、小说改编等故事型内容。',
   'optional': '可选',

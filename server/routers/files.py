@@ -42,7 +42,7 @@ from lib.image_utils import normalize_uploaded_image, validate_image_bytes
 from lib.json_io import atomic_write_bytes
 from lib.path_safety import PathTraversalError, safe_join
 from lib.project_change_hints import build_change_label, emit_project_change_batch, project_change_source
-from lib.project_manager import ProjectManager, get_project_manager
+from lib.project_manager import CourseSourceInUseError, ProjectManager, get_project_manager
 from lib.source_loader import (
     ConflictError,
     CorruptFileError,
@@ -766,26 +766,20 @@ async def delete_source_file(project_name: str, filename: str, _t: Translator):
 
         def _sync():
             manager = get_project_manager()
-            project_dir = manager.get_project_path(project_name)
-
-            with manager.locked_source_mutation(project_name):
-                # 安全检查：确保路径在项目目录内
-                try:
-                    source_path = safe_join(project_dir, "source", filename)
-                except PathTraversalError:
-                    raise HTTPException(status_code=403, detail=_t("forbidden_access"))
-
-                if source_path.exists():
-                    source_path.unlink()
-                    # 级联删除原文件备份（同 stem，任意扩展名）
-                    raw_dir = project_dir / "source" / "raw"
-                    if raw_dir.exists():
-                        stem = source_path.stem
-                        for raw_file in raw_dir.iterdir():
-                            if raw_file.is_file() and raw_file.stem == stem:
-                                raw_file.unlink()
-                    return {"success": True}
+            # 先区分项目不存在，再把 manager 内部的文件不存在映射为源文件 404。
+            manager.get_project_path(project_name)
+            try:
+                manager.delete_source_file(project_name, filename)
+            except PathTraversalError:
+                raise HTTPException(status_code=403, detail=_t("forbidden_access"))
+            except CourseSourceInUseError as exc:
+                raise HTTPException(
+                    status_code=409,
+                    detail=_t("course_source_in_use", episode=exc.episode),
+                )
+            except FileNotFoundError:
                 raise HTTPException(status_code=404, detail=_t("file_not_found", path=filename))
+            return {"success": True}
 
         return await asyncio.to_thread(_sync)
 

@@ -111,6 +111,66 @@ class TestFilesRouter:
         assert project["episodes"][1]["source_file"].endswith("lesson-two.txt")
 
     @pytest.mark.unit
+    def test_delete_unprocessed_course_source_restores_initial_placeholder(self, tmp_path, monkeypatch):
+        client, pm = _client(monkeypatch, tmp_path)
+        pm.create_project("course-demo", content_mode="course")
+        pm.create_project_metadata(
+            "course-demo",
+            "Course",
+            "Anime",
+            "course",
+            extras={"generation_mode": "reference_video", "grid_storyboard": False},
+        )
+
+        with client:
+            uploaded = client.post(
+                "/api/v1/projects/course-demo/course/episodes",
+                files={"file": ("lesson-one.md", "第一课", "text/markdown")},
+            )
+            deleted = client.delete("/api/v1/projects/course-demo/source/lesson-one.txt")
+
+        assert uploaded.status_code == 200, uploaded.text
+        assert deleted.status_code == 200, deleted.text
+        project = pm.load_project("course-demo")
+        assert project["episodes"] == [
+            {
+                "episode": 1,
+                "title": "",
+                "script_file": "scripts/episode_1.json",
+                "source_file": None,
+                "source_revision": None,
+            }
+        ]
+        assert not (pm.get_project_path("course-demo") / "source" / "lesson-one.txt").exists()
+
+    @pytest.mark.unit
+    def test_delete_course_source_rejects_episode_with_downstream_script(self, tmp_path, monkeypatch):
+        client, pm = _client(monkeypatch, tmp_path)
+        pm.create_project("course-demo", content_mode="course")
+        pm.create_project_metadata(
+            "course-demo",
+            "Course",
+            "Anime",
+            "course",
+            extras={"generation_mode": "reference_video", "grid_storyboard": False},
+        )
+
+        with client:
+            uploaded = client.post(
+                "/api/v1/projects/course-demo/course/episodes",
+                files={"file": ("lesson-one.md", "第一课", "text/markdown")},
+            )
+            script_path = pm.get_project_path("course-demo") / "scripts" / "episode_1.json"
+            script_path.write_text("{}", encoding="utf-8")
+            deleted = client.delete("/api/v1/projects/course-demo/source/lesson-one.txt")
+
+        assert uploaded.status_code == 200, uploaded.text
+        assert deleted.status_code == 409, deleted.text
+        project = pm.load_project("course-demo")
+        assert project["episodes"][0]["source_file"] == "source/lesson-one.txt"
+        assert (pm.get_project_path("course-demo") / "source" / "lesson-one.txt").exists()
+
+    @pytest.mark.unit
     def test_course_episode_upload_rejects_other_modes(self, tmp_path, monkeypatch):
         client, _ = _client(monkeypatch, tmp_path)
         with client:

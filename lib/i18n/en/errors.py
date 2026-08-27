@@ -137,6 +137,7 @@ MESSAGES = {
     "product_task_submitted": "Merchandise asset sheet generation task for '{name}' submitted",
     # Files
     "file_not_found": "File does not exist: {path}",
+    "course_source_in_use": "Course episode {episode} has already entered analysis; its source file cannot be deleted",
     "forbidden_access": "Access to files outside the project directory is forbidden",
     "invalid_upload_type": "Invalid upload type: {upload_type}",
     "missing_filename": "Uploaded file is missing a filename",
