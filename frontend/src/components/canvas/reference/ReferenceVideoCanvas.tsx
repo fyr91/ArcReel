@@ -25,16 +25,11 @@ import { H3PromptPanel } from "./H3PromptPanel";
 import { KeyframePreviewPanel } from "./KeyframePreviewPanel";
 import { StoryboardSheetPanel } from "./StoryboardSheetPanel";
 import { HyperframesStudioTab } from "./HyperframesStudioTab";
-import { NarrationDeliveryChoice } from "@/components/shared/NarrationDeliveryChoice";
 import { computeVoiceLegacyNotice, VoiceLegacyBanner } from "./VoiceLegacyBanner";
 import { useReferenceDurationGate } from "@/hooks/useReferenceDurationGate";
 import { ReferenceStep1PreviewPanel } from "@/components/canvas/reference/ReferenceStep1PreviewPanel";
 import { API } from "@/api";
-import {
-  enqueueNarration,
-  enqueueReferenceVideoBatch,
-  enqueueReferenceVideoUnit,
-} from "@/actions/generation";
+import { enqueueReferenceVideoBatch, enqueueReferenceVideoUnit } from "@/actions/generation";
 import {
   useReferenceVideoStore,
   referenceVideoCacheKey,
@@ -52,15 +47,12 @@ import { errMsg } from "@/utils/async";
 import {
   buildMentionLookup,
   extractMentions,
-  lineSpeechMarks,
   normalizeAssetName,
-  splitScriptLines,
   type MentionLookup,
 } from "@/utils/reference-mentions";
 import type {
   H3PromptState,
   ReferenceBatchAdmission,
-  ReferenceRequestOptions,
   ReferenceVideoUnit,
   UnitStatus,
 } from "@/types";
@@ -89,8 +81,6 @@ export interface ReferenceVideoCanvasProps {
    * unit 使用——参考图约束按 unit 生效，不能因同集内其它 unit 带图就收窄这类 unit 的可选档位。
    */
   durationOptionsNoReference?: number[];
-  /** 上游旁白工作流给出的请求事实；不在画布内探测或推断 TTS 状态。 */
-  requestOptions?: ReferenceRequestOptions;
   /** Script owner required for keyframe image edits. */
   scriptFile?: string;
 }
@@ -145,22 +135,6 @@ function isUnitBusy(projectName: string, unitId: string): boolean {
   return isResourceBusy("reference_video", projectName, unitId);
 }
 
-function unitNarrationText(unit: ReferenceVideoUnit | null): string {
-  if (!unit) return "";
-  const narration: string[] = [];
-  let hasCharacterSpeech = false;
-  for (const line of splitScriptLines(unit.text)) {
-    for (const mark of lineSpeechMarks(line)) {
-      if (mark.speaker) {
-        hasCharacterSpeech = true;
-      } else {
-        narration.push(mark.text.trim());
-      }
-    }
-  }
-  return hasCharacterSpeech ? "" : narration.join("\n");
-}
-
 export function ReferenceVideoCanvas({
   projectName,
   episode,
@@ -172,24 +146,11 @@ export function ReferenceVideoCanvas({
   freeDuration = false,
   durationOptions,
   durationOptionsNoReference,
-  requestOptions,
   scriptFile,
 }: ReferenceVideoCanvasProps) {
   const { t } = useTranslation("dashboard");
   const [, navigate] = useLocation();
   const project = useProjectsStore((s) => s.currentProjectData);
-  const usesNarrationDelivery = project?.content_mode === "ad";
-  const [narrationDelivery, setNarrationDelivery] = useState<"post_production" | "use_tts">(
-    requestOptions?.narration_delivery ?? "post_production",
-  );
-  const effectiveRequestOptions = useMemo<ReferenceRequestOptions>(
-    () => usesNarrationDelivery
-      ? (requestOptions || narrationDelivery !== "post_production"
-        ? { ...requestOptions, narration_delivery: narrationDelivery }
-        : {})
-      : {},
-    [narrationDelivery, requestOptions, usesNarrationDelivery],
-  );
 
   const loadUnits = useReferenceVideoStore((s) => s.loadUnits);
   const addUnit = useReferenceVideoStore((s) => s.addUnit);
@@ -199,10 +160,6 @@ export function ReferenceVideoCanvas({
   const units =
     useReferenceVideoStore((s) => s.unitsByEpisode[referenceVideoCacheKey(projectName, episode)]) ??
     (EMPTY_UNITS as ReferenceVideoUnit[]);
-  const hasNarration = useMemo(
-    () => units.some((unit) => unitNarrationText(unit).trim().length > 0),
-    [units],
-  );
   const selectedUnitId = useReferenceVideoStore((s) => s.selectedUnitId);
   const error = useReferenceVideoStore((s) => s.error);
   const loading = useReferenceVideoStore((s) => s.loading);
@@ -319,7 +276,6 @@ export function ReferenceVideoCanvas({
   // 乐观占用来自 tasks-store：入队动作层在请求发出前打标、失败回滚，真实任务行落库后
   // 让位，故「请求发出 → 任务行落库」全程都被覆盖，画布无须自备请求在途标记。
   const busyUnitIds = useActiveResourceIds("reference_video", projectName);
-  const ttsBusyUnitIds = useActiveResourceIds("tts", projectName);
 
   // 成片上传、版本恢复与时长保存都不产生任务行，进不了 tasks-store 占用集，故在画布层按 unit 记录。
   // 存在这里而非 UnitPreviewPanel 内：该面板有窄屏 sub-tab 与宽屏右栏两处挂载点，切换子页
@@ -449,17 +405,12 @@ export function ReferenceVideoCanvas({
   const durationGate = useReferenceDurationGate({
     projectName,
     episode,
-    requestOptions: effectiveRequestOptions,
   });
   /** 批量准入的未决结论（需确认 / 受阻）；admitted 由 toast 反馈，不进这里。 */
   const [batchAdmission, setBatchAdmission] = useState<ReferenceBatchAdmission | null>(null);
 
   const enqueue = useCallback(
-    async (
-      unitId: string,
-      confirmedRequestDuration: number | undefined,
-      options: ReferenceRequestOptions,
-    ) => {
+    async (unitId: string, confirmedRequestDuration: number | undefined) => {
       // 提交前用 getState() 新鲜读复核：按钮渲染期捕获的占用态未必是最新的
       // （批量循环、Agent 入队、SSE 落库都可能在渲染之后、点击之前占用同一 unit）；
       // 时长确认弹窗打开期间同样会经过这段窗口，故复核落在入队这一刻。
@@ -474,7 +425,6 @@ export function ReferenceVideoCanvas({
       try {
         // 乐观打标（请求发出前）、失败回滚与 queued/deduped 提示都在动作层内完成
         await enqueueReferenceVideoUnit(projectName, episode, unitId, {
-          ...options,
           ...(confirmedRequestDuration == null
             ? {}
             : { confirmed_request_duration_seconds: confirmedRequestDuration }),
@@ -495,11 +445,11 @@ export function ReferenceVideoCanvas({
    * 单元入口专用：批量入口走服务端的全有或全无准入，一次请求评估全部目标。
    */
   const makeEnqueueSerially = useCallback(
-    (canEnqueue: (unitId: string) => boolean, options: ReferenceRequestOptions) =>
+    (canEnqueue: (unitId: string) => boolean) =>
       async (unitIds: string[], confirmedDurations: ReadonlyMap<string, number>) => {
       for (const id of unitIds) {
         if (!canEnqueue(id)) continue;
-        await enqueue(id, confirmedDurations.get(id), options);
+        await enqueue(id, confirmedDurations.get(id));
       }
     },
     [enqueue],
@@ -518,7 +468,7 @@ export function ReferenceVideoCanvas({
       }
       await durationGate.run(
         [unitId],
-        makeEnqueueSerially(canEnqueueUnit, effectiveRequestOptions),
+        makeEnqueueSerially(canEnqueueUnit),
         canEnqueueUnit,
       );
     },
@@ -528,7 +478,6 @@ export function ReferenceVideoCanvas({
       isUnitLocked,
       isUnitGenerationBlocked,
       canEnqueueUnit,
-      effectiveRequestOptions,
       t,
     ],
   );
@@ -569,30 +518,6 @@ export function ReferenceVideoCanvas({
     [loadUnits, projectName, episode],
   );
 
-  const handleGenerateNarration = useCallback(
-    async (unitId: string) => {
-      const scriptFile = useProjectsStore
-        .getState()
-        .currentProjectData?.episodes?.find((item) => item.episode === episode)?.script_file;
-      if (!scriptFile) {
-        useAppStore.getState().pushToast(t("timeline_script_not_ready"), "error");
-        return;
-      }
-      try {
-        await enqueueNarration(projectName, unitId, scriptFile);
-      } catch (error) {
-        toastError(error, (message) => t("generate_narration_failed", { message }));
-      }
-    },
-    [episode, projectName, t],
-  );
-  const onGenerateNarrationVoid = useCallback(
-    (unitId: string) => {
-      void handleGenerateNarration(unitId);
-    },
-    [handleGenerateNarration],
-  );
-
   // 批量生成的作用对象：全部尚无成片的 unit（含 needs_replan、在途、失败重试）。按钮禁用须与
   // 它同一口径——只看当前选中 unit 是否在跑、与作用对象无关的判定会脱节：选中项空闲时按钮会在
   // 没有任何待生成 unit 的情况下仍可点击，选中项在跑时又会挡住其余 unit 的批量生成。
@@ -610,7 +535,6 @@ export function ReferenceVideoCanvas({
       try {
         const admission = await enqueueReferenceVideoBatch(projectName, episode, {
           unit_ids: unitIds,
-          ...(usesNarrationDelivery ? { narration_delivery: narrationDelivery } : {}),
           ...(confirmedDurations ? { confirmed_request_durations: confirmedDurations } : {}),
         });
         setBatchAdmission(admission.decision === "admitted" ? null : admission);
@@ -619,7 +543,7 @@ export function ReferenceVideoCanvas({
         toastError(e, (msg) => t("reference_batch_request_failed", { error: msg }));
       }
     },
-    [projectName, episode, narrationDelivery, t, usesNarrationDelivery],
+    [projectName, episode, t],
   );
 
   const handleBatchGenerate = useCallback(async () => {
@@ -791,7 +715,6 @@ export function ReferenceVideoCanvas({
     try {
       const response = await API.getH3PromptStates(projectName, episode, {
         unit_ids: [selectedH3UnitId],
-        ...(usesNarrationDelivery ? { narration_delivery: narrationDelivery } : {}),
       });
       if (sequence !== h3RequestSequence.current) return;
       setH3PromptState(response.states[0] ?? null);
@@ -802,7 +725,7 @@ export function ReferenceVideoCanvas({
     } finally {
       if (sequence === h3RequestSequence.current) setH3PromptLoading(false);
     }
-  }, [episode, narrationDelivery, projectName, selectedH3UnitId, usesNarrationDelivery]);
+  }, [episode, projectName, selectedH3UnitId]);
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect -- fetch lifecycle synchronizes the selected unit with its durable H3 artifact
@@ -858,7 +781,6 @@ export function ReferenceVideoCanvas({
     try {
       const response = await API.updateH3Prompt(projectName, episode, selectedH3UnitId, {
         rendered_prompt: flushed,
-        ...(usesNarrationDelivery ? { narration_delivery: narrationDelivery } : {}),
       });
       if (sequence !== h3RequestSequence.current) return;
       setH3PromptState({
@@ -883,8 +805,6 @@ export function ReferenceVideoCanvas({
     currentH3PromptKey,
     episode,
     h3PromptDirty,
-    narrationDelivery,
-    usesNarrationDelivery,
     projectName,
     selectedH3UnitId,
   ]);
@@ -1160,11 +1080,7 @@ export function ReferenceVideoCanvas({
     selected ? s._segmentIndex.get(selected.unit_id) : undefined,
   );
   const estimatedCost = segCost?.estimate.video;
-  const displayedEstimatedCost =
-    usesNarrationDelivery && narrationDelivery === "use_tts" ? undefined : estimatedCost;
   const actualCost = segCost?.actual.video;
-  const narrationEstimatedCost = segCost?.estimate.audio;
-  const selectedNarrationText = unitNarrationText(selected);
 
   const selectedIndex = selected ? units.findIndex((u) => u.unit_id === selected.unit_id) : -1;
   const goPrev = useCallback(() => {
@@ -1248,13 +1164,6 @@ export function ReferenceVideoCanvas({
         <span className="flex-1" />
         {tab === "units" && (
           <>
-            {usesNarrationDelivery && hasNarration && (
-              <NarrationDeliveryChoice
-                value={narrationDelivery}
-                onChange={setNarrationDelivery}
-                compact
-              />
-            )}
             <button
               type="button"
               onClick={() => navigate(projectSettingsNavigationTarget(projectName))}
@@ -1705,12 +1614,8 @@ export function ReferenceVideoCanvas({
                           cancelling={selectedCancelling}
                           task={selectedTask}
                           onCancelTask={(taskId) => void handleCancelTask(taskId)}
-                          estimatedCost={displayedEstimatedCost}
+                          estimatedCost={estimatedCost}
                           actualCost={actualCost}
-                          narrationText={selectedNarrationText}
-                          narrationGenerating={ttsBusyUnitIds.has(selected.unit_id)}
-                          narrationEstimatedCost={narrationEstimatedCost}
-                          onGenerateNarration={onGenerateNarrationVoid}
                           onGenerate={onGenerateVoid}
                           generationBlocked={Boolean(selected.needs_replan)}
                           onUploadVideo={handleUploadVideo}
@@ -1745,12 +1650,8 @@ export function ReferenceVideoCanvas({
                   cancelling={selectedCancelling}
                   task={selectedTask}
                   onCancelTask={(taskId) => void handleCancelTask(taskId)}
-                  estimatedCost={displayedEstimatedCost}
+                  estimatedCost={estimatedCost}
                   actualCost={actualCost}
-                  narrationText={selectedNarrationText}
-                  narrationGenerating={selected ? ttsBusyUnitIds.has(selected.unit_id) : false}
-                  narrationEstimatedCost={narrationEstimatedCost}
-                  onGenerateNarration={onGenerateNarrationVoid}
                   onGenerate={onGenerateVoid}
                   generationBlocked={Boolean(selected?.needs_replan)}
                   onUploadVideo={handleUploadVideo}

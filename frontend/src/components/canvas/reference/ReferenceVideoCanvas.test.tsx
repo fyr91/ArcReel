@@ -408,34 +408,15 @@ describe("ReferenceVideoCanvas", () => {
     expect((ta as HTMLTextAreaElement).value).toContain("x");
   });
 
-  it("offers explicit generate/regenerate/listen actions for unit-owned narration TTS", async () => {
+  it("keeps all unit speech inside the H3 video flow without standalone narration actions", async () => {
     const unit = mkUnit("E1U1");
     unit.text = "镜头推进。\n{夜色深沉。}";
     vi.spyOn(API, "listReferenceVideoUnits").mockResolvedValue({ units: [unit] });
-    useProjectsStore.setState({
-      currentProjectName: "proj",
-      currentProjectData: {
-        ...STUB_PROJECT,
-        episodes: [{ episode: 1, title: "", script_file: "episode_1.json" }],
-      },
-    });
-    const generate = vi
-      .spyOn(API, "generateNarrationAudio")
-      .mockResolvedValue({ success: true, task_id: "tts-1", deduped: false, message: "queued" });
 
     render(<ReferenceVideoCanvas projectName="proj" episode={1} />);
-    fireEvent.click(await screen.findByRole("button", { name: /生成旁白|Generate narration/ }));
-
-    await waitFor(() =>
-      expect(generate).toHaveBeenCalledWith("proj", "E1U1", "episode_1.json"),
-    );
-
-    unit.generated_assets.narration_audio = "audio/segment_E1U1.wav";
-    useReferenceVideoStore.setState({
-      unitsByEpisode: { [referenceVideoCacheKey("proj", 1)]: [unit] },
-    } as never);
-    expect(await screen.findByRole("button", { name: /重新生成旁白|Regenerate narration/ })).toBeInTheDocument();
-    expect(document.querySelector('audio[src*="audio/segment_E1U1.wav"]')).not.toBeNull();
+    await screen.findByRole("button", { name: UNIT_GENERATE_CTA });
+    expect(screen.queryByRole("button", { name: /生成旁白|Generate narration/ })).toBeNull();
+    expect(document.querySelector("audio")).toBeNull();
   });
 
   // 正文是单一真相：保存把编辑器里那段文本原样送到 PATCH 的 prompt 位，
@@ -954,47 +935,6 @@ describe("ReferenceVideoCanvas", () => {
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
   });
 
-  // 交付方式是本次请求的一部分，批量与单元入口读同一个画布选择：批量不带上它，
-  // 整批会按服务端默认的「后期配音」准入，用户选的「使用当前 TTS」被静默丢弃。
-  it("批量入口带上本次的旁白交付选择", async () => {
-    useProjectsStore.setState({ currentProjectData: { ...STUB_PROJECT, content_mode: "ad" } });
-    vi.spyOn(API, "listReferenceVideoUnits").mockResolvedValue({
-      units: [mkUnit("E1U1", "镜头推进。\n{夜色深沉。}")],
-    });
-    const batchSpy = vi
-      .spyOn(API, "generateReferenceVideoBatch")
-      .mockResolvedValue(mkAdmission());
-
-    render(<ReferenceVideoCanvas projectName="proj" episode={1} />);
-    fireEvent.click(await screen.findByRole("button", { name: /Use current TTS|使用当前 TTS/ }));
-    fireEvent.click(await screen.findByRole("button", { name: /Batch generate videos|批量生成视频/ }));
-
-    await waitFor(() => expect(batchSpy).toHaveBeenCalled());
-    expect(batchSpy).toHaveBeenCalledWith(
-      "proj",
-      1,
-      expect.objectContaining({ narration_delivery: "use_tts" }),
-    );
-  });
-
-  it("批量入口未改选择时按后期配音提交", async () => {
-    useProjectsStore.setState({ currentProjectData: { ...STUB_PROJECT, content_mode: "ad" } });
-    vi.spyOn(API, "listReferenceVideoUnits").mockResolvedValue({ units: [mkUnit("E1U1")] });
-    const batchSpy = vi
-      .spyOn(API, "generateReferenceVideoBatch")
-      .mockResolvedValue(mkAdmission());
-
-    render(<ReferenceVideoCanvas projectName="proj" episode={1} />);
-    fireEvent.click(await screen.findByRole("button", { name: /Batch generate videos|批量生成视频/ }));
-
-    await waitFor(() => expect(batchSpy).toHaveBeenCalled());
-    expect(batchSpy).toHaveBeenCalledWith(
-      "proj",
-      1,
-      expect.objectContaining({ narration_delivery: "post_production" }),
-    );
-  });
-
   // 上传与生成回写同一个成片文件：文件选择对话框打开期间同一 unit 可能已被占用，
   // 按钮渲染期的禁用态挡不住这段窗口，提交时刻须再用 getState() 新鲜读复核一次。
   it("上传确认时刻复核占用态，命中即拒绝并提示", async () => {
@@ -1121,53 +1061,6 @@ describe("ReferenceVideoCanvas", () => {
       await waitFor(() =>
         expect(genSpy).toHaveBeenCalledWith("proj", 1, "E1U1", {
           confirmed_request_duration_seconds: 8,
-        }),
-      );
-    });
-
-    it("复用上游 TTS 时长选项完成预检、确认与入队", async () => {
-      useProjectsStore.setState({ currentProjectData: { ...STUB_PROJECT, content_mode: "ad" } });
-      vi.spyOn(API, "listReferenceVideoUnits").mockResolvedValue({ units: [mkUnit("E1U1")] });
-      const precheckSpy = vi.spyOn(API, "precheckReferenceVideoDuration").mockResolvedValue({
-        needs_confirmation: true,
-        script_duration: 3,
-        duration_input: 9.5,
-        request_duration: 12,
-        adjustment: "up",
-        declared_capability: "i2v",
-        hydrated_capability: "i2v",
-        provider_id: "kling",
-        model_id: "kling-v2-1-master",
-        problems: [],
-      });
-      const generateSpy = vi.spyOn(API, "generateReferenceVideoUnit").mockResolvedValue({
-        task_id: "t1",
-        deduped: false,
-      } as never);
-      const requestOptions = {
-        narration_delivery: "use_tts" as const,
-      };
-
-      render(<ReferenceVideoCanvas projectName="proj" episode={1} requestOptions={requestOptions} />);
-      fireEvent.click(await screen.findByRole("button", { name: UNIT_GENERATE_CTA }));
-
-      await waitFor(() =>
-        expect(precheckSpy).toHaveBeenCalledWith(
-          "proj",
-          1,
-          "E1U1",
-          expect.objectContaining(requestOptions),
-        ),
-      );
-      const dialog = within(screen.getByRole("dialog"));
-      expect(dialog.getByText(/9\.5 秒|9\.5s/)).toBeInTheDocument();
-      expect(dialog.getByText(/^3 秒$|^3s$/)).toBeInTheDocument();
-
-      fireEvent.click(await screen.findByRole("button", { name: CONFIRM_CTA }));
-      await waitFor(() =>
-        expect(generateSpy).toHaveBeenCalledWith("proj", 1, "E1U1", {
-          ...requestOptions,
-          confirmed_request_duration_seconds: 12,
         }),
       );
     });

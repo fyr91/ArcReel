@@ -6,7 +6,6 @@ import { API, type VersionInfo } from "@/api";
 import { useAppStore } from "@/stores/app-store";
 import { useProjectsStore } from "@/stores/projects-store";
 import { errMsg } from "@/utils/async";
-import { PresentationPlayer } from "@/components/shared/PresentationPlayer";
 
 interface VersionTimeMachineProps {
   projectName: string;
@@ -366,25 +365,15 @@ export function VersionTimeMachine({
                     {selectedInfo.file_url &&
                       (resourceType === "videos" || resourceType === "reference_videos" ? (
                         <div className="mb-2 aspect-video w-full overflow-hidden rounded-lg border border-gray-800 bg-black">
-                          {selectedInfo.presentation_available !== true ? (
-                            // eslint-disable-next-line jsx-a11y/media-has-caption -- 无法进入共享成片读取器的历史视频仅展示原始媒体
-                            <video
-                              src={selectedInfo.file_url}
-                              aria-label={t("version_preview_alt", { version: selectedInfo.version })}
-                              className="h-full w-full object-contain"
-                              controls
-                              playsInline
-                              preload="none"
-                            />
-                          ) : (
-                            <PresentationPlayer
-                              key={`${resourceType}:${resourceId}:${selectedInfo.version}`}
-                              projectName={projectName}
-                              resourceType={resourceType}
-                              resourceId={resourceId}
-                              videoVersion={selectedInfo.version}
-                            />
-                          )}
+                          {/* eslint-disable-next-line jsx-a11y/media-has-caption -- version file paths are directly previewable and require no presentation admission */}
+                          <video
+                            src={selectedInfo.file_url}
+                            aria-label={t("version_preview_alt", { version: selectedInfo.version })}
+                            className="h-full w-full object-contain"
+                            controls
+                            playsInline
+                            preload="metadata"
+                          />
                         </div>
                       ) : resourceType === "audio" ? (
                         // eslint-disable-next-line jsx-a11y/media-has-caption -- 历史旁白的文字记录显示在同一预览卡片
