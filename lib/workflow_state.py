@@ -28,7 +28,6 @@ from lib.episode_ledger import (
     normalize_source_text,
     parse_positive_episode_num,
 )
-from lib.path_safety import safe_exists
 from lib.project_manager import ProjectManager
 from lib.project_migration_failure import (
     MIGRATION_FAILURE_CODE,
@@ -554,20 +553,6 @@ class WorkflowStateService:
                     collection["missing_ids"] = []
                     break
                 path = item.get(spec.sheet_field)
-                # A project character may intentionally use a reviewed reference
-                # image as its primary visual instead of generating a separate
-                # character sheet.  Generation consumers already accept this
-                # slot, so the workflow must not report a false ASSET_SHEETS
-                # blocker merely because ``character_sheet`` is empty.
-                reference_image = item.get("reference_image") if asset_type == "character" else None
-                if (
-                    (not isinstance(path, str) or not path)
-                    and isinstance(reference_image, str)
-                    and reference_image
-                    and safe_exists(project_path, reference_image)
-                ):
-                    collection["current_ids"].append(name)
-                    continue
                 if resolver is not None and isinstance(path, str) and path:
                     self._classify_artifact(
                         collection,
