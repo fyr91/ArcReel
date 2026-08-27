@@ -713,7 +713,8 @@ PROVIDER_REGISTRY: dict[str, ProviderMeta] = {
         secret_keys=["api_key"],
         models={
             # --- text ---
-            # Agent Plan 套餐未声明独立费率表；pricing=None 由 lookup_pricing 按 Gemini 通用默认费率处理。
+            # Agent Plan 中已有公开费率的 DeepSeek 型号按高峰期、缓存未命中价估算；
+            # 其他 pricing=None 的型号由 lookup_pricing 按 Gemini 通用默认费率处理。
             # 清单与火山方舟 Agent Plan 个人版「支持模型及 Harness」对齐（2026-08-18）。已下线
             # 型号保留 hidden 条目，兼容旧项目已保存的 provider/model；所有新下拉统一剔除 hidden。
             "doubao-seed-2.0-mini": ModelInfo(
@@ -731,6 +732,7 @@ PROVIDER_REGISTRY: dict[str, ProviderMeta] = {
                 display_name="DeepSeek V4 Flash",
                 media_type="text",
                 capabilities=["text_generation"],
+                pricing=_ark_text_pricing("deepseek-v4-flash", 3.00, 9.00),
             ),
             "doubao-seed-2.1-turbo": ModelInfo(
                 display_name="豆包 Seed 2.1 Turbo",
@@ -761,6 +763,7 @@ PROVIDER_REGISTRY: dict[str, ProviderMeta] = {
                 display_name="DeepSeek V4 Pro",
                 media_type="text",
                 capabilities=["text_generation", "structured_output"],
+                pricing=_ark_text_pricing("deepseek-v4-pro", 9.00, 27.00),
             ),
             "kimi-k3": ModelInfo(
                 display_name="Kimi K3",
@@ -1517,7 +1520,11 @@ PROVIDER_REGISTRY: dict[str, ProviderMeta] = {
                 capabilities=["text_to_image", "image_to_image"],
                 default=True,
                 resolutions=["1K", "2K"],
-                pricing=None,
+                pricing=PerImageFlat(
+                    rates={"google:nano-banana@2-lite": 0.18},
+                    default_model="google:nano-banana@2-lite",
+                    currency="CNY",
+                ),
             ),
             # GPT Image 2（OpenAI）：T2I + I2I + edit，任意尺寸（总像素预算，见 backend）。
             "openai:gpt-image@2": ModelInfo(
@@ -1525,7 +1532,11 @@ PROVIDER_REGISTRY: dict[str, ProviderMeta] = {
                 media_type="image",
                 capabilities=["text_to_image", "image_to_image"],
                 resolutions=["1K", "2K"],
-                pricing=None,
+                pricing=PerImageFlat(
+                    rates={"openai:gpt-image@2": 0.25},
+                    default_model="openai:gpt-image@2",
+                    currency="CNY",
+                ),
             ),
         },
         default_base_url=RUNWARE_API_BASE,
