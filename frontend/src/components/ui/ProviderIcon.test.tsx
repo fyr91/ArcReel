@@ -29,6 +29,7 @@ describe("ProviderIcon", () => {
     "grok",
     "ark",
     "ark-agent-plan",
+    "deepseek",
     "dashscope",
     "minimax",
     "openai",

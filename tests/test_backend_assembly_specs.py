@@ -518,6 +518,20 @@ class TestTextOpenAICompatSpec:
             provider_name="minimax",
         )
 
+    @patch("lib.text_backends.registry.create_backend")
+    def test_deepseek_uses_registry_base_url_and_provider_name(self, mock_create):
+        spec = get_provider_spec("deepseek", "text")
+        assert spec.registry_backend == "openai"
+        config = _loaded(credentials={"api_key": "ds"}, provider_id="deepseek")
+        spec.build_backend(config, "deepseek-v4-flash-vision-exp")
+        mock_create.assert_called_once_with(
+            "openai",
+            model="deepseek-v4-flash-vision-exp",
+            api_key="ds",
+            base_url="https://api.deepseek.com",
+            provider_name="deepseek",
+        )
+
 
 class TestRegistryShape:
     def test_unknown_provider_media_fails_loud(self):
@@ -534,7 +548,7 @@ class TestRegistryShape:
             assert (provider, "video") in PROVIDER_SPEC_REGISTRY
 
     def test_text_family_complete(self):
-        # 文本九对：七 provider + gemini 两 id（aistudio/vertex）
+        # 文本十对：八 provider + gemini 两 id（aistudio/vertex）
         text_keys = {k for k in PROVIDER_SPEC_REGISTRY if k[1] == "text"}
         assert text_keys == {
             ("ark", "text"),
@@ -544,6 +558,7 @@ class TestRegistryShape:
             ("gemini-aistudio", "text"),
             ("gemini-vertex", "text"),
             ("openai", "text"),
+            ("deepseek", "text"),
             ("dashscope", "text"),
             ("minimax", "text"),
         }

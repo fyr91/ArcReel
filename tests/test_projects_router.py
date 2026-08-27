@@ -19,6 +19,7 @@ from lib.project_manager import EmptySourceError, ProjectManager
 from lib.release_defaults import (
     RELEASE_COMPLEX_TEXT_BACKEND,
     RELEASE_IMAGE_BACKEND,
+    RELEASE_IMAGE_RESOLUTION,
     RELEASE_SIMPLE_TEXT_BACKEND,
     RELEASE_STORYBOARD_IMAGE_BACKEND,
     RELEASE_TEXT_BACKEND,
@@ -1932,7 +1933,10 @@ class TestProjectsRouter:
         assert data["default_text_backend"] == RELEASE_TEXT_BACKEND
         assert data["text_backend_simple"] == RELEASE_SIMPLE_TEXT_BACKEND
         assert data["text_backend_complex"] == RELEASE_COMPLEX_TEXT_BACKEND
-        assert data["model_settings"] == {RELEASE_VIDEO_BACKEND: {"resolution": RELEASE_VIDEO_RESOLUTION}}
+        assert data["model_settings"] == {
+            RELEASE_VIDEO_BACKEND: {"resolution": RELEASE_VIDEO_RESOLUTION},
+            RELEASE_IMAGE_BACKEND: {"resolution": RELEASE_IMAGE_RESOLUTION},
+        }
 
     @pytest.mark.unit
     def test_create_project_with_image_default_layer(self, tmp_path, monkeypatch):

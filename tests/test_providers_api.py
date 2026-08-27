@@ -1152,3 +1152,22 @@ class TestArkAgentPlanConnectionTest:
                 resp = client.post("/api/v1/providers/ark-agent-plan/test")
         assert resp.status_code == 200
         assert captured["base_url"] == "https://custom.example.com/v9"
+
+
+class TestDeepSeekConnectionTest:
+    @pytest.mark.unit
+    def test_deepseek_reuses_openai_compatible_probe(self):
+        assert providers._TEST_DISPATCH["deepseek"] is providers._test_openai
+
+    @pytest.mark.unit
+    def test_probe_returns_deepseek_models(self):
+        deepseek_model = MagicMock(id="deepseek-v4-pro")
+        unrelated_model = MagicMock(id="other-model")
+        with patch("openai.OpenAI") as openai_cls:
+            openai_cls.return_value.models.list.return_value.data = [deepseek_model, unrelated_model]
+            result = providers._test_openai(
+                {"api_key": "sk-test", "base_url": "https://api.deepseek.com"}, lambda key, **_: key
+            )
+
+        openai_cls.assert_called_once_with(api_key="sk-test", base_url="https://api.deepseek.com")
+        assert result.available_models == ["deepseek-v4-pro"]

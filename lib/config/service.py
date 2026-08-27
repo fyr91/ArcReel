@@ -13,9 +13,9 @@ from lib.config.repository import ManagedProviderConfigRepository, ProviderConfi
 from lib.db.base import DEFAULT_USER_ID
 from lib.db.repositories.credential_repository import CredentialRepository
 
-_DEFAULT_VIDEO_BACKEND = "gemini-aistudio/veo-3.1-lite-generate-preview"
-_DEFAULT_IMAGE_BACKEND = "gemini-aistudio/gemini-3.1-flash-image-preview"
-_DEFAULT_TEXT_BACKEND = "gemini-aistudio/gemini-3-flash-preview"
+_DEFAULT_VIDEO_BACKEND = "croco/minimax-h3"
+_DEFAULT_IMAGE_BACKEND = "runware/google:nano-banana@2-lite"
+_DEFAULT_TEXT_BACKEND = "deepseek/deepseek-v4-flash-vision-exp"
 _DEFAULT_AUDIO_BACKEND = "dashscope/qwen3-tts-flash"
 # 旁白默认音色（DashScope 预设）；可被 project.json 顶层 narration_voice 或全局 setting 覆盖
 # （与 video_backend 等同走顶层 key，非 settings 子字典）。

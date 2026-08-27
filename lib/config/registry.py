@@ -845,6 +845,28 @@ PROVIDER_REGISTRY: dict[str, ProviderMeta] = {
         },
         default_base_url="https://ark.cn-beijing.volces.com/api/plan/v3",
     ),
+    "deepseek": ProviderMeta(
+        display_name="DeepSeek",
+        description="DeepSeek 官方 API，提供文本生成与多模态理解模型。",
+        required_keys=["api_key"],
+        optional_keys=["base_url"],
+        secret_keys=["api_key"],
+        models={
+            "deepseek-v4-flash-vision-exp": ModelInfo(
+                display_name="DeepSeek V4 Flash Vision Exp",
+                media_type="text",
+                capabilities=["text_generation", "structured_output", "vision"],
+                default=True,
+            ),
+            "deepseek-v4-pro": ModelInfo(
+                display_name="DeepSeek V4 Pro",
+                media_type="text",
+                capabilities=["text_generation", "structured_output"],
+            ),
+        },
+        default_base_url="https://api.deepseek.com",
+        group="own",
+    ),
     "grok": ProviderMeta(
         display_name="Grok",
         description="xAI Grok 模型，支持视频和图片生成。",

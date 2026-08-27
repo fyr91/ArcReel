@@ -7,8 +7,9 @@ dataclass，挂一个 build 闭包；闭包读 LoadedConfig 信封 + model_id �
 kling（JWT 双 secret + api_model_name 解耦）两个特例族，各自挂专属 build 闭包。文本（media_type=text）
 四条 media_type 同经本表：简单文本（ark/ark-agent-plan/grok/agnes，agnes 走 OpenAI 兼容
 chat/completions 但鉴权 / base_url 收口在专属 AgnesTextBackend，故归简单族而非 OpenAI-compat 别名）、gemini 文本（aistudio/vertex）、
-OpenAI-compat 文本（openai/dashscope/minimax，dashscope/minimax 经 helper 派生 base_url + 透传
-provider_name 计费归因）各挂专属闭包；文本侧别名映射（dashscope/minimax → openai registry backend）
+OpenAI-compat 文本（openai/deepseek/dashscope/minimax，DeepSeek 使用 registry 默认根地址，
+dashscope/minimax 经 helper 派生 base_url + 透传 provider_name 计费归因）各挂专属闭包；文本侧别名映射
+（deepseek/dashscope/minimax → openai registry backend）
 并入 spec 的 registry_backend 字段，根除原文本工厂第二份 PROVIDER_ID_TO_BACKEND。表在 import 期校验
 不变式（registry 名已注册除外，见模块末尾说明），misconfig fail-fast。
 """
@@ -207,9 +208,9 @@ def _kling_spec(media_type: str) -> ProviderSpec:
 #      chat/completions，但鉴权 / base_url 归一化收口在专属 AgnesTextBackend，故归此族而非 ③。
 #   ② gemini 文本 —— aistudio（model + api_key + base_url 无条件透传，含 None/空串）/ vertex
 #      （model + backend=vertex + gcs_bucket）按 provider_id 分两行，不在闭包内 if。
-#   ③ OpenAI-compat（openai / dashscope / minimax）—— 都映射到 "openai" registry backend；openai 直传
-#      用户 base_url（无条件，含 None），dashscope/minimax 由各自 helper 从 host 派生 base_url 并透传
-#      真实 provider_name，确保 usage 记账与计费查表命中自身（百炼/MiniMax）的 CNY 费率而非 OpenAI USD。
+#   ③ OpenAI-compat（openai / deepseek / dashscope / minimax）—— 都映射到 "openai" registry backend；
+#      openai 直传用户 base_url（无条件，含 None），deepseek 回落 registry 默认根地址，dashscope/minimax
+#      由各自 helper 从 host 派生 base_url；后三者透传真实 provider_name，确保 usage 记账归因自身。
 
 
 def _build_text_simple(config: LoadedConfig, model_id: str | None, *, registry_backend: str) -> Any:
@@ -291,18 +292,21 @@ def _build_text_openai_compat(
     *,
     derive_base_url: Callable[[str | None], str] | None,
     provider_name: str | None,
+    use_registry_default: bool,
 ) -> Any:
-    """OpenAI-compat 文本构造：openai / dashscope / minimax 都用 OpenAITextBackend。
+    """OpenAI-compat 文本构造：openai / deepseek / dashscope / minimax 都用 OpenAITextBackend。
 
     derive_base_url=None（openai）：直传用户 base_url（无条件，含 None，由 backend 决定 endpoint）。
+    use_registry_default=True（deepseek）：用户未填时使用 ProviderMeta.default_base_url。
     derive_base_url 非空（dashscope/minimax）：由 helper 从用户 host 派生 OpenAI 兼容 base，并透传
     provider_name 给 backend，确保 usage 记账与计费查表命中自身 CNY 费率而非 OpenAI USD。
     """
     user_base_url = config.credentials.get("base_url")
+    base_url = _resolve_base_url(config) if use_registry_default else user_base_url
     kwargs: dict[str, Any] = {
         "model": model_id,
         "api_key": config.credentials.get("api_key"),
-        "base_url": derive_base_url(user_base_url) if derive_base_url else user_base_url,
+        "base_url": derive_base_url(base_url) if derive_base_url else base_url,
     }
     if provider_name:
         kwargs["provider_name"] = provider_name
@@ -314,12 +318,18 @@ def _text_openai_compat_spec(
     *,
     derive_base_url: Callable[[str | None], str] | None,
     provider_name: str | None,
+    use_registry_default: bool = False,
 ) -> ProviderSpec:
     return ProviderSpec(
         provider_id=provider_id,
         media_type="text",
         registry_backend=_TEXT_OPENAI_COMPAT_REGISTRY_BACKEND,
-        build_backend=partial(_build_text_openai_compat, derive_base_url=derive_base_url, provider_name=provider_name),
+        build_backend=partial(
+            _build_text_openai_compat,
+            derive_base_url=derive_base_url,
+            provider_name=provider_name,
+            use_registry_default=use_registry_default,
+        ),
     )
 
 
@@ -379,8 +389,9 @@ PROVIDER_SPEC_REGISTRY[("doubao", "audio")] = _simple_spec("doubao", "audio", ex
 
 # ── 文本族注册 ────────────────────────────────────────────────────
 # 简单文本四家（registry_backend = provider_id 自身）；gemini 两个 provider_id 按 backend 分两行
-# （aistudio/vertex 各自闭包，registry_backend 同为 "gemini"）；OpenAI-compat 三家都映射到 "openai"
-# registry backend，openai 直传用户 base_url，dashscope/minimax 经 helper 派生 + 透传 provider_name 计费归因。
+# （aistudio/vertex 各自闭包，registry_backend 同为 "gemini"）；OpenAI-compat 四家都映射到 "openai"
+# registry backend，openai 直传用户 base_url，deepseek 回落 registry 默认根地址，dashscope/minimax 经 helper
+# 派生；deepseek/dashscope/minimax 透传 provider_name 计费归因。
 # agnes 虽走 OpenAI 兼容 chat/completions，但鉴权 / base_url 归一化收口在专属 AgnesTextBackend（复用
 # agnes_shared），故归简单文本族（registry_backend = "agnes"），不并入 OpenAI-compat 别名映射。
 _TEXT_SIMPLE_PROVIDERS = ("ark", "ark-agent-plan", "grok", "agnes")
@@ -390,6 +401,9 @@ PROVIDER_SPEC_REGISTRY.update(
         ("gemini-aistudio", "text"): _text_gemini_spec("gemini-aistudio", build=_build_text_gemini_aistudio),
         ("gemini-vertex", "text"): _text_gemini_spec("gemini-vertex", build=_build_text_gemini_vertex),
         ("openai", "text"): _text_openai_compat_spec("openai", derive_base_url=None, provider_name=None),
+        ("deepseek", "text"): _text_openai_compat_spec(
+            "deepseek", derive_base_url=None, provider_name="deepseek", use_registry_default=True
+        ),
         ("dashscope", "text"): _text_openai_compat_spec(
             "dashscope", derive_base_url=_dashscope_text_base_url, provider_name="dashscope"
         ),

@@ -65,11 +65,13 @@ const STEP_CONNECTOR_INACTIVE_STYLE: CSSProperties = {
 };
 
 const RELEASE_VIDEO_BACKEND = "croco/minimax-h3";
-const RELEASE_IMAGE_BACKEND = "ark-agent-plan/doubao-seedream-5.0-lite";
+const RELEASE_IMAGE_BACKEND = "runware/google:nano-banana@2-lite";
 const RELEASE_STORYBOARD_IMAGE_BACKEND = "runware/google:nano-banana@2-lite";
-const RELEASE_TEXT_BACKEND = "ark-agent-plan/deepseek-v4-pro";
-const RELEASE_SIMPLE_TEXT_BACKEND = "ark-agent-plan/minimax-m3";
+const RELEASE_TEXT_BACKEND = "deepseek/deepseek-v4-flash-vision-exp";
+const RELEASE_SIMPLE_TEXT_BACKEND = "deepseek/deepseek-v4-flash-vision-exp";
+const RELEASE_COMPLEX_TEXT_BACKEND = "deepseek/deepseek-v4-pro";
 const RELEASE_VIDEO_RESOLUTION = "480p";
+const RELEASE_IMAGE_RESOLUTION = "1K";
 
 function StepIndicator({ current }: { current: 1 | 2 | 3 }) {
   const { t } = useTranslation("templates");
@@ -171,10 +173,10 @@ export function CreateProjectModal() {
     imageBackendI2I: "",
     textBackendDefault: RELEASE_TEXT_BACKEND,
     textBackendSimple: RELEASE_SIMPLE_TEXT_BACKEND,
-    textBackendComplex: RELEASE_TEXT_BACKEND,
+    textBackendComplex: RELEASE_COMPLEX_TEXT_BACKEND,
     defaultDuration: null,
     videoResolution: RELEASE_VIDEO_RESOLUTION,
-    imageResolution: null,
+    imageResolution: RELEASE_IMAGE_RESOLUTION,
   });
 
   const [style, setStyle] = useState<WizardStep3Value>({

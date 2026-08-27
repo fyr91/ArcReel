@@ -802,11 +802,11 @@ def _test_grok(config: dict[str, str], _t: Callable[..., str]) -> ConnectionTest
     )
 
 
-_OPENAI_MODEL_KEYWORDS = ("gpt", "sora", "dall", "o1", "o3", "o4")
+_OPENAI_MODEL_KEYWORDS = ("gpt", "sora", "dall", "deepseek", "o1", "o3", "o4")
 
 
 def _test_openai(config: dict[str, str], _t: Callable[..., str]) -> ConnectionTestResponse:
-    """通过 models.list() 验证 OpenAI API Key。"""
+    """通过 models.list() 验证 OpenAI 或 DeepSeek 的 OpenAI 兼容 API Key。"""
     from openai import OpenAI
 
     kwargs: dict = {"api_key": config["api_key"]}
@@ -949,6 +949,7 @@ _TEST_DISPATCH: dict[str, Callable[[dict[str, str], Any], ConnectionTestResponse
     "ark-agent-plan": _test_ark,
     "grok": _test_grok,
     "openai": _test_openai,
+    "deepseek": _test_openai,
     "vidu": _test_vidu,
     "dashscope": _test_dashscope,
     "minimax": _test_minimax,

@@ -1,4 +1,5 @@
 import BailianColor from "@lobehub/icons/es/Bailian/components/Color";
+import DeepSeekColor from "@lobehub/icons/es/DeepSeek/components/Color";
 import GeminiColor from "@lobehub/icons/es/Gemini/components/Color";
 import GrokMono from "@lobehub/icons/es/Grok/components/Mono";
 import KlingColor from "@lobehub/icons/es/Kling/components/Color";
@@ -13,6 +14,7 @@ export const PROVIDER_NAMES: Record<string, string> = {
   "gemini-aistudio": "AI Studio",
   "gemini-vertex": "Vertex AI",
   ark: "火山方舟",
+  deepseek: "DeepSeek",
   grok: "Grok",
   openai: "OpenAI",
   vidu: "Vidu",
@@ -33,6 +35,7 @@ const ICON_REGISTRY: Record<string, ComponentType<{ className?: string }>> = {
   grok: GrokMono,
   volcengine: VolcengineColor,
   bailian: BailianColor,
+  deepseek: DeepSeekColor,
   minimax: MinimaxColor,
   openai: OpenAIMono,
   vidu: ViduColor,

@@ -173,12 +173,20 @@ async def create_credential(
         base_url = body.base_url or preset.messages_url
         display_name = body.display_name or preset.display_name
         model = body.model or preset.default_model
+        haiku_model = body.haiku_model or preset.default_haiku_model
+        sonnet_model = body.sonnet_model or preset.default_sonnet_model
+        opus_model = body.opus_model or preset.default_opus_model
+        subagent_model = body.subagent_model or preset.default_subagent_model
     else:
         if not body.base_url:
             raise HTTPException(status_code=422, detail=_t("agent_base_url_required_custom"))
         base_url = body.base_url
         display_name = body.display_name or "Custom"
         model = body.model
+        haiku_model = body.haiku_model
+        sonnet_model = body.sonnet_model
+        opus_model = body.opus_model
+        subagent_model = body.subagent_model
 
     repo = AgentCredentialRepository(session)
     user_id = current_request_user_id()
@@ -188,10 +196,10 @@ async def create_credential(
         base_url=base_url,
         api_key=body.api_key,
         model=model,
-        haiku_model=body.haiku_model,
-        sonnet_model=body.sonnet_model,
-        opus_model=body.opus_model,
-        subagent_model=body.subagent_model,
+        haiku_model=haiku_model,
+        sonnet_model=sonnet_model,
+        opus_model=opus_model,
+        subagent_model=subagent_model,
         user_id=user_id,
     )
     # 自动 active 策略：activate=True，或 (activate=None 且当前无 active)

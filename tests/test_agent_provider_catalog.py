@@ -83,7 +83,7 @@ def test_default_models_match_table() -> None:
         "glm-cn": "glm-5.1",
         "glm-intl": "glm-5.1",
         "xiaomi-mimo": "mimo-v2.5-pro",
-        "deepseek": "deepseek-v4-pro",
+        "deepseek": "deepseek-v4-flash-vision-exp",
         "minimax-cn": "MiniMax-M3",
         "minimax-intl": "MiniMax-M3",
         "kimi": "",
@@ -101,6 +101,17 @@ def test_ark_agent_plan_reuses_visible_registry_text_catalog() -> None:
     expected = tuple(mid for mid, info in registry.models.items() if info.media_type == "text" and not info.hidden)
     assert preset.suggested_models == expected
     assert preset.default_model == next(mid for mid in expected if registry.models[mid].default)
+
+
+def test_deepseek_reuses_registry_catalog_and_tier_defaults() -> None:
+    preset = get_preset("deepseek")
+    assert preset is not None
+    assert preset.suggested_models == ("deepseek-v4-flash-vision-exp", "deepseek-v4-pro")
+    assert preset.default_model == "deepseek-v4-flash-vision-exp"
+    assert preset.default_haiku_model == "deepseek-v4-flash-vision-exp"
+    assert preset.default_sonnet_model == "deepseek-v4-flash-vision-exp"
+    assert preset.default_opus_model == "deepseek-v4-pro"
+    assert preset.default_subagent_model == "deepseek-v4-flash-vision-exp"
 
 
 def test_api_key_url_required() -> None:

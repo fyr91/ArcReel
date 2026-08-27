@@ -17,6 +17,7 @@ def test_all_providers_registered():
         "gemini-vertex",
         "ark",
         "ark-agent-plan",
+        "deepseek",
         "grok",
         "openai",
         "vidu",

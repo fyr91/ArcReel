@@ -171,13 +171,14 @@ describe("CreateProjectModal", () => {
         grid_storyboard: false,
         style_template_id: "live_premium_drama",
         video_backend: "croco/minimax-h3",
-        default_image_backend: "ark-agent-plan/doubao-seedream-5.0-lite",
+        default_image_backend: "runware/google:nano-banana@2-lite",
         image_provider_storyboard: "runware/google:nano-banana@2-lite",
-        default_text_backend: "ark-agent-plan/deepseek-v4-pro",
-        text_backend_simple: "ark-agent-plan/minimax-m3",
-        text_backend_complex: "ark-agent-plan/deepseek-v4-pro",
+        default_text_backend: "deepseek/deepseek-v4-flash-vision-exp",
+        text_backend_simple: "deepseek/deepseek-v4-flash-vision-exp",
+        text_backend_complex: "deepseek/deepseek-v4-pro",
         model_settings: {
           "croco/minimax-h3": { resolution: "480p" },
+          "runware/google:nano-banana@2-lite": { resolution: "1K" },
         },
         default_duration: null,
       })

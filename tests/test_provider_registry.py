@@ -33,6 +33,19 @@ def test_ark_agent_plan_registered() -> None:
             assert m.resolutions, f"{mid} missing resolutions"
 
 
+def test_deepseek_registered_as_own_text_provider() -> None:
+    p = PROVIDER_REGISTRY["deepseek"]
+    assert p.group == "own"
+    assert p.default_base_url == "https://api.deepseek.com"
+    assert p.optional_keys == ["base_url"]
+    assert {mid for mid, info in p.models.items() if info.media_type == "text"} == {
+        "deepseek-v4-flash-vision-exp",
+        "deepseek-v4-pro",
+    }
+    assert p.models["deepseek-v4-flash-vision-exp"].default is True
+    assert "vision" in p.models["deepseek-v4-flash-vision-exp"].capabilities
+
+
 def test_ark_agent_plan_current_text_catalog_and_legacy_visibility() -> None:
     p = PROVIDER_REGISTRY["ark-agent-plan"]
     visible_text = {mid for mid, info in p.models.items() if info.media_type == "text" and not info.hidden}

@@ -25,6 +25,7 @@ def _visible_text_catalog(provider_id: str) -> tuple[str, tuple[str, ...]]:
 
 
 _ARK_AGENT_PLAN_DEFAULT_MODEL, _ARK_AGENT_PLAN_TEXT_MODELS = _visible_text_catalog("ark-agent-plan")
+_DEEPSEEK_DEFAULT_MODEL, _DEEPSEEK_TEXT_MODELS = _visible_text_catalog("deepseek")
 
 
 @dataclass(frozen=True)
@@ -41,6 +42,10 @@ class PresetProvider:
     notes_i18n_key: str | None
     api_key_pattern: str | None
     is_recommended: bool
+    default_haiku_model: str | None = None
+    default_sonnet_model: str | None = None
+    default_opus_model: str | None = None
+    default_subagent_model: str | None = None
 
 
 PRESET_PROVIDERS: dict[str, PresetProvider] = {
@@ -120,13 +125,17 @@ PRESET_PROVIDERS: dict[str, PresetProvider] = {
         icon_key="DeepSeek",
         messages_url="https://api.deepseek.com/anthropic",
         discovery_url="https://api.deepseek.com",
-        default_model="deepseek-v4-pro",
-        suggested_models=(),
+        default_model=_DEEPSEEK_DEFAULT_MODEL,
+        suggested_models=_DEEPSEEK_TEXT_MODELS,
         docs_url=None,
         api_key_url="https://platform.deepseek.com/",
         notes_i18n_key="preset_notes_deepseek",
         api_key_pattern=r"^sk-[A-Za-z0-9]+$",
         is_recommended=False,
+        default_haiku_model="deepseek-v4-flash-vision-exp",
+        default_sonnet_model="deepseek-v4-flash-vision-exp",
+        default_opus_model="deepseek-v4-pro",
+        default_subagent_model="deepseek-v4-flash-vision-exp",
     ),
     "minimax-cn": PresetProvider(
         id="minimax-cn",

@@ -78,7 +78,7 @@ async def test_list_preset_providers_returns_catalog(authed_client) -> None:
     deepseek = next(p for p in data["providers"] if p["id"] == "deepseek")
     assert deepseek["messages_url"] == "https://api.deepseek.com/anthropic"
     assert deepseek["discovery_url"] == "https://api.deepseek.com"
-    assert deepseek["default_model"] == "deepseek-v4-pro"
+    assert deepseek["default_model"] == "deepseek-v4-flash-vision-exp"
     assert deepseek["icon_key"] == "DeepSeek"
     arcreel = next(p for p in data["providers"] if p["id"] == "arcreel")
     assert arcreel["is_recommended"] is True
@@ -109,7 +109,11 @@ async def test_create_with_preset(authed_client) -> None:
     cred = resp.json()
     assert cred["preset_id"] == "deepseek"
     assert cred["base_url"] == "https://api.deepseek.com/anthropic"
-    assert cred["model"] == "deepseek-v4-pro"
+    assert cred["model"] == "deepseek-v4-flash-vision-exp"
+    assert cred["haiku_model"] == "deepseek-v4-flash-vision-exp"
+    assert cred["sonnet_model"] == "deepseek-v4-flash-vision-exp"
+    assert cred["opus_model"] == "deepseek-v4-pro"
+    assert cred["subagent_model"] == "deepseek-v4-flash-vision-exp"
     assert cred["display_name"] == "DeepSeek"
     assert cred["api_key_masked"].startswith("sk-")
     assert cred["icon_key"] == "DeepSeek"
