@@ -78,6 +78,7 @@ from lib.project_schema import parse_project_schema_version
 from lib.reference_video.duration_migration import migrate_script_unit_durations
 from lib.script_editor import ScriptEditError, resolve_items
 from lib.script_models import get_generated_assets
+from lib.source_revision import SourceScope, compute_source_revision
 from lib.style_templates import LEGACY_STYLE_MAP, resolve_template_prompt
 from lib.validation_messages import ValidationResult
 
@@ -1875,9 +1876,19 @@ class ProjectManager:
                             if episode_num == 1:
                                 episode["source_file"] = None
                                 episode["source_revision"] = None
+                                episode.pop("overview", None)
+                                project.pop("overview", None)
                                 episode["title"] = ""
                             else:
                                 episodes.remove(episode)
+                            workflow = project.get("workflow")
+                            per_episode = (
+                                workflow.get("asset_inventory_by_episode")
+                                if isinstance(workflow, dict)
+                                else None
+                            )
+                            if isinstance(per_episode, dict):
+                                per_episode.pop(str(episode_num), None)
                             metadata_changed = True
 
                 if metadata_changed:
@@ -1890,6 +1901,49 @@ class ProjectManager:
                     raw_file.unlink()
 
         emit_project_change_hint(project_name, changed_paths=changed_paths)
+
+    def update_source_text(self, project_name: str, filename: str, content: str) -> str:
+        """Write source text and invalidate only the bound course episode's analysis."""
+
+        project_dir = self.get_project_path(project_name)
+        project_file = self._get_project_file_path(project_name)
+        source_path = safe_join(project_dir / "source", filename)
+        relative_source = source_path.relative_to(project_dir).as_posix()
+        metadata_changed = False
+        with self._project_lock(project_name):
+            source_path.parent.mkdir(parents=True, exist_ok=True)
+            with formal_write_transaction(project_file, source_path):
+                project = load_json(project_file)
+                changed = False
+                if project.get("content_mode") == "course":
+                    episodes = project.get("episodes")
+                    for episode in episodes if isinstance(episodes, list) else []:
+                        if not isinstance(episode, dict) or episode.get("source_file") != relative_source:
+                            continue
+                        episode.pop("overview", None)
+                        episode["source_revision"] = None
+                        episode_number = episode.get("episode")
+                        if episode_number == 1:
+                            project.pop("overview", None)
+                        workflow = project.get("workflow")
+                        per_episode = (
+                            workflow.get("asset_inventory_by_episode")
+                            if isinstance(workflow, dict)
+                            else None
+                        )
+                        if isinstance(per_episode, dict):
+                            per_episode.pop(str(episode_number), None)
+                        changed = True
+                atomic_write_bytes(source_path, content.encode("utf-8"))
+                if changed:
+                    self._apply_project_mutation_unlocked(project, lambda _project: None)
+                    atomic_write_json(project_file, project)
+                    metadata_changed = True
+        emit_project_change_hint(
+            project_name,
+            changed_paths=[relative_source, *([self.PROJECT_FILE] if metadata_changed else [])],
+        )
+        return relative_source
 
     @contextmanager
     def file_lock(self, path: Path):
@@ -3501,6 +3555,10 @@ class ProjectManager:
         Returns:
             生成的 overview 字典，包含 synopsis, genre, theme, world_setting, generated_at
         """
+        project_data = self.load_project(project_name)
+        if project_data.get("content_mode") == "course":
+            return await self.generate_episode_overview(project_name, 1)
+
         from .prompt_builders_script import build_overview_prompt
         from .text_backends.base import TextGenerationRequest, TextTaskType
         from .text_generator import TextGenerator
@@ -3515,7 +3573,6 @@ class ProjectManager:
 
         # 调用 TextGenerator（Structured Outputs）。剧本文档固定采用「提取优先」：
         # 作者写下的创作方案前言优先照用，缺失才退回从正文归纳。
-        project_data = self.load_project(project_name)
         # source_language 来自 project.json，可能是非字符串脏数据；非字符串或空串回退默认语言
         raw_source_language = project_data.get("source_language")
         target_language = (
@@ -3546,6 +3603,102 @@ class ProjectManager:
 
         logger.info("项目概述已生成并保存")
         return overview_dict
+
+    async def generate_episode_overview(self, project_name: str, episode: int) -> dict:
+        """Analyze exactly one course episode's bound source document.
+
+        Course episodes may be unrelated. Their story context therefore lives on the episode
+        ledger entry and never falls back to the project overview. Episode 1 is mirrored to the
+        legacy project-level field solely for the existing overview canvas and compatibility.
+        """
+
+        from .prompt_builders_script import build_overview_prompt
+        from .text_backends.base import TextGenerationRequest, TextTaskType
+        from .text_generator import TextGenerator
+
+        if type(episode) is not int or episode < 1:
+            raise ValueError("episode must be a positive integer")
+        project = self.load_project(project_name)
+        if project.get("content_mode") != "course":
+            raise ValueError("episode overview is only available for course projects")
+        entries = project.get("episodes")
+        entry = next(
+            (
+                item
+                for item in entries if isinstance(item, Mapping) and item.get("episode") == episode
+            ),
+            None,
+        ) if isinstance(entries, list) else None
+        if entry is None:
+            raise ValueError(f"episode {episode} does not exist")
+        source_file = entry.get("source_file")
+        if not isinstance(source_file, str) or not source_file:
+            raise EmptySourceError(f"episode {episode} has no bound source file")
+
+        scope = SourceScope(kind="files", files=[source_file])
+        project_path = self.get_project_path(project_name)
+        source = compute_source_revision(project_path, project, scope)
+        if source.blockers:
+            raise EmptySourceError(source.blockers[0].reason)
+        if source.revision is None or not source.documents:
+            raise EmptySourceError(f"episode {episode} source is unavailable")
+        source_content = "\n\n".join(document.text for document in source.documents)
+        if not source_content.strip():
+            raise EmptySourceError(f"episode {episode} source is blank")
+        expected_revision = source.revision
+
+        raw_source_language = project.get("source_language")
+        target_language = (
+            raw_source_language if isinstance(raw_source_language, str) and raw_source_language.strip() else "中文"
+        )
+        generator = await TextGenerator.create(TextTaskType.OVERVIEW, project_name)
+        result = await generator.generate(
+            TextGenerationRequest(
+                prompt=build_overview_prompt(source_content, target_language=target_language),
+                response_schema=ProjectOverview,
+            ),
+            project_name=project_name,
+        )
+        overview = ProjectOverview.model_validate_json(result.text).model_dump()
+        overview["generated_at"] = datetime.now(UTC).isoformat()
+
+        persisted: dict[str, Any] | None = None
+
+        def _mutate(current: dict[str, Any]) -> None:
+            nonlocal persisted
+            current_entries = current.get("episodes")
+            current_entry = next(
+                (
+                    item
+                    for item in current_entries
+                    if isinstance(item, dict) and item.get("episode") == episode
+                ),
+                None,
+            ) if isinstance(current_entries, list) else None
+            if current_entry is None or current_entry.get("source_file") != source_file:
+                raise EpisodeScriptReboundError(f"episode {episode} source binding changed")
+            before = compute_source_revision(project_path, current, scope)
+            if before.revision != expected_revision:
+                raise EpisodeScriptReboundError(f"episode {episode} source changed during analysis")
+
+            # Language and lecturer/style remain project-level shared settings. Only episode 1
+            # establishes the initial detected source language, matching legacy welcome behavior.
+            if episode == 1:
+                current["source_language"] = overview["language"]
+            after = compute_source_revision(project_path, current, scope)
+            if after.revision is None:
+                raise EmptySourceError(f"episode {episode} source revision is unavailable")
+            persisted = {**overview, "source_revision": after.revision}
+            current_entry["overview"] = persisted
+            current_entry["source_revision"] = after.revision
+            if episode == 1:
+                current["overview"] = overview
+
+        self.update_project(project_name, _mutate)
+        if persisted is None:  # pragma: no cover - update_project invokes the callback or raises
+            raise RuntimeError("episode overview update did not run")
+        logger.info("课程第 %s 集概述已生成并保存", episode)
+        return persisted
 
 
 _project_manager: ProjectManager | None = None

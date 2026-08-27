@@ -424,6 +424,7 @@ describe("API", () => {
       await API.listFiles("demo");
       await API.deleteDraft("demo", 1, 2);
       await API.generateOverview("demo");
+      await API.generateEpisodeOverview("demo", 2);
       await API.updateOverview("demo", { synopsis: "new" });
 
       await API.generateStoryboard("demo", "seg-1", "img", "episode_1.json");

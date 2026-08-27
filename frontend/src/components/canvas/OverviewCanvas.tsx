@@ -220,14 +220,22 @@ export function OverviewCanvas({
   );
 
   const handleAnalyze = useCallback(async () => {
-    await API.generateOverview(projectName);
+    if (projectData?.content_mode === "course") {
+      await API.generateEpisodeOverview(projectName, 1);
+    } else {
+      await API.generateOverview(projectName);
+    }
     await refreshProject();
-  }, [projectName, refreshProject]);
+  }, [projectData?.content_mode, projectName, refreshProject]);
 
   const handleRegenerate = useCallback(async () => {
     setRegenerating(true);
     try {
-      await API.generateOverview(projectName);
+      if (projectData?.content_mode === "course") {
+        await API.generateEpisodeOverview(projectName, 1);
+      } else {
+        await API.generateOverview(projectName);
+      }
       await refreshProject();
       useAppStore.getState().pushToast(tRef.current("project_overview_regenerated"), "success");
     } catch (err) {
@@ -237,7 +245,7 @@ export function OverviewCanvas({
     } finally {
       setRegenerating(false);
     }
-  }, [projectName, refreshProject]);
+  }, [projectData?.content_mode, projectName, refreshProject]);
 
   const [editingOverview, setEditingOverview] = useState(false);
   const [savingOverview, setSavingOverview] = useState(false);

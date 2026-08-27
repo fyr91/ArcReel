@@ -286,6 +286,11 @@ class _FakePM:
             _OverviewProbe.model_validate({})
         raise EmptySourceError("source missing")
 
+    async def generate_episode_overview(self, name, episode):
+        if name == "ready" and episode == 2:
+            return {"synopsis": "episode two only", "source_revision": "sha256-v1:" + "a" * 64}
+        raise EmptySourceError("episode source missing")
+
 
 class _RejectedFakeEdit(Exception):
     def __init__(self, result: ScriptBatchEditResult):
@@ -3305,6 +3310,14 @@ class TestUnexpectedErrorsDoNotLeak:
             resp = client.post("/api/v1/projects/ready/generate-overview")
             assert resp.status_code == 500
             assert sentinel not in self._body(resp)
+
+    @pytest.mark.unit
+    def test_generate_episode_overview_uses_episode_route(self, tmp_path, monkeypatch):
+        client = _client(monkeypatch, _FakePM(tmp_path))
+        with client:
+            resp = client.post("/api/v1/projects/ready/episodes/2/generate-overview")
+        assert resp.status_code == 200
+        assert resp.json()["overview"]["synopsis"] == "episode two only"
 
     @pytest.mark.unit
     def test_generate_overview_corrupted_project_maps_to_500_not_provider_error(self, tmp_path, monkeypatch):

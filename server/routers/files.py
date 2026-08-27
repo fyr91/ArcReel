@@ -736,17 +736,11 @@ async def update_source_file(
 
         def _sync():
             manager = get_project_manager()
-            project_dir = manager.get_project_path(project_name)
-
-            with manager.locked_source_mutation(project_name):
-                # 安全检查：确保路径在项目目录内（文件尚不存在也要能通过，此处允许新建）
-                try:
-                    source_path = safe_join(project_dir, "source", filename)
-                except PathTraversalError:
-                    raise HTTPException(status_code=403, detail=_t("forbidden_access"))
-
-                source_path.write_text(content, encoding="utf-8")
-            return {"success": True, "path": f"source/{filename}"}
+            try:
+                path = manager.update_source_text(project_name, filename, content)
+            except PathTraversalError:
+                raise HTTPException(status_code=403, detail=_t("forbidden_access"))
+            return {"success": True, "path": path}
 
         return await asyncio.to_thread(_sync)
 

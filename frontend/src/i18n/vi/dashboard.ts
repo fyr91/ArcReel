@@ -1923,4 +1923,11 @@ export default {
   'narration_delivery_label': 'Cách giao lời dẫn',
   'narration_delivery_post_production': 'Thêm ở hậu kỳ',
   'narration_delivery_use_tts': 'Dùng TTS hiện tại',
+  'course_episode_analysis_title': 'Phân tích tập {{episode}}',
+  'course_episode_analysis_description': 'Tài liệu của tập này được phân tích độc lập và không dùng nội dung từ các tập khác.',
+  'course_episode_analyze': 'Bắt đầu phân tích',
+  'course_episode_analyzing': 'Đang phân tích…',
+  'course_episode_analysis_success': 'Đã hoàn tất phân tích tập {{episode}}',
+  'course_episode_analysis_failed': 'Phân tích tập thất bại: {{message}}',
+  'tool_name_generate_episode_overview': 'Phân tích tập khóa học',
 } satisfies Record<keyof typeof enDashboard, string>;

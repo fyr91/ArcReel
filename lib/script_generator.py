@@ -27,6 +27,7 @@ from lib.artifact_manifest import ArtifactBasisDescriptor, ArtifactKey
 from lib.artifact_provenance import (
     build_ad_episode_script_basis,
     build_episode_script_basis,
+    episode_overview,
     project_ad_episode_script_inputs,
 )
 from lib.backend_assembly.specs import get_provider_spec
@@ -301,7 +302,7 @@ class ScriptGenerator:
 
         if step1_units is not None:
             prompt = build_reference_video_prompt(
-                project_overview=self.project_json.get("overview", {}),
+                project_overview=episode_overview(self.project_json, episode),
                 style=self.project_json.get("style", ""),
                 style_description=self.project_json.get("style_description", ""),
                 characters=characters,
@@ -321,7 +322,7 @@ class ScriptGenerator:
             # drama 已在前面经 _generate_drama_step2 早返回；reference 走上面分支，故此 else 必为 narration。
             narration_step1 = self._load_narration_step1(episode, supported_durations)
             prompt = build_narration_prompt(
-                project_overview=self.project_json.get("overview", {}),
+                project_overview=episode_overview(self.project_json, episode),
                 style=self.project_json.get("style", ""),
                 style_description=self.project_json.get("style_description", ""),
                 characters=characters,
@@ -460,7 +461,7 @@ class ScriptGenerator:
         props = self.project_json.get("props")
         props = props if isinstance(props, dict) else {}
         return build_drama_prompt(
-            project_overview=self.project_json.get("overview", {}),
+            project_overview=episode_overview(self.project_json, episode),
             style=self.project_json.get("style", ""),
             style_description=self.project_json.get("style_description", ""),
             scenes_content=render_drama_content_for_step2(content_scenes),
@@ -659,7 +660,7 @@ class ScriptGenerator:
             # 不再需要档位与上限，只需参考图上限。
             step1_units = self._load_reference_step1(episode, self._resolve_raw_supported_durations(caps))
             prompt = build_reference_video_prompt(
-                project_overview=self.project_json.get("overview", {}),
+                project_overview=episode_overview(self.project_json, episode),
                 style=self.project_json.get("style", ""),
                 style_description=self.project_json.get("style_description", ""),
                 characters=characters,
@@ -675,7 +676,7 @@ class ScriptGenerator:
         # narration 两段式：step1 透传内容层（novel_text 等），step2 仅产视觉层。
         # drama / ad 已在前面早返回，reference 走上面分支，故此处必为 narration。
         prompt = build_narration_prompt(
-            project_overview=self.project_json.get("overview", {}),
+            project_overview=episode_overview(self.project_json, episode),
             style=self.project_json.get("style", ""),
             style_description=self.project_json.get("style_description", ""),
             characters=characters,
@@ -856,9 +857,9 @@ class ScriptGenerator:
         with open(path, encoding="utf-8") as f:
             return json.load(f)
 
-    def _freeze_step1_artifact_basis(self, step1_content: object) -> None:
+    def _freeze_step1_artifact_basis(self, step1_content: object, episode: int) -> None:
         """Freeze the authoritative step1 basis before the provider call."""
-        basis = build_episode_script_basis(step1_content, project=self.project_json)
+        basis = build_episode_script_basis(step1_content, project=self.project_json, episode=episode)
         self._artifact_basis = ArtifactBasisDescriptor.from_basis(basis)
 
     def _freeze_step1_input_claim(self, episode: int, step1_path: Path, *, content_digest: str) -> None:
@@ -974,7 +975,7 @@ class ScriptGenerator:
                 supported_durations=supported_durations,
             )
             self._step1_revision = content_fingerprint_of_data(raw)
-            self._freeze_step1_artifact_basis(raw)
+            self._freeze_step1_artifact_basis(raw, episode)
             self._freeze_step1_input_claim(
                 episode,
                 step1_json,
@@ -1052,7 +1053,7 @@ class ScriptGenerator:
         except json.JSONDecodeError as e:
             raise ValueError(f"step1_segments.json 解析失败: {e}")
         self._step1_revision = content_fingerprint_of_data(raw)
-        self._freeze_step1_artifact_basis(raw)
+        self._freeze_step1_artifact_basis(raw, episode)
         self._freeze_step1_input_claim(
             episode,
             step1_json,
@@ -1114,7 +1115,7 @@ class ScriptGenerator:
         if not isinstance(data, dict):
             raise ValueError("Step 1 内容文件结构异常：顶层应为对象 {title, scenes}")
         self._step1_revision = content_fingerprint_of_data(data)
-        self._freeze_step1_artifact_basis(data)
+        self._freeze_step1_artifact_basis(data, episode)
         scenes = data.get("scenes")
         if not isinstance(scenes, list) or not scenes:
             raise ValueError("Step 1 内容文件结构异常：scenes 必须是非空的场景对象数组")

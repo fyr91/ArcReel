@@ -1924,4 +1924,11 @@ export default {
   'narration_delivery_label': '旁白交付',
   'narration_delivery_post_production': '后期配音',
   'narration_delivery_use_tts': '使用当前 TTS',
+  'course_episode_analysis_title': '分析第 {{episode}} 集',
+  'course_episode_analysis_description': '本集文档会独立解析，不会引用其他集的剧情内容。项目语言、讲师风格和共享素材仍会保留。',
+  'course_episode_analyze': '开始分析本集',
+  'course_episode_analyzing': '正在分析…',
+  'course_episode_analysis_success': '第 {{episode}} 集分析完成',
+  'course_episode_analysis_failed': '本集分析失败：{{message}}',
+  'tool_name_generate_episode_overview': '分析课程分集',
 } satisfies Record<keyof typeof enDashboard, string>;

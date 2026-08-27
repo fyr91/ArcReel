@@ -198,6 +198,9 @@ describe("OverviewCanvas", () => {
     });
     const genericUpload = vi.spyOn(API, "uploadFile");
     const generateOverview = vi.spyOn(API, "generateOverview").mockResolvedValue(undefined as never);
+    const generateEpisodeOverview = vi
+      .spyOn(API, "generateEpisodeOverview")
+      .mockResolvedValue(undefined as never);
     vi.spyOn(API, "getProject").mockResolvedValue({ project: uploaded, scripts: {} });
 
     render(<OverviewCanvas projectName="course-demo" projectData={initial} />);
@@ -206,9 +209,11 @@ describe("OverviewCanvas", () => {
     await waitFor(() => expect(addCourseEpisode).toHaveBeenCalledWith("course-demo", expect.any(File)));
     expect(genericUpload).not.toHaveBeenCalled();
     expect(generateOverview).not.toHaveBeenCalled();
+    expect(generateEpisodeOverview).not.toHaveBeenCalled();
 
     fireEvent.click(screen.getByTestId("welcome-analyze"));
-    await waitFor(() => expect(generateOverview).toHaveBeenCalledWith("course-demo"));
+    await waitFor(() => expect(generateEpisodeOverview).toHaveBeenCalledWith("course-demo", 1));
+    expect(generateOverview).not.toHaveBeenCalled();
   });
 
   it("regenerates overview on button click", async () => {

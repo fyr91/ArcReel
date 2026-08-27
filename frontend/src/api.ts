@@ -1971,6 +1971,17 @@ class API {
     );
   }
 
+  /** 仅分析课程项目中指定集绑定的源文件。 */
+  static async generateEpisodeOverview(
+    projectName: string,
+    episode: number,
+  ): Promise<{ success: boolean; overview: ProjectOverview }> {
+    return this.request(
+      `/projects/${encodeURIComponent(projectName)}/episodes/${episode}/generate-overview`,
+      { method: "POST" },
+    );
+  }
+
   /**
    * 更新项目概述（手动编辑）
    */

@@ -122,6 +122,10 @@ export interface EpisodeMeta {
   script_file: string;
   /** 课程项目中一份文档对应本集的规范化源文件。 */
   source_file?: string | null;
+  /** 课程模式中只由本集 source_file 生成的独立内容概述。 */
+  overview?: ProjectOverview;
+  /** overview 与本集源文件绑定时的正式修订号。 */
+  source_revision?: string | null;
   /** Written by episode_planner at split time: ending hook / suspense */
   hook?: string;
   /** Written by episode_planner at split time: slice boundary in the source file (char offsets) */

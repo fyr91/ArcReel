@@ -1837,6 +1837,38 @@ async def generate_overview(name: str, _t: Translator):
         raise HTTPException(status_code=500, detail=_t("internal_server_error"))
 
 
+@router.post(
+    "/projects/{name}/episodes/{episode}/generate-overview",
+    dependencies=[Depends(require_project_migration_ok)],
+)
+async def generate_episode_overview(name: str, episode: int, _t: Translator):
+    """Generate story context from one course episode's bound source file only."""
+
+    if episode < 1:
+        raise BadRequestError("invalid_episode", episode=episode)
+    try:
+        manager = get_project_manager()
+        manager.get_project_path(name)
+        with project_change_source("webui"):
+            overview = await manager.generate_episode_overview(name, episode)
+        return {"success": True, "overview": overview}
+    except FileNotFoundError as exc:
+        raise NotFoundError("project_not_found", name=name) from exc
+    except PydanticValidationError:
+        logger.exception("课程分集概述生成响应解析失败")
+        raise HTTPException(status_code=400, detail=_t("overview_ai_response_invalid"))
+    except EmptySourceError as exc:
+        raise BadRequestError("overview_source_empty") from exc
+    except ValueError as exc:
+        logger.warning("课程分集概述生成参数或配置错误: name=%s episode=%s (%s)", name, episode, exc)
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except (HTTPException, ApiError):
+        raise
+    except Exception:
+        logger.exception("课程分集概述生成失败")
+        raise HTTPException(status_code=500, detail=_t("internal_server_error"))
+
+
 @router.patch("/projects/{name}/overview")
 async def update_overview(name: str, req: UpdateOverviewRequest, _t: Translator):
     """更新项目概述（手动编辑）"""
