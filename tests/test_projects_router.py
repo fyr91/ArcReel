@@ -2785,6 +2785,28 @@ class TestProjectsRouter:
             assert ep["title"] == "新集名"
 
     @pytest.mark.unit
+    def test_update_course_episode_title_before_formal_script_exists(self, tmp_path, monkeypatch):
+        manager = ProjectManager(tmp_path / "projects")
+        manager.create_project("course")
+        manager.create_project_metadata(
+            "course",
+            "Course",
+            content_mode="course",
+            extras={"generation_mode": "reference_video"},
+        )
+
+        with _client(monkeypatch, manager) as client:
+            response = client.patch(
+                "/api/v1/projects/course/episodes/1",
+                json={"title": "  景泰蓝制作工艺  "},
+            )
+
+        assert response.status_code == 200
+        assert response.json()["episode"] == {"episode": 1, "title": "景泰蓝制作工艺"}
+        assert manager.load_project("course")["episodes"][0]["title"] == "景泰蓝制作工艺"
+        assert not (manager.get_project_path("course") / "scripts" / "episode_1.json").exists()
+
+    @pytest.mark.unit
     def test_update_episode_title_empty_rejected(self, tmp_path, monkeypatch):
         """空/纯空白标题被拒（422），不进锁。"""
         client = _client(monkeypatch, _FakePM(tmp_path))

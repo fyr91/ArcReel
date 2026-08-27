@@ -280,6 +280,24 @@ export function StudioCanvasRouter() {
     }
   }, [currentProjectName, refreshProject]);
 
+  const handleRegenerateEpisodeOverview = useCallback(async (episode: number) => {
+    if (!currentProjectName) return;
+    try {
+      await API.generateEpisodeOverview(currentProjectName, episode);
+      await refreshProject();
+      useAppStore.getState().pushToast(
+        tRef.current("course_episode_analysis_success", { episode }),
+        "success",
+      );
+    } catch (err) {
+      useAppStore.getState().pushToast(
+        tRef.current("course_episode_analysis_failed", { message: errMsg(err) }),
+        "error",
+      );
+      throw err;
+    }
+  }, [currentProjectName, refreshProject]);
+
   const handleGenerateStoryboard = useCallback(async (
     segmentId: string,
     scriptFile?: string,
@@ -831,6 +849,8 @@ export function StudioCanvasRouter() {
                     episodeTitle={episode?.title}
                     onSaveTitle={(title) => handleUpdateEpisodeTitle(epNum, title)}
                     canEditTitle={Boolean(episode?.script_file)}
+                    episodeOverview={episode?.overview}
+                    onRegenerateOverview={() => handleRegenerateEpisodeOverview(epNum)}
                     hasScript={Boolean(script)}
                     scriptFile={scriptFile ?? undefined}
                     showPreprocess={!isAd}

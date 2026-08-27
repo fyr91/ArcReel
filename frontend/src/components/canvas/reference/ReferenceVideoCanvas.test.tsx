@@ -714,6 +714,41 @@ describe("ReferenceVideoCanvas", () => {
     expect(listSpy).not.toHaveBeenCalled();
   });
 
+  it("keeps the parsed course episode overview visible above preprocessing", async () => {
+    useProjectsStore.setState({
+      currentProjectName: "proj",
+      currentProjectData: { ...STUB_PROJECT, content_mode: "course", generation_mode: "reference_video" },
+    });
+    vi.spyOn(API, "getScriptReview").mockResolvedValue({
+      episode: 1,
+      content_mode: "narration",
+      status: "pending_review",
+      fingerprint: "fp",
+      confirmed_at: null,
+      quarantine: null,
+      supported_durations: null,
+      duration_tiers: null,
+      content: { units: [] },
+    });
+
+    render(
+      <ReferenceVideoCanvas
+        projectName="proj"
+        episode={1}
+        hasScript={false}
+        episodeOverview={{
+          synopsis: "本集讲解景泰蓝制作流程",
+          genre: "传统工艺",
+          theme: "非遗传承",
+          world_setting: "工艺课堂",
+        }}
+      />,
+    );
+
+    expect(await screen.findByRole("heading", { name: "本集概述" })).toBeInTheDocument();
+    expect(screen.getByText("本集讲解景泰蓝制作流程")).toBeInTheDocument();
+  });
+
   it("switches to units tab and fetches once hasScript flips true", async () => {
     vi.spyOn(API, "listReferenceVideoUnits").mockResolvedValue({ units: [mkUnit("E1U1")] });
     vi.spyOn(API, "getScriptReview").mockResolvedValue({

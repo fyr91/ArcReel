@@ -5,7 +5,8 @@ from __future__ import annotations
 import copy
 from typing import Any
 
-from lib.project_manager import ProjectManager
+from lib.path_safety import safe_join
+from lib.project_manager import EpisodeScriptReboundError, ProjectManager
 
 EDITABLE_EPISODE_METADATA_FIELDS = ("title", "hook", "outline")
 _OUTLINE_FIELDS = ("story_beats", "next_episode_teaser")
@@ -69,7 +70,7 @@ def update_episode_metadata(
     episode: int,
     updates: dict[str, Any],
 ) -> dict[str, Any]:
-    """Atomically update formal-script metadata and its project episode mirror."""
+    """Atomically update episode metadata across formal-script and course pre-script states."""
 
     if isinstance(episode, bool) or not isinstance(episode, int) or episode < 1:
         raise ValueError("episode 必须是正整数")
@@ -82,9 +83,55 @@ def update_episode_metadata(
             raise EpisodeMetadataNotFoundError(f"第 {episode} 集不存在或尚无正式文稿")
         return str(meta["script_file"])
 
-    with manager.locked_episode_script(project_name, _resolve) as script:
-        for field, value in normalized.items():
-            script[field] = copy.deepcopy(value)
+    try:
+        with manager.locked_episode_script(project_name, _resolve) as script:
+            for field, value in normalized.items():
+                script[field] = copy.deepcopy(value)
+    except FileNotFoundError as missing_script:
+        # 课程分集在解析完成、正式 step2 文稿尚未生成时，title 的真相源只能暂存于
+        # episodes[] 导览条目。脚本一旦存在仍必须走上面的正式文稿 → 镜像链路；hook / outline
+        # 也从不允许在无文稿状态下制造第二份真相源。
+        if set(normalized) != {"title"}:
+            raise
+        load_readonly = getattr(manager, "load_project_readonly", manager.load_project)
+        project = load_readonly(project_name)
+        entries = project.get("episodes") or []
+        meta = next(
+            (entry for entry in entries if isinstance(entry, dict) and entry.get("episode") == episode),
+            None,
+        )
+        if meta is None:
+            raise EpisodeMetadataNotFoundError(f"第 {episode} 集不存在") from missing_script
+        if project.get("content_mode") != "course" or not meta.get("script_file"):
+            raise
+
+        norm = manager.normalize_script_filename(str(meta["script_file"]))
+        script_path = safe_join(manager.get_project_path(project_name) / "scripts", norm)
+        captured: dict[str, Any] = {}
+
+        # 与正式脚本创建/保存共用同一把文件锁，并在项目锁内复核文件仍不存在。若脚本恰在
+        # 两阶段之间出现，拒绝本次 ledger-only 写入，由调用方重试后走正式文稿链路。
+        with manager.file_lock(script_path):
+
+            def _mutate(current: dict[str, Any]) -> None:
+                current_entries = current.get("episodes") or []
+                current_meta = next(
+                    (entry for entry in current_entries if isinstance(entry, dict) and entry.get("episode") == episode),
+                    None,
+                )
+                if current.get("content_mode") != "course" or current_meta is None:
+                    raise EpisodeMetadataNotFoundError(f"第 {episode} 集不存在")
+                current_script = current_meta.get("script_file")
+                if not current_script or manager.normalize_script_filename(str(current_script)) != norm:
+                    raise EpisodeScriptReboundError(f"episode {episode} script binding changed")
+                if script_path.is_file():
+                    raise EpisodeScriptReboundError(f"episode {episode} script appeared during title update")
+                current_meta["title"] = normalized["title"]
+                captured.update(episode=episode, title=normalized["title"])
+
+            manager.update_project(project_name, _mutate)
+
+        return captured
 
     return {"episode": episode, **copy.deepcopy(normalized)}
 

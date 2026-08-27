@@ -117,12 +117,16 @@ vi.mock("./reference/ReferenceVideoCanvas", () => ({
     hasScript,
     canEditTitle,
     onSaveTitle,
+    episodeOverview,
+    onRegenerateOverview,
     showPreprocess,
     freeDuration,
   }: {
     hasScript: boolean;
     canEditTitle?: boolean;
     onSaveTitle?: (title: string) => Promise<void>;
+    episodeOverview?: { synopsis: string };
+    onRegenerateOverview?: () => Promise<void>;
     showPreprocess?: boolean;
     freeDuration?: boolean;
   }) => (
@@ -133,8 +137,12 @@ vi.mock("./reference/ReferenceVideoCanvas", () => ({
       data-free-duration={freeDuration ? "yes" : "no"}
     >
       <div data-testid="reference-can-edit-title">{canEditTitle ? "yes" : "no"}</div>
+      <div data-testid="reference-episode-overview">{episodeOverview?.synopsis ?? "none"}</div>
       <button onClick={() => void onSaveTitle?.("新标题")?.catch(() => {})}>
         reference-save-title
+      </button>
+      <button onClick={() => void onRegenerateOverview?.()?.catch(() => {})}>
+        reference-regenerate-overview
       </button>
     </div>
   ),
@@ -509,6 +517,56 @@ describe("StudioCanvasRouter", () => {
     expect(screen.getByRole("heading", { name: "分析第 2 集" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "开始分析本集" })).toBeInTheDocument();
     expect(screen.queryByTestId("reference-video-canvas")).not.toBeInTheDocument();
+  });
+
+  it("shows the parsed course episode overview in preprocessing and can regenerate it", async () => {
+    const overview = {
+      synopsis: "本集讲解景泰蓝制作流程",
+      genre: "传统工艺",
+      theme: "非遗传承",
+      world_setting: "工艺课堂",
+    };
+    const projectData = makeProjectData({
+      content_mode: "course",
+      generation_mode: "reference_video",
+      episodes: [
+        {
+          episode: 2,
+          title: "景泰蓝制作工艺",
+          script_file: "scripts/episode_2.json",
+          source_file: "source/cloisonne.md",
+          overview,
+        },
+      ],
+    });
+    useProjectsStore.setState({
+      currentProjectName: "course-demo",
+      currentProjectData: projectData,
+      currentScripts: {},
+    });
+    const regenerate = vi.spyOn(API, "generateEpisodeOverview").mockResolvedValue({
+      success: true,
+      overview: {
+        ...overview,
+        title: "景泰蓝制作工艺",
+        source_revision: "sha256-v1:" + "a".repeat(64),
+      },
+    });
+    vi.spyOn(API, "getProject").mockResolvedValue({
+      project: projectData,
+      scripts: {},
+      asset_fingerprints: {},
+    });
+
+    renderAt("/episodes/2");
+
+    expect(screen.getByTestId("reference-video-canvas")).toHaveAttribute("data-has-script", "no");
+    expect(screen.getByTestId("reference-episode-overview")).toHaveTextContent(overview.synopsis);
+    fireEvent.click(screen.getByText("reference-regenerate-overview"));
+
+    await waitFor(() => {
+      expect(regenerate).toHaveBeenCalledWith("course-demo", 2);
+    });
   });
 
   it("skips the provider/system-config lookups in the demo workbench", async () => {

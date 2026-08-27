@@ -789,3 +789,15 @@ def build_overview_prompt(source_content: str, target_language: str = "中文") 
     （target_language 由调用方按 project.json 的 source_language 解析）。
     """
     return f"{_OVERVIEW_TASK_SCREENPLAY}\n\n**输出语言**：所有字符串值必须使用 {target_language}；JSON 键名 / 枚举值保持英文。\n\n{source_content}"
+
+
+def build_course_episode_overview_prompt(source_content: str, target_language: str = "中文") -> str:
+    """构建单份课程文档的独立解析 prompt，并为该集提炼可读标题。"""
+
+    return (
+        "请分析以下单集课程文档，提炼本集概述（内容梗概 / 题材 / 主题 / 背景设定），"
+        "并生成一个简洁、具体、能准确概括本集教学主题的标题。\n"
+        "标题不要照抄文件名，不要包含‘第几集’或 Episode 编号，也不要使用空泛的‘课程介绍’。\n\n"
+        f"**输出语言**：所有字符串值必须使用 {target_language}；JSON 键名 / 枚举值保持英文。\n\n"
+        f"{source_content}"
+    )

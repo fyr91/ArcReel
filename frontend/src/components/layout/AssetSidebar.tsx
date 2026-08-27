@@ -209,6 +209,21 @@ export function AssetSidebar({ className }: AssetSidebarProps) {
     }
   };
 
+  const renameEpisode = async (episode: number, title: string) => {
+    if (!currentProjectName || demoMode) return;
+    try {
+      await API.updateEpisode(currentProjectName, episode, { title });
+      await useProjectsStore.getState().refreshProject(currentProjectName);
+      useAppStore.getState().pushToast(t("dashboard:episode_title_updated"), "success");
+    } catch (error) {
+      useAppStore.getState().pushToast(
+        t("dashboard:episode_title_update_failed", { message: errMsg(error) }),
+        "error",
+      );
+      throw error;
+    }
+  };
+
   return (
     <aside
       className={`flex flex-col overflow-hidden ${className ?? ""}`}
@@ -380,6 +395,11 @@ export function AssetSidebar({ className }: AssetSidebarProps) {
                       : undefined
                   }
                   deleting={deletePreviewEpisode === ep.episode || deletingEpisode === ep.episode}
+                  onRename={
+                    !isAd && !demoMode && ep.script_file
+                      ? (title) => renameEpisode(ep.episode, title)
+                      : undefined
+                  }
                 />
               ))
             )}

@@ -1,3 +1,4 @@
+import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Clapperboard, Loader2, Trash2 } from "lucide-react";
 import type { EpisodeMeta } from "@/types";
@@ -19,6 +20,8 @@ interface EpisodeCardProps {
   onDelete?: () => void;
   deleteLabel?: string;
   deleting?: boolean;
+  /** 双击标题后的保存回调；未提供时标题保持普通导航文本。 */
+  onRename?: (title: string) => Promise<void>;
 }
 
 const STATUS_COLOR: Record<string, string> = {
@@ -51,12 +54,55 @@ export function EpisodeCard({
   onDelete,
   deleteLabel,
   deleting = false,
+  onRename,
 }: EpisodeCardProps) {
   const { t } = useTranslation(["dashboard"]);
   const status = ep.status ?? "draft";
   const statusColor = STATUS_COLOR[status] ?? STATUS_COLOR.draft;
   const statusLabel = t(STATUS_LABEL_KEY[status] ?? STATUS_LABEL_KEY.draft);
   const isActive = status === "in_production";
+  const displayTitle = ep.title || fallbackTitle || "";
+  const [editingTitle, setEditingTitle] = useState(false);
+  const [titleDraft, setTitleDraft] = useState(displayTitle);
+  const [savingTitle, setSavingTitle] = useState(false);
+  const titleInputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (!editingTitle) return;
+    titleInputRef.current?.focus();
+    titleInputRef.current?.select();
+  }, [editingTitle]);
+
+  const startTitleEdit = () => {
+    if (!onRename || savingTitle) return;
+    setTitleDraft(displayTitle);
+    setEditingTitle(true);
+  };
+
+  const cancelTitleEdit = () => {
+    setTitleDraft(displayTitle);
+    setEditingTitle(false);
+  };
+
+  const saveTitle = async () => {
+    if (!onRename || savingTitle) return;
+    const next = titleDraft.trim();
+    if (!next) return;
+    if (next === displayTitle) {
+      setEditingTitle(false);
+      return;
+    }
+    setSavingTitle(true);
+    try {
+      await onRename(next);
+      setEditingTitle(false);
+    } catch {
+      // 调用方负责 toast；保留输入内容，方便用户修正或重试。
+      requestAnimationFrame(() => titleInputRef.current?.focus());
+    } finally {
+      setSavingTitle(false);
+    }
+  };
 
   // 进度按视频产物的可用数算——可用 = current ∪ stale，与工作台同一份计数。
   // 视频总数为 0（尚未成脚本）时退回剧本条目数，只用于显示"这集有几件内容"。
@@ -89,9 +135,7 @@ export function EpisodeCard({
 
   return (
     <div className="group relative w-full" style={{ marginBottom: 3 }}>
-      <button
-        type="button"
-        onClick={onClick}
+      <div
         className="grid w-full items-center gap-2.5 rounded-lg p-2 text-left transition-colors focus-ring"
         style={{
           gridTemplateColumns: "auto 1fr auto",
@@ -111,31 +155,73 @@ export function EpisodeCard({
           if (!active) e.currentTarget.style.background = "transparent";
         }}
       >
-      <div
-        className="num grid h-[34px] w-[34px] shrink-0 place-items-center rounded-md text-[11px] font-bold leading-none"
-        style={{
-          background: active
-            ? "linear-gradient(135deg, var(--color-accent) 0%, oklch(0.45 0.12 160) 100%)"
-            : "linear-gradient(180deg, oklch(0.28 0.013 265), oklch(0.24 0.012 265))",
-          color: active ? "oklch(0.14 0 0)" : "var(--color-text-3)",
-          boxShadow: active
-            ? "inset 0 1px 0 oklch(1 0 0 / 0.25), 0 0 0 1px oklch(1 0 0 / 0.12), 0 2px 6px -2px var(--color-accent-glow)"
-            : "inset 0 1px 0 oklch(1 0 0 / 0.04), inset 0 0 0 1px var(--color-hairline-soft)",
-        }}
-      >
-        {showEpisodeBadge ? `E${ep.episode}` : <Clapperboard className="h-4 w-4" aria-hidden />}
-      </div>
-
-      <div className="min-w-0">
+        <button
+          type="button"
+          onClick={onClick}
+          aria-label={displayTitle}
+          className="focus-ring absolute inset-0 rounded-lg"
+        />
         <div
-          className="truncate text-[13px]"
+          className="num pointer-events-none relative grid h-[34px] w-[34px] shrink-0 place-items-center rounded-md text-[11px] font-bold leading-none"
           style={{
-            color: active ? "var(--color-text)" : "var(--color-text-2)",
-            fontWeight: active ? 600 : 500,
+            background: active
+              ? "linear-gradient(135deg, var(--color-accent) 0%, oklch(0.45 0.12 160) 100%)"
+              : "linear-gradient(180deg, oklch(0.28 0.013 265), oklch(0.24 0.012 265))",
+            color: active ? "oklch(0.14 0 0)" : "var(--color-text-3)",
+            boxShadow: active
+              ? "inset 0 1px 0 oklch(1 0 0 / 0.25), 0 0 0 1px oklch(1 0 0 / 0.12), 0 2px 6px -2px var(--color-accent-glow)"
+              : "inset 0 1px 0 oklch(1 0 0 / 0.04), inset 0 0 0 1px var(--color-hairline-soft)",
           }}
         >
-          {ep.title || fallbackTitle || ""}
+          {showEpisodeBadge ? `E${ep.episode}` : <Clapperboard className="h-4 w-4" aria-hidden />}
         </div>
+
+        <div className="pointer-events-none relative min-w-0">
+        {editingTitle ? (
+          <input
+            ref={titleInputRef}
+            value={titleDraft}
+            onChange={(event) => setTitleDraft(event.target.value)}
+            onClick={(event) => event.stopPropagation()}
+            onDoubleClick={(event) => event.stopPropagation()}
+            onKeyDown={(event) => {
+              event.stopPropagation();
+              if (event.nativeEvent.isComposing) return;
+              if (event.key === "Enter") {
+                event.preventDefault();
+                void saveTitle();
+              } else if (event.key === "Escape") {
+                event.preventDefault();
+                cancelTitleEdit();
+              }
+            }}
+            disabled={savingTitle}
+            aria-label={t("edit_episode_title")}
+            className="focus-ring pointer-events-auto block w-full min-w-0 rounded border border-[var(--color-accent-soft)] bg-[oklch(0.16_0.01_250/0.9)] px-1 py-0.5 text-[13px] outline-none disabled:opacity-60"
+            style={{
+              color: "var(--color-text)",
+              fontWeight: active ? 600 : 500,
+            }}
+          />
+        ) : (
+          <button
+            type="button"
+            onClick={onClick}
+            onDoubleClick={(event) => {
+              event.preventDefault();
+              event.stopPropagation();
+              startTitleEdit();
+            }}
+            title={onRename ? t("edit_episode_title") : displayTitle}
+            className="focus-ring pointer-events-auto block w-full truncate rounded-sm text-left text-[13px]"
+            style={{
+              color: active ? "var(--color-text)" : "var(--color-text-2)",
+              fontWeight: active ? 600 : 500,
+            }}
+          >
+            {displayTitle}
+          </button>
+        )}
         <div className="mt-[3px] flex items-center gap-1.5">
           <span
             className="inline-flex items-center gap-1 text-[10.5px]"
@@ -200,17 +286,17 @@ export function EpisodeCard({
             />
           </div>
         )}
-      </div>
+        </div>
 
         {costText && (
           <span
-            className="num self-start pt-0.5 text-[10.5px]"
+            className="num pointer-events-none relative self-start pt-0.5 text-[10.5px]"
             style={{ color: active ? "var(--color-accent-2)" : "var(--color-text-4)" }}
           >
             {costText}
           </span>
         )}
-      </button>
+      </div>
       {onDelete && deleteLabel && (
         <button
           type="button"
@@ -218,7 +304,7 @@ export function EpisodeCard({
           disabled={deleting}
           title={deleteLabel}
           aria-label={deleteLabel}
-          className="focus-ring absolute bottom-1.5 right-1.5 grid h-6 w-6 place-items-center rounded-md opacity-65 transition-[opacity,background-color,color] hover:opacity-100 focus-visible:opacity-100 disabled:cursor-wait"
+          className="focus-ring absolute bottom-1.5 right-1.5 z-10 grid h-6 w-6 place-items-center rounded-md opacity-65 transition-[opacity,background-color,color] hover:opacity-100 focus-visible:opacity-100 disabled:cursor-wait"
           style={{
             background: "oklch(0.22 0.02 25 / 0.82)",
             color: "var(--color-warm-bright)",

@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 
 import { EpisodeCard } from "./EpisodeCard";
@@ -95,6 +95,48 @@ describe("EpisodeCard", () => {
 
     expect(onDelete).toHaveBeenCalledOnce();
     expect(onClick).not.toHaveBeenCalled();
+  });
+
+  it("renames the episode title inline on double click and trims the saved value", async () => {
+    const onRename = vi.fn().mockResolvedValue(undefined);
+    render(
+      <EpisodeCard
+        ep={makeEpisode()}
+        active
+        onClick={() => {}}
+        route="reference_video"
+        onRename={onRename}
+      />,
+    );
+
+    fireEvent.doubleClick(screen.getByText("第一集"));
+    const input = screen.getByRole("textbox", { name: "编辑分集标题" });
+    fireEvent.change(input, { target: { value: "  景泰蓝制作工艺  " } });
+    fireEvent.keyDown(input, { key: "Enter" });
+
+    await waitFor(() => expect(onRename).toHaveBeenCalledWith("景泰蓝制作工艺"));
+  });
+
+  it("keeps the inline editor open when renaming fails", async () => {
+    const onRename = vi.fn().mockRejectedValue(new Error("offline"));
+    render(
+      <EpisodeCard
+        ep={makeEpisode()}
+        active
+        onClick={() => {}}
+        route="reference_video"
+        onRename={onRename}
+      />,
+    );
+
+    fireEvent.doubleClick(screen.getByText("第一集"));
+    fireEvent.change(screen.getByRole("textbox", { name: "编辑分集标题" }), {
+      target: { value: "新标题" },
+    });
+    fireEvent.keyDown(screen.getByRole("textbox", { name: "编辑分集标题" }), { key: "Enter" });
+
+    await waitFor(() => expect(onRename).toHaveBeenCalledWith("新标题"));
+    expect(screen.getByRole("textbox", { name: "编辑分集标题" })).toHaveValue("新标题");
   });
 });
 
