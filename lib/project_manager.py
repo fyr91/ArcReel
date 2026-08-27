@@ -1883,6 +1883,7 @@ class ProjectManager:
                                 episode["source_file"] = None
                                 episode["source_revision"] = None
                                 episode.pop("overview", None)
+                                episode.pop("overview_status", None)
                                 project.pop("overview", None)
                                 episode["title"] = ""
                             else:
@@ -1927,6 +1928,7 @@ class ProjectManager:
                         if not isinstance(episode, dict) or episode.get("source_file") != relative_source:
                             continue
                         episode.pop("overview", None)
+                        episode.pop("overview_status", None)
                         episode["source_revision"] = None
                         episode_number = episode.get("episode")
                         if episode_number == 1:
@@ -3716,6 +3718,9 @@ class ProjectManager:
                 current_entry["title"] = episode_title
                 persisted_title = episode_title
             current_entry["overview"] = persisted
+            # AI output is a reviewable draft. Only the explicit confirmation operation may
+            # advance it to confirmed; regeneration always reopens review.
+            current_entry["overview_status"] = "draft"
             current_entry["source_revision"] = after.revision
             if episode == 1:
                 current["overview"] = overview

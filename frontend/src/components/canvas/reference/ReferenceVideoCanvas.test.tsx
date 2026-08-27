@@ -714,12 +714,12 @@ describe("ReferenceVideoCanvas", () => {
     expect(listSpy).not.toHaveBeenCalled();
   });
 
-  it("keeps the parsed course episode overview visible above preprocessing", async () => {
+  it("uses a dedicated episode-analysis tab for courses without rendering split preprocessing", async () => {
     useProjectsStore.setState({
       currentProjectName: "proj",
       currentProjectData: { ...STUB_PROJECT, content_mode: "course", generation_mode: "reference_video" },
     });
-    vi.spyOn(API, "getScriptReview").mockResolvedValue({
+    const reviewSpy = vi.spyOn(API, "getScriptReview").mockResolvedValue({
       episode: 1,
       content_mode: "narration",
       status: "pending_review",
@@ -736,6 +736,8 @@ describe("ReferenceVideoCanvas", () => {
         projectName="proj"
         episode={1}
         hasScript={false}
+        episodeOverviewStatus="draft"
+        onConfirmOverview={vi.fn().mockResolvedValue(undefined)}
         episodeOverview={{
           synopsis: "本集讲解景泰蓝制作流程",
           genre: "传统工艺",
@@ -745,8 +747,15 @@ describe("ReferenceVideoCanvas", () => {
       />,
     );
 
+    expect(
+      await screen.findByRole("tab", { name: /Episode analysis|单集解析/ }),
+    ).toHaveAttribute("aria-selected", "true");
     expect(await screen.findByRole("heading", { name: "本集概述" })).toBeInTheDocument();
-    expect(screen.getByText("本集讲解景泰蓝制作流程")).toBeInTheDocument();
+    expect(screen.getByLabelText("故事梗概")).toHaveValue("本集讲解景泰蓝制作流程");
+    expect(
+      screen.queryByRole("tab", { name: /Splitting preprocess|拆分预处理/ }),
+    ).not.toBeInTheDocument();
+    expect(reviewSpy).not.toHaveBeenCalled();
   });
 
   it("switches to units tab and fetches once hasScript flips true", async () => {

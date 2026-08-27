@@ -118,6 +118,8 @@ vi.mock("./reference/ReferenceVideoCanvas", () => ({
     canEditTitle,
     onSaveTitle,
     episodeOverview,
+    episodeOverviewStatus,
+    onConfirmOverview,
     onRegenerateOverview,
     showPreprocess,
     freeDuration,
@@ -126,6 +128,13 @@ vi.mock("./reference/ReferenceVideoCanvas", () => ({
     canEditTitle?: boolean;
     onSaveTitle?: (title: string) => Promise<void>;
     episodeOverview?: { synopsis: string };
+    episodeOverviewStatus?: "draft" | "confirmed";
+    onConfirmOverview?: (overview: {
+      synopsis: string;
+      genre: string;
+      theme: string;
+      world_setting: string;
+    }) => Promise<void>;
     onRegenerateOverview?: () => Promise<void>;
     showPreprocess?: boolean;
     freeDuration?: boolean;
@@ -138,11 +147,24 @@ vi.mock("./reference/ReferenceVideoCanvas", () => ({
     >
       <div data-testid="reference-can-edit-title">{canEditTitle ? "yes" : "no"}</div>
       <div data-testid="reference-episode-overview">{episodeOverview?.synopsis ?? "none"}</div>
+      <div data-testid="reference-episode-overview-status">{episodeOverviewStatus ?? "legacy"}</div>
       <button onClick={() => void onSaveTitle?.("新标题")?.catch(() => {})}>
         reference-save-title
       </button>
       <button onClick={() => void onRegenerateOverview?.()?.catch(() => {})}>
         reference-regenerate-overview
+      </button>
+      <button
+        onClick={() =>
+          void onConfirmOverview?.({
+            synopsis: "人工修订概述",
+            genre: "课程",
+            theme: "学习",
+            world_setting: "课堂",
+          })?.catch(() => {})
+        }
+      >
+        reference-confirm-overview
       </button>
     </div>
   ),
@@ -519,7 +541,7 @@ describe("StudioCanvasRouter", () => {
     expect(screen.queryByTestId("reference-video-canvas")).not.toBeInTheDocument();
   });
 
-  it("shows the parsed course episode overview in preprocessing and can regenerate it", async () => {
+  it("shows a draft course episode analysis, confirms edits, and can regenerate it", async () => {
     const overview = {
       synopsis: "本集讲解景泰蓝制作流程",
       genre: "传统工艺",
@@ -535,6 +557,8 @@ describe("StudioCanvasRouter", () => {
           title: "景泰蓝制作工艺",
           script_file: "scripts/episode_2.json",
           source_file: "source/cloisonne.md",
+          source_revision: "sha256-v1:" + "a".repeat(64),
+          overview_status: "draft",
           overview,
         },
       ],
@@ -552,6 +576,12 @@ describe("StudioCanvasRouter", () => {
         source_revision: "sha256-v1:" + "a".repeat(64),
       },
     });
+    const confirm = vi.spyOn(API, "confirmEpisodeOverview").mockResolvedValue({
+      success: true,
+      episode: 2,
+      overview,
+      overview_status: "confirmed",
+    });
     vi.spyOn(API, "getProject").mockResolvedValue({
       project: projectData,
       scripts: {},
@@ -562,6 +592,21 @@ describe("StudioCanvasRouter", () => {
 
     expect(screen.getByTestId("reference-video-canvas")).toHaveAttribute("data-has-script", "no");
     expect(screen.getByTestId("reference-episode-overview")).toHaveTextContent(overview.synopsis);
+    expect(screen.getByTestId("reference-episode-overview-status")).toHaveTextContent("draft");
+    fireEvent.click(screen.getByText("reference-confirm-overview"));
+    await waitFor(() => {
+      expect(confirm).toHaveBeenCalledWith(
+        "course-demo",
+        2,
+        {
+          synopsis: "人工修订概述",
+          genre: "课程",
+          theme: "学习",
+          world_setting: "课堂",
+        },
+        "sha256-v1:" + "a".repeat(64),
+      );
+    });
     fireEvent.click(screen.getByText("reference-regenerate-overview"));
 
     await waitFor(() => {

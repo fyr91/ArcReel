@@ -65,6 +65,7 @@ import type {
   ProviderInfo,
   ReferenceGenerationRequestOptions,
   ImageModelSelection,
+  ProjectOverview,
 } from "@/types";
 import type { EpisodeScript } from "@/types/script";
 
@@ -292,6 +293,36 @@ export function StudioCanvasRouter() {
     } catch (err) {
       useAppStore.getState().pushToast(
         tRef.current("course_episode_analysis_failed", { message: errMsg(err) }),
+        "error",
+      );
+      throw err;
+    }
+  }, [currentProjectName, refreshProject]);
+
+  const handleConfirmEpisodeOverview = useCallback(async (
+    episode: number,
+    overview: ProjectOverview,
+    sourceRevision?: string | null,
+  ) => {
+    if (!currentProjectName) throw new Error("project is unavailable");
+    if (!sourceRevision) {
+      const error = new Error("episode analysis source revision is unavailable");
+      useAppStore.getState().pushToast(
+        tRef.current("course_episode_overview_confirm_failed", { message: errMsg(error) }),
+        "error",
+      );
+      throw error;
+    }
+    try {
+      await API.confirmEpisodeOverview(currentProjectName, episode, overview, sourceRevision);
+      await refreshProject();
+      useAppStore.getState().pushToast(
+        tRef.current("course_episode_overview_confirmed"),
+        "success",
+      );
+    } catch (err) {
+      useAppStore.getState().pushToast(
+        tRef.current("course_episode_overview_confirm_failed", { message: errMsg(err) }),
         "error",
       );
       throw err;
@@ -850,6 +881,10 @@ export function StudioCanvasRouter() {
                     onSaveTitle={(title) => handleUpdateEpisodeTitle(epNum, title)}
                     canEditTitle={Boolean(episode?.script_file)}
                     episodeOverview={episode?.overview}
+                    episodeOverviewStatus={episode?.overview_status}
+                    onConfirmOverview={(overview) =>
+                      handleConfirmEpisodeOverview(epNum, overview, episode?.source_revision)
+                    }
                     onRegenerateOverview={() => handleRegenerateEpisodeOverview(epNum)}
                     hasScript={Boolean(script)}
                     scriptFile={scriptFile ?? undefined}

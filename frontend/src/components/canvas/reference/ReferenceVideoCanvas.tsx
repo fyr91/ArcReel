@@ -66,8 +66,10 @@ export interface ReferenceVideoCanvasProps {
   episodeTitle?: string;
   onSaveTitle?: (next: string) => Promise<void>;
   canEditTitle?: boolean;
-  /** 课程分集解析结果；在预处理页持续展示，避免解析完成后上下文消失。 */
+  /** 课程分集解析结果；课程的 preproc tab 实际呈现为“单集解析”。 */
   episodeOverview?: ProjectOverview;
+  episodeOverviewStatus?: "draft" | "confirmed";
+  onConfirmOverview?: (overview: ProjectOverview) => Promise<void>;
   onRegenerateOverview?: () => Promise<void>;
   /** step2 剧本（scripts/episode_N.json）是否已生成——决定默认 tab（镜像 GridImageToVideoCanvas 的 hasScript 判定）。 */
   hasScript?: boolean;
@@ -147,6 +149,8 @@ export function ReferenceVideoCanvas({
   onSaveTitle,
   canEditTitle,
   episodeOverview,
+  episodeOverviewStatus,
+  onConfirmOverview,
   onRegenerateOverview,
   hasScript = true,
   showPreprocess = true,
@@ -1068,17 +1072,22 @@ export function ReferenceVideoCanvas({
     return () => clearTimeout(timer);
   }, [scrollTarget, units, loading, select, clearScrollTarget]);
 
-  const preprocStatus: "loading" | "error" | "empty" | "ready" = loading
-    ? "loading"
-    : error
-      ? "error"
-      : units.length === 0
-        ? "empty"
-        : "ready";
+  const preprocStatus: "loading" | "error" | "empty" | "ready" | "draft" = isCourse
+    ? episodeOverviewStatus === "draft"
+      ? "draft"
+      : "ready"
+    : loading
+      ? "loading"
+      : error
+        ? "error"
+        : units.length === 0
+          ? "empty"
+          : "ready";
   const preprocDot: Record<typeof preprocStatus, string> = {
     loading: "bg-gray-500",
     error: "bg-red-500",
     empty: "bg-gray-500",
+    draft: "bg-amber-400",
     ready: "bg-emerald-500",
   };
 
@@ -1156,7 +1165,7 @@ export function ReferenceVideoCanvas({
               tab === "preproc" ? "text-[var(--color-text)]" : "text-[var(--color-text-3)]"
             }`}
           >
-            <span>{t("reference_tab_preprocess")}</span>
+            <span>{isCourse ? t("course_episode_analysis_tab") : t("reference_tab_preprocess")}</span>
             {preprocStatus === "loading" ? (
               <Loader2 className="h-3 w-3 animate-spin text-[var(--color-text-4)]" aria-hidden="true" />
             ) : (
@@ -1253,18 +1262,24 @@ export function ReferenceVideoCanvas({
       ) : tab === "preproc" ? (
         <div className="min-h-0 flex-1 overflow-auto bg-[oklch(0.18_0.011_250_/_0.25)]">
           <div className="mx-auto w-full max-w-3xl px-6 py-5">
-            {isCourse && episodeOverview && (
-              <CourseEpisodeOverviewCard
-                overview={episodeOverview}
-                onRegenerate={onRegenerateOverview}
+            {isCourse ? (
+              episodeOverview ? (
+                <CourseEpisodeOverviewCard
+                  key={`${episode}:${episodeOverviewStatus ?? "legacy"}:${episodeOverview.generated_at ?? ""}:${episodeOverview.synopsis}`}
+                  overview={episodeOverview}
+                  status={episodeOverviewStatus}
+                  onConfirm={onConfirmOverview}
+                  onRegenerate={onRegenerateOverview}
+                />
+              ) : null
+            ) : (
+              <ReferenceStep1PreviewPanel
+                key={`${projectName}:${episode}`}
+                projectName={projectName}
+                episode={episode}
+                lookup={mentionLookup}
               />
             )}
-            <ReferenceStep1PreviewPanel
-              key={`${projectName}:${episode}`}
-              projectName={projectName}
-              episode={episode}
-              lookup={mentionLookup}
-            />
           </div>
         </div>
       ) : (

@@ -322,6 +322,8 @@ MESSAGES = {
     "ref_warn_unit_changed_during_regenerate": "视频单元「{unit_id}」在生成准备期间已有修改；本次仍按任务开始时选中的内容继续生成",
     # Episode meta
     "episode_not_found": "第 {episode} 集不存在或尚无脚本文件",
+    "episode_overview_not_found": "第 {episode} 集尚无可确认的解析结果",
+    "episode_overview_revision_conflict": "本集原文或解析结果已变化，请重新解析后再确认",
     "episode_title_empty": "分集标题不能为空",
     "about_update_check_failed": "检查更新失败，请稍后重试",
     "about_version_read_failed": "读取应用版本失败",

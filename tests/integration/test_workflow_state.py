@@ -309,8 +309,22 @@ def test_course_workflow_scopes_overview_and_inventory_to_selected_episode(tmp_p
     pm.update_project(
         "demo",
         lambda project: project["episodes"][1].update(
-            {"overview": {"synopsis": "第二集独立主题"}, "source_revision": revision}
+            {
+                "overview": {"synopsis": "第二集独立主题"},
+                "overview_status": "draft",
+                "source_revision": revision,
+            }
         ),
+    )
+
+    needs_confirmation = service.get_status("demo", episode=2)
+    assert needs_confirmation.next_action.type == "confirm_episode_overview"
+    assert needs_confirmation.next_action.args["episode"] == 2
+    assert needs_confirmation.next_action.args["expected_source_revision"] == revision
+
+    pm.update_project(
+        "demo",
+        lambda project: project["episodes"][1].update({"overview_status": "confirmed"}),
     )
 
     needs_inventory = service.get_status("demo", episode=2)

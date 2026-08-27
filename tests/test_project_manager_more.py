@@ -915,6 +915,7 @@ class TestProjectManagerMore:
         assert overview["title"] == "景泰蓝制作工艺"
         assert saved["episodes"][1]["title"] == "景泰蓝制作工艺"
         assert saved["episodes"][1]["overview"]["synopsis"] == overview["synopsis"]
+        assert saved["episodes"][1]["overview_status"] == "draft"
         assert "title" not in saved["episodes"][1]["overview"]
         assert saved["episodes"][1]["source_revision"] == overview["source_revision"]
         assert "overview" not in saved["episodes"][0]
@@ -928,7 +929,9 @@ class TestProjectManagerMore:
         regenerated = await pm.generate_episode_overview("demo", 2)
 
         assert regenerated["title"] == "人工确认标题"
-        assert pm.load_project("demo")["episodes"][1]["title"] == "人工确认标题"
+        regenerated_project = pm.load_project("demo")
+        assert regenerated_project["episodes"][1]["title"] == "人工确认标题"
+        assert regenerated_project["episodes"][1]["overview_status"] == "draft"
         assert pm.load_script("demo", "episode_2.json")["title"] == "人工确认标题"
 
     @pytest.mark.unit
