@@ -280,9 +280,17 @@ def test_episodic_inventory_generates_missing_asset_sheets_before_episode_plan(
 ) -> None:
     pm, project_path = _make_project(tmp_path, mode)
     _write_source_and_complete(pm, project_path)
+    character_reference = "characters/refs/阿离.png"
+    _write_artifact(project_path, character_reference)
 
     def _add_assets(project: dict) -> None:
-        project["characters"] = {"阿离": {"description": "白衣少年"}}
+        project["characters"] = {
+            "阿离": {
+                "description": "白衣少年",
+                "character_sheet": "",
+                "reference_image": character_reference,
+            }
+        }
         project["scenes"] = {"庭院": {"description": "青砖庭院"}}
         project["props"] = {"玉佩": {"description": "白玉挂件"}}
         # 商品图不属于剧集型项目的必需资产设计阶段。
@@ -1528,7 +1536,7 @@ def test_schema8_manifest_reports_current_stale_missing_and_blocked_without_file
 
 
 @pytest.mark.integration
-def test_character_reference_image_satisfies_asset_sheet_stage_without_generated_sheet(tmp_path: Path) -> None:
+def test_character_reference_image_does_not_replace_required_asset_sheet(tmp_path: Path) -> None:
     pm, project_path = _make_project(tmp_path, "ad")
     reference_path = "characters/refs/Alice.png"
     _write_artifact(project_path, reference_path)
@@ -1549,8 +1557,8 @@ def test_character_reference_image_satisfies_asset_sheet_stage_without_generated
     status = WorkflowStateService(pm).get_status("demo")
 
     assert status.artifacts["asset_sheets"]["character"] == {
-        "current_ids": ["Alice"],
-        "missing_ids": [],
+        "current_ids": [],
+        "missing_ids": ["Alice"],
         "stale_ids": [],
     }
 
