@@ -31,9 +31,15 @@ function normalizedEntries<T>(bucket: Record<string, T> | undefined): Map<string
 }
 
 function characterImage(character: Character): string | null {
-  return (
-    character.lecturer_portrait ?? character.character_sheet ?? character.reference_image ?? null
-  );
+  for (const path of [
+    character.lecturer_portrait,
+    character.character_sheet,
+    character.reference_image,
+  ]) {
+    const normalizedPath = path?.trim();
+    if (normalizedPath) return normalizedPath;
+  }
+  return null;
 }
 
 /**

@@ -9,7 +9,12 @@ const PROJECT: ProjectData = {
   style: "",
   episodes: [],
   characters: {
-    学员: { description: "", character_sheet: "characters/student.png", course_role: "actor" },
+    学员: {
+      description: "",
+      character_sheet: "characters/student.png",
+      lecturer_portrait: "",
+      course_role: "actor",
+    },
     老师: {
       description: "",
       character_sheet: "characters/teacher-sheet.png",
