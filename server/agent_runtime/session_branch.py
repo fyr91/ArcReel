@@ -108,6 +108,7 @@ class SessionBranchService:
             await self._meta_store.create(
                 meta.project_name,
                 new_session_id,
+                episode=meta.episode,
                 fork_parent_session_id=session_id,
                 fork_anchor_uuid=anchor_uuid,
             )

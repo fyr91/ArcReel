@@ -1539,6 +1539,8 @@ export default {
   'batch_generate_videos': 'Tạo video hàng loạt',
   'batch_generate_narration': 'Tạo thuyết minh cả tập',
   'context_clear': 'Xóa ngữ cảnh',
+  'assistant_scope_project': 'Toàn bộ dự án',
+  'assistant_scope_episode': 'Tập {{episode}}',
   'context_label_character': 'Nhân vật',
   'context_label_prop': 'Đạo cụ',
   'context_label_scene': 'Cảnh',

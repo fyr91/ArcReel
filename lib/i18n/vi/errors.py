@@ -454,6 +454,8 @@ MESSAGES = {
     "version_not_found": "Phiên bản {version} không tồn tại",
     "version_resource_not_found": "Tài nguyên '{resource_type}/{resource_id}' không tồn tại",
     "session_busy": "Phiên đang xử lý; vui lòng đợi phản hồi hiện tại hoàn tất trước khi gửi",
+    "session_scope_mismatch": "Phiên này thuộc một tập khác; hãy đợi chuyển trang hoàn tất rồi thử lại",
+    "assistant_episode_not_found": "Tập {episode} không còn tồn tại nên không thể tạo hoặc tiếp tục cuộc trò chuyện này",
     "session_capacity_exceeded": "Đã đạt giới hạn phiên đồng thời, vui lòng thử lại sau",
     "session_question_unavailable": "Phiên chưa chạy hoặc không có câu hỏi đang chờ",
     "rewrite_anchor_invalid": "Tin nhắn bạn muốn sửa không thuộc cuộc trò chuyện này, hãy tải lại rồi thử lại",

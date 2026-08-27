@@ -209,8 +209,14 @@ export function AgentCopilot() {
     handoffGuide, currentSessionId, subagents, pendingUserTurn, awaitingAgentResponse,
   } = useAssistantStore();
 
-  const { currentProjectName } = useProjectsStore();
+  const { currentProjectName, currentProjectData } = useProjectsStore();
   const currentEpisode = useCurrentEpisode();
+  const currentEpisodeTitle = currentProjectData?.episodes?.find(
+    (item) => item.episode === currentEpisode,
+  )?.title;
+  const assistantScopeKey = currentProjectName
+    ? `${currentProjectName}::${currentEpisode ?? "project"}`
+    : null;
   const toggleAssistantPanel = useAppStore((s) => s.toggleAssistantPanel);
   const hyperframesAutoEditRequest = useAppStore((s) => s.hyperframesAutoEditRequest);
   const workflowPlan = useWorkflowStore((s) => s.plan);
@@ -218,7 +224,7 @@ export function AgentCopilot() {
   const workflowPlanLoading = useWorkflowStore((s) => s.loading);
   const workflowPlanError = useWorkflowStore((s) => s.error);
   const { sendMessage, rewriteMessage, answerQuestion, interrupt, createNewSession, switchSession, deleteSession } =
-    useAssistantSession(currentProjectName);
+    useAssistantSession(currentProjectName, currentEpisode);
 
   const agentCompletionRevision = `${sessionStatus ?? ""}|${Object.values(subagents)
     .map((task) => `${task.tool_use_id}:${task.status}`)
@@ -241,6 +247,9 @@ export function AgentCopilot() {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const slashMenuRef = useRef<SlashCommandMenuHandle>(null);
   const [localInput, setLocalInput] = useState("");
+  const localInputRef = useRef("");
+  const inputDraftsRef = useRef<Map<string, string>>(new Map());
+  const activeInputScopeRef = useRef<string | null>(null);
   const [showSlashMenu, setShowSlashMenu] = useState(false);
   const {
     images: attachedImages,
@@ -253,6 +262,27 @@ export function AgentCopilot() {
   } = useImageAttachments();
   const [isDragOver, setIsDragOver] = useState(false);
   const [lightboxSrc, setLightboxSrc] = useState<string | null>(null);
+
+  useEffect(() => {
+    localInputRef.current = localInput;
+  }, [localInput]);
+
+  // 右侧面板跨路由常驻：切集时按项目/分集保存未发送文字，进入新作用域恢复其
+  // 自己的草稿；图片不跨作用域携带，避免在另一集误发素材。
+  useEffect(() => {
+    const previous = activeInputScopeRef.current;
+    if (previous === assistantScopeKey) return;
+    if (previous) inputDraftsRef.current.set(previous, localInputRef.current);
+    const nextInput = assistantScopeKey ? (inputDraftsRef.current.get(assistantScopeKey) ?? "") : "";
+    localInputRef.current = nextInput;
+    setLocalInput(nextInput);
+    if (previous !== null) {
+      invalidatePendingReaders();
+      resetImages();
+      setShowSlashMenu(false);
+    }
+    activeInputScopeRef.current = assistantScopeKey;
+  }, [assistantScopeKey, invalidatePendingReaders, resetImages]);
   const allTurns = composeAllTurns(turns, draftTurn);
   const showSendFeedback = Boolean(pendingUserTurn) || awaitingAgentResponse;
   const handoffTurn: Turn | null = handoffGuide?.projectName === currentProjectName
@@ -263,7 +293,7 @@ export function AgentCopilot() {
       }
     : null;
   const isRunning = sessionStatus === "running";
-  const inputDisabled = Boolean(pendingQuestion) || answeringQuestion || isRunning || sending;
+  const inputDisabled = Boolean(pendingQuestion) || answeringQuestion || isRunning || sending || messagesLoading;
   const attachDisabled = inputDisabled || isReadingImages || attachedImages.length >= MAX_ATTACHED_IMAGES;
   const inputPlaceholder = pendingQuestion
     ? t("answer_above_hint")
@@ -595,7 +625,7 @@ export function AgentCopilot() {
       </div>
 
       {/* Context banner */}
-      <ContextBanner />
+      <ContextBanner episode={currentEpisode} episodeTitle={currentEpisodeTitle} />
 
       {/* Messages */}
       <div ref={scrollRef} className="flex-1 min-w-0 space-y-3 overflow-y-auto overflow-x-hidden px-3 py-3">

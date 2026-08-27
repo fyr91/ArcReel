@@ -20,10 +20,12 @@ from server.agent_runtime.failure_observation import build_startup_failure_obser
 from server.agent_runtime.models import SessionMeta
 from server.agent_runtime.service import (
     AssistantService,
+    EpisodeScopeNotFoundError,
     InterruptSettleTimeoutError,
     PendingQuestionError,
     RewriteAnchorError,
     RewriteUnavailableError,
+    SessionScopeMismatchError,
     SessionSupersededError,
 )
 from server.agent_runtime.session_branch import SessionBranchError
@@ -158,6 +160,8 @@ class ImageRequest(BaseModel):
 class SendRequest(ImageRequest):
     content: str = ""
     session_id: str | None = None
+    # NULL 为全项目会话；正整数为不可变分集焦点。
+    episode: int | None = Field(default=None, ge=1)
     # 请求侧幂等键：同键重试返回既有权威条目，不产生重复。
     client_key: str | None = Field(default=None, max_length=128)
 
@@ -186,6 +190,7 @@ async def send_message(
             project_name,
             req.content,
             session_id=req.session_id,
+            episode=req.episode,
             images=req.images,
             locale=get_locale(request),
             client_key=req.client_key,
@@ -195,6 +200,10 @@ async def send_message(
         raise ServiceUnavailableError("session_capacity_exceeded") from exc
     except FileNotFoundError as exc:
         raise NotFoundError("session_or_project_not_found") from exc
+    except EpisodeScopeNotFoundError as exc:
+        raise NotFoundError("assistant_episode_not_found", episode=exc.episode) from exc
+    except SessionScopeMismatchError as exc:
+        raise ConflictError("session_scope_mismatch") from exc
     except TimeoutError:
         raise HTTPException(status_code=504, detail=_t("sdk_session_timeout"))
     except SessionBusyError as exc:
@@ -251,6 +260,8 @@ async def rewrite_message(
         raise ConflictError("session_already_superseded") from exc
     except RewriteUnavailableError as exc:
         raise ServiceUnavailableError("rewrite_unavailable") from exc
+    except EpisodeScopeNotFoundError as exc:
+        raise NotFoundError("assistant_episode_not_found", episode=exc.episode) from exc
     except InterruptSettleTimeoutError:
         raise HTTPException(status_code=504, detail=_t("rewrite_interrupt_timeout"))
     except SessionBranchError as exc:
@@ -288,12 +299,23 @@ async def list_sessions(
     project_name: str,
     _t: Translator,
     status: Literal["idle", "running", "completed", "error", "interrupted"] | None = None,
+    scope: Literal["all", "project", "episode"] = "all",
+    episode: int | None = Query(default=None, ge=1),
     limit: int = Query(default=50, ge=1, le=200),
     offset: int = Query(default=0, ge=0),
 ):
+    if scope == "episode" and episode is None:
+        raise BadRequestError("request_invalid")
+    if scope != "episode" and episode is not None:
+        raise BadRequestError("request_invalid")
     try:
         sessions = await get_assistant_service().list_sessions(
-            project_name=project_name, status=status, limit=limit, offset=offset
+            project_name=project_name,
+            status=status,
+            scope=scope,
+            episode=episode,
+            limit=limit,
+            offset=offset,
         )
         return {"sessions": [s.model_dump() for s in sessions]}
     except HTTPException:

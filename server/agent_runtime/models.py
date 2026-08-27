@@ -47,6 +47,7 @@ class SessionMeta(BaseModel):
 
     id: str  # 对外暴露，填充 sdk_session_id 值
     project_name: str
+    episode: int | None = None
     title: str = ""
     status: SessionStatus = "idle"
     superseded_by: str | None = None

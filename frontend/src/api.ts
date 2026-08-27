@@ -2589,10 +2589,18 @@ class API {
   static async listAssistantSessions(
     projectName: string,
     status: string | null = null,
-    options: { signal?: AbortSignal } = {}
+    options: { signal?: AbortSignal; episode?: number | null } = {}
   ): Promise<{ sessions: SessionMeta[] }> {
     const params = new URLSearchParams();
     if (status) params.append("status", status);
+    if (options.episode !== undefined) {
+      if (options.episode === null) {
+        params.append("scope", "project");
+      } else {
+        params.append("scope", "episode");
+        params.append("episode", String(options.episode));
+      }
+    }
     const query = params.toString();
     return this.request(
       `${this.assistantBase(projectName)}/sessions${query ? "?" + query : ""}`,
@@ -2630,7 +2638,8 @@ class API {
     content: string,
     sessionId?: string | null,
     images?: ImagePayload[],
-    clientKey?: string
+    clientKey?: string,
+    episode?: number | null
   ): Promise<{ session_id: string; status: string; entry: TimelineEntry | null }> {
     return this.request(`${this.assistantBase(projectName)}/sessions/send`, {
       method: "POST",
@@ -2639,6 +2648,7 @@ class API {
         session_id: sessionId || undefined,
         images: images || [],
         client_key: clientKey || undefined,
+        episode: episode ?? undefined,
       }),
     });
   }

@@ -1601,6 +1601,8 @@ export default {
   'eyebrow_segment_refs': 'References · Scope',
   'eyebrow_library': 'Library · {{type}}',
   'context_clear': 'Clear context',
+  'assistant_scope_project': 'Project',
+  'assistant_scope_episode': 'Episode {{episode}}',
   'context_label_character': 'Character',
   'context_label_scene': 'Scene',
   'context_label_prop': 'Prop',

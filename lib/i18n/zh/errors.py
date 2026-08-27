@@ -401,6 +401,8 @@ MESSAGES = {
     "version_not_found": "版本 {version} 不存在",
     "version_resource_not_found": "资源 '{resource_type}/{resource_id}' 不存在",
     "session_busy": "会话正在处理中，请等待当前回复完成后再发送",
+    "session_scope_mismatch": "当前会话不属于正在查看的分集，请等待页面切换完成后重试",
+    "assistant_episode_not_found": "第 {episode} 集已不存在，无法创建或继续该会话",
     "session_capacity_exceeded": "并发会话数已达上限，请稍后再试",
     "session_question_unavailable": "会话未运行或没有待回答的问题",
     "rewrite_anchor_invalid": "要改写的消息不在这个会话里，请刷新后重试",

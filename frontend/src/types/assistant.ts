@@ -13,6 +13,8 @@ export type SessionStatus = "idle" | "running" | "completed" | "error" | "interr
 export interface SessionMeta {
   id: string;              // 现在就是 sdk_session_id
   project_name: string;
+  /** null/undefined 为全项目会话；正整数为会话创建时固定的分集焦点。 */
+  episode?: number | null;
   title: string;
   status: SessionStatus;
   created_at: string;

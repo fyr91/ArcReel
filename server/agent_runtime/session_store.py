@@ -17,6 +17,7 @@ def _dict_to_session(d: dict) -> SessionMeta:
     return SessionMeta(
         id=d["sdk_session_id"],  # DB 内部 id 不暴露，对外统一用 sdk_session_id
         project_name=d["project_name"],
+        episode=d.get("episode"),
         title=d.get("title") or "",
         status=d["status"],
         superseded_by=d.get("superseded_by"),
@@ -42,6 +43,7 @@ class SessionMetaStore:
         project_name: str,
         sdk_session_id: str,
         *,
+        episode: int | None = None,
         fork_parent_session_id: str | None = None,
         fork_anchor_uuid: str | None = None,
     ) -> SessionMeta:
@@ -51,6 +53,7 @@ class SessionMetaStore:
             d = await repo.create(
                 project_name=project_name,
                 sdk_session_id=sdk_session_id,
+                episode=episode,
                 fork_parent_session_id=fork_parent_session_id,
                 fork_anchor_uuid=fork_anchor_uuid,
                 user_id=self._user_id,
@@ -70,6 +73,8 @@ class SessionMetaStore:
         self,
         project_name: str | None = None,
         status: SessionStatus | None = None,
+        scope: str = "all",
+        episode: int | None = None,
         limit: int = 50,
         offset: int = 0,
     ) -> list[SessionMeta]:
@@ -79,6 +84,8 @@ class SessionMetaStore:
             result = await repo.list(
                 project_name=project_name,
                 status=status,
+                scope=scope,
+                episode=episode,
                 limit=limit,
                 offset=offset,
             )

@@ -454,6 +454,8 @@ MESSAGES = {
     "version_not_found": "Version {version} does not exist",
     "version_resource_not_found": "Resource '{resource_type}/{resource_id}' does not exist",
     "session_busy": "The session is busy; wait for the current reply to finish before sending",
+    "session_scope_mismatch": "This session belongs to a different episode; wait for the page switch to finish and retry",
+    "assistant_episode_not_found": "Episode {episode} no longer exists, so this conversation cannot be created or continued",
     "session_capacity_exceeded": "Concurrent session limit reached, please try again later",
     "session_question_unavailable": "The session is not running or has no pending question",
     "rewrite_anchor_invalid": "The message you are editing is not part of this conversation; refresh and try again",

@@ -787,6 +787,77 @@ describe("useAssistantSession", () => {
     expect(useAssistantStore.getState().turns).toEqual([]);
   });
 
+  it("switches to the selected episode's own session and timeline", async () => {
+    const listSpy = vi.spyOn(API, "listAssistantSessions").mockImplementation(
+      async (_projectName, _status, options = {}) => ({
+        sessions: [{
+          ...makeSession(options.episode === 1 ? "session-1" : "session-2", "idle"),
+          episode: options.episode,
+        }],
+      }),
+    );
+    vi.spyOn(API, "getAssistantSession").mockImplementation(async (_projectName, sessionId) => ({
+      session: {
+        ...makeSession(sessionId, "idle"),
+        episode: sessionId === "session-1" ? 1 : 2,
+      },
+    }));
+    vi.spyOn(API, "listAssistantEntries").mockImplementation(async (_projectName, sessionId) => (
+      makeEntriesResponse({ entries: [userEntry(0, sessionId)] })
+    ));
+
+    const { rerender } = renderHook(
+      ({ episode }) => useAssistantSession("demo", episode),
+      { initialProps: { episode: 1 } },
+    );
+
+    await waitFor(() => {
+      expect(useAssistantStore.getState().currentSessionId).toBe("session-1");
+    });
+    expect(useAssistantStore.getState().turns[0].content[0].text).toBe("session-1");
+
+    rerender({ episode: 2 });
+    expect(useAssistantStore.getState().sessions).toEqual([]);
+
+    await waitFor(() => {
+      expect(useAssistantStore.getState().currentSessionId).toBe("session-2");
+    });
+    expect(useAssistantStore.getState().turns[0].content[0].text).toBe("session-2");
+    expect(listSpy).toHaveBeenNthCalledWith(1, "demo", null, expect.objectContaining({ episode: 1 }));
+    expect(listSpy).toHaveBeenNthCalledWith(2, "demo", null, expect.objectContaining({ episode: 2 }));
+  });
+
+  it("creates and remembers a new session inside the selected episode scope", async () => {
+    vi.spyOn(API, "listAssistantSessions").mockResolvedValue({ sessions: [] });
+    const sendSpy = vi.spyOn(API, "sendAssistantMessage").mockResolvedValue({
+      session_id: "episode-session",
+      status: "accepted",
+      entry: userEntry(0, "hello"),
+    });
+
+    const { result } = renderHook(() => useAssistantSession("demo", 3));
+    await waitFor(() => {
+      expect(useAssistantStore.getState().messagesLoading).toBe(false);
+    });
+
+    await act(async () => {
+      expect(await result.current.sendMessage("hello")).toBe(true);
+    });
+
+    expect(sendSpy).toHaveBeenCalledWith(
+      "demo",
+      "hello",
+      null,
+      undefined,
+      expect.any(String),
+      3,
+    );
+    expect(useAssistantStore.getState().sessions[0].episode).toBe(3);
+    expect(JSON.parse(localStorage.getItem("arcreel:lastSessionByProject") ?? "{}")).toEqual({
+      "demo::3": "episode-session",
+    });
+  });
+
   it("resets timeline when switching to a project that has no sessions", async () => {
     vi.spyOn(API, "listAssistantSessions").mockImplementation(async (projectName) => ({
       sessions: projectName === "project-a" ? [makeSession("session-a", "idle")] : [],
@@ -1476,7 +1547,9 @@ describe("useAssistantSession", () => {
     expect(MockEventSource.instances[0].url).toContain("session-2");
     expect(MockEventSource.instances[0].url).not.toContain("after=");
     // 刷新后仍停在新分支
-    expect(JSON.parse(localStorage.getItem("arcreel:lastSessionByProject") ?? "{}")).toEqual({ demo: "session-2" });
+    expect(JSON.parse(localStorage.getItem("arcreel:lastSessionByProject") ?? "{}")).toEqual({
+      "demo::project": "session-2",
+    });
   });
 
   it("keeps the user on the origin session when a rewrite is rejected, and reuses the idempotency key on retry", async () => {

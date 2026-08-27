@@ -41,7 +41,7 @@ async def branching(session_factory, tmp_path):
     )
 
     session_id = str(uuid4())
-    await meta_store.create(PROJECT_NAME, session_id)
+    await meta_store.create(PROJECT_NAME, session_id, episode=2)
 
     u1, a1, u2, a2 = (f"m{i}-{uuid4().hex[:8]}" for i in range(4))
     await store.append(
@@ -424,6 +424,7 @@ async def test_branch_records_where_it_forked_from(branching):
     assert meta is not None
     assert meta.fork_parent_session_id == session_id
     assert meta.fork_anchor_uuid == anchor_uuid
+    assert meta.episode == 2
     origin = await meta_store.get(session_id)
     assert origin is not None
     assert origin.fork_parent_session_id is None, "原会话不是分叉产物"
