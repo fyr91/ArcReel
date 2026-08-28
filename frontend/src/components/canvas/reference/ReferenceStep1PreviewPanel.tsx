@@ -9,7 +9,6 @@ import type {
   ScriptReviewViolation,
 } from "@/types";
 import { useAppStore } from "@/stores/app-store";
-import { useAssistantStore } from "@/stores/assistant-store";
 import { useProjectsStore } from "@/stores/projects-store";
 import { useScriptReviewDraft } from "@/hooks/useScriptReviewDraft";
 import { voidPromise } from "@/utils/async";
@@ -336,14 +335,18 @@ export function ReferenceStep1PreviewPanel({ projectName, episode, lookup }: Ref
 
   const handleConfirmed = useCallback(() => {
     // 保存 / 确认两次 await 期间用户可能已切走项目（本组件所在的 tab 可能因此被卸载）：只在项目
-    // 本身变了才抑制全局副作用，否则会把续写消息写进用户切换到的别的项目/会话。同项目内切
-    // tab（如切到「视频单元」，本面板同样会被卸载）不属于这种情况——预填文案本身带着具体
-    // 集号，写进全局 assistant 输入框依然准确，不该被同一份卸载信号误伤。
+    // 本身变了才抑制全局副作用，否则会把续写消息发进用户切换到的别的项目/会话。同项目内切
+    // tab（如切到「视频单元」，本面板同样会被卸载）不属于这种情况——自动发送请求带着具体
+    // 项目与集号，不该被同一份卸载信号误伤。
     if (useProjectsStore.getState().currentProjectName !== projectName) return;
     pushToast(t("dashboard:review_confirmed"), "success");
-    // 确认放行 + 预填继续消息到会话输入框——只填不发送，用户自行核对后发送。
-    useAssistantStore.getState().setInput(t("reference_step1_confirm_continue_prefill", { episode }));
-    useAppStore.getState().setAssistantPanelOpen(true);
+    const appStore = useAppStore.getState();
+    appStore.requestAssistantPrompt(
+      projectName,
+      t("reference_step1_confirm_continue_prefill", { episode }),
+      episode,
+    );
+    appStore.setAssistantPanelOpen(true);
   }, [projectName, episode, pushToast, t]);
 
   const {
@@ -404,9 +407,10 @@ export function ReferenceStep1PreviewPanel({ projectName, episode, lookup }: Ref
             t("reference_step1_fix_request_prefill_header", { episode, count: violations.length }),
             ...violations.map((v, i) => `${i + 1}. ${v.message}`),
           ].join("\n");
-    useAssistantStore.getState().setInput(report);
-    useAppStore.getState().setAssistantPanelOpen(true);
-  }, [state, episode, t]);
+    const appStore = useAppStore.getState();
+    appStore.requestAssistantPrompt(projectName, report, episode);
+    appStore.setAssistantPanelOpen(true);
+  }, [state, episode, projectName, t]);
 
   const cardRefs = useRef(new Map<string, HTMLElement>());
   const setCardRef = useCallback((key: string, el: HTMLElement | null) => {

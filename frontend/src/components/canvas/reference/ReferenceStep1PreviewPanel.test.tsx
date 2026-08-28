@@ -2,7 +2,6 @@ import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { API } from "@/api";
 import { useAppStore } from "@/stores/app-store";
-import { useAssistantStore } from "@/stores/assistant-store";
 import { useProjectsStore } from "@/stores/projects-store";
 import { ReferenceStep1PreviewPanel } from "./ReferenceStep1PreviewPanel";
 import type { MentionLookup } from "@/hooks/useUnitPromptHighlight";
@@ -74,8 +73,7 @@ function quarantinedState(): ScriptReviewState {
 describe("ReferenceStep1PreviewPanel", () => {
   beforeEach(() => {
     useAppStore.setState(useAppStore.getInitialState(), true);
-    useAssistantStore.setState(useAssistantStore.getInitialState(), true);
-    // 确认后的全局副作用（toast + 预填）只在「用户仍在看这个项目」时才生效，测试渲染面板时
+    // 确认后的全局副作用（toast + 自动发送）只在「用户仍在看这个项目」时才生效，测试渲染面板时
     // 用的 projectName="p"，需要同步告诉 store 当前正在看的就是它。
     useProjectsStore.setState({ currentProjectName: "p", currentProjectData: PROJECT });
   });
@@ -116,7 +114,7 @@ describe("ReferenceStep1PreviewPanel", () => {
     expect(screen.queryByText("raw agent message")).not.toBeInTheDocument();
   });
 
-  it("confirms, then prefills a continue message into the assistant input without sending", async () => {
+  it("confirms, then queues the continue message for immediate Agent sending", async () => {
     vi.spyOn(API, "getScriptReview").mockResolvedValue(pendingState());
     const confirm = vi
       .spyOn(API, "confirmScriptReview")
@@ -128,11 +126,15 @@ describe("ReferenceStep1PreviewPanel", () => {
     fireEvent.click(screen.getByRole("button", { name: /确认拆分，继续生成/ }));
 
     await waitFor(() => expect(confirm).toHaveBeenCalledWith("p", 1));
-    await waitFor(() => expect(useAssistantStore.getState().input).toContain("第 1 集"));
+    await waitFor(() => expect(useAppStore.getState().assistantPromptRequest).toMatchObject({
+      projectName: "p",
+      episode: 1,
+      prompt: expect.stringContaining("第 1 集"),
+    }));
     expect(useAppStore.getState().assistantPanelOpen).toBe(true);
   });
 
-  it("suppresses the confirm toast/prefill if the user has switched to a different project mid-request", async () => {
+  it("suppresses the confirm toast/send if the user has switched to a different project mid-request", async () => {
     useAppStore.setState({ assistantPanelOpen: false });
     vi.spyOn(API, "getScriptReview").mockResolvedValue(pendingState());
     let resolveConfirm: (value: ScriptReviewState) => void = () => {};
@@ -153,14 +155,14 @@ describe("ReferenceStep1PreviewPanel", () => {
     // adopt() 运行在守卫之前，确认本身已生效——用按钮态的变化确认异步流程真的跑完了，
     // 而不是靠一个从始至终都为空的断言碰巧「通过」。
     await waitFor(() => expect(screen.getByRole("button", { name: "已确认" })).toBeDisabled());
-    expect(useAssistantStore.getState().input).toBe("");
+    expect(useAppStore.getState().assistantPromptRequest).toBeNull();
     expect(useAppStore.getState().toast).toBeNull();
     expect(useAppStore.getState().assistantPanelOpen).toBe(false);
   });
 
-  it("still shows the confirm toast/prefill after switching tabs within the same project", async () => {
+  it("still shows the confirm toast and sends after switching tabs within the same project", async () => {
     // 同项目内切 tab（本组件会被卸载，但 useProjectsStore.currentProjectName 不变）不该被
-    // 当成「切走了」而抑制全局副作用——预填文案本身带着具体集号，写进全局输入框依然准确。
+    // 当成「切走了」而抑制全局副作用——自动发送请求本身带着具体项目与集号。
     vi.spyOn(API, "getScriptReview").mockResolvedValue(pendingState());
     let resolveConfirm: (value: ScriptReviewState) => void = () => {};
     vi.spyOn(API, "confirmScriptReview").mockReturnValue(
@@ -175,7 +177,11 @@ describe("ReferenceStep1PreviewPanel", () => {
     unmount();
     resolveConfirm(pendingState({ status: "confirmed", quarantine: null }));
 
-    await waitFor(() => expect(useAssistantStore.getState().input).toContain("第 1 集"));
+    await waitFor(() => expect(useAppStore.getState().assistantPromptRequest).toMatchObject({
+      projectName: "p",
+      episode: 1,
+      prompt: expect.stringContaining("第 1 集"),
+    }));
     expect(useAppStore.getState().assistantPanelOpen).toBe(true);
   });
 
@@ -190,17 +196,18 @@ describe("ReferenceStep1PreviewPanel", () => {
     expect(screen.getByRole("button", { name: "让 Agent 修复" })).toBeInTheDocument();
   });
 
-  it("prefills a structured fix-request report on 'ask the assistant to fix it', without sending", async () => {
+  it("queues a structured fix-request report for immediate Agent sending", async () => {
     vi.spyOn(API, "getScriptReview").mockResolvedValue(quarantinedState());
     render(<ReferenceStep1PreviewPanel projectName="p" episode={1} lookup={LOOKUP} />);
 
     await waitFor(() => expect(screen.getByRole("button", { name: "让 Agent 修复" })).toBeInTheDocument());
     fireEvent.click(screen.getByRole("button", { name: "让 Agent 修复" }));
 
-    const input = useAssistantStore.getState().input;
-    expect(input).toContain("第 1 集");
-    expect(input).toContain("1. unit E1U01 使用了全角花括号");
-    expect(input).toContain("2. unit E1U01 的台词念不完");
+    const request = useAppStore.getState().assistantPromptRequest;
+    expect(request).toMatchObject({ projectName: "p", episode: 1 });
+    expect(request?.prompt).toContain("第 1 集");
+    expect(request?.prompt).toContain("1. unit E1U01 使用了全角花括号");
+    expect(request?.prompt).toContain("2. unit E1U01 的台词念不完");
     expect(useAppStore.getState().assistantPanelOpen).toBe(true);
   });
 
@@ -456,9 +463,10 @@ describe("ReferenceStep1PreviewPanel", () => {
 
     fireEvent.click(await screen.findByRole("button", { name: "让 Agent 修复" }));
 
-    const input = useAssistantStore.getState().input;
-    expect(input).toContain("validate_and_promote_draft");
-    expect(input).not.toContain("1. ");
+    const request = useAppStore.getState().assistantPromptRequest;
+    expect(request).toMatchObject({ projectName: "p", episode: 1 });
+    expect(request?.prompt).toContain("validate_and_promote_draft");
+    expect(request?.prompt).not.toContain("1. ");
     // 禁用判据是隔离草稿文件是否在场，不是重算后的违约数量——违约为空但仍隔离时确认依旧禁用。
     expect(screen.getByRole("button", { name: /确认拆分，继续生成/ })).toBeDisabled();
   });
