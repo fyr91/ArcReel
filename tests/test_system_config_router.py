@@ -137,6 +137,13 @@ class TestGetSystemConfig:
         assert "options" in body
 
     @pytest.mark.unit
+    def test_unset_agent_concurrency_uses_system_default(self):
+        mock_svc = _make_mock_svc()
+        with TestClient(_make_app_with_mock(mock_svc)) as client:
+            settings = client.get("/api/v1/system/config").json()["settings"]
+        assert settings["agent_max_concurrent_sessions"] == 20
+
+    @pytest.mark.unit
     def test_settings_keys(self):
         mock_svc = _make_mock_svc()
         with TestClient(_make_app_with_mock(mock_svc)) as client:

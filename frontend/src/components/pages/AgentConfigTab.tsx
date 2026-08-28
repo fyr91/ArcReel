@@ -16,6 +16,8 @@ import { errMsg, voidCall } from "@/utils/async";
 
 import { TabSaveFooter } from "./TabSaveFooter";
 
+const DEFAULT_MAX_CONCURRENT_SESSIONS = 20;
+
 interface AgentDraft {
   cleanupDelaySeconds: string;
   maxConcurrentSessions: string;
@@ -27,7 +29,7 @@ function buildDraft(data: GetSystemConfigResponse): AgentDraft {
   const s = data.settings;
   return {
     cleanupDelaySeconds: String(s.agent_session_cleanup_delay_seconds ?? 300),
-    maxConcurrentSessions: String(s.agent_max_concurrent_sessions ?? 5),
+    maxConcurrentSessions: String(s.agent_max_concurrent_sessions ?? DEFAULT_MAX_CONCURRENT_SESSIONS),
     catalogApiUrl: s.croco_characters_api_url ?? "",
     catalogApiToken: "",
   };
@@ -47,7 +49,8 @@ function buildPatch(draft: AgentDraft, saved: AgentDraft): SystemConfigPatch {
   if (draft.cleanupDelaySeconds !== saved.cleanupDelaySeconds)
     patch.agent_session_cleanup_delay_seconds = Number(draft.cleanupDelaySeconds) || 300;
   if (draft.maxConcurrentSessions !== saved.maxConcurrentSessions)
-    patch.agent_max_concurrent_sessions = Number(draft.maxConcurrentSessions) || 5;
+    patch.agent_max_concurrent_sessions =
+      Number(draft.maxConcurrentSessions) || DEFAULT_MAX_CONCURRENT_SESSIONS;
   if (draft.catalogApiUrl !== saved.catalogApiUrl)
     patch.croco_characters_api_url = draft.catalogApiUrl.trim();
   if (draft.catalogApiToken.trim())
@@ -65,13 +68,13 @@ export function AgentConfigTab({ visible }: AgentConfigTabProps) {
   const [loadError, setLoadError] = useState<string | null>(null);
   const [draft, setDraft] = useState<AgentDraft>({
     cleanupDelaySeconds: "300",
-    maxConcurrentSessions: "5",
+    maxConcurrentSessions: String(DEFAULT_MAX_CONCURRENT_SESSIONS),
     catalogApiUrl: "",
     catalogApiToken: "",
   });
   const savedRef = useRef<AgentDraft>({
     cleanupDelaySeconds: "300",
-    maxConcurrentSessions: "5",
+    maxConcurrentSessions: String(DEFAULT_MAX_CONCURRENT_SESSIONS),
     catalogApiUrl: "",
     catalogApiToken: "",
   });

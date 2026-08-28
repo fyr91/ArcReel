@@ -123,9 +123,9 @@ class TestConfigReading:
             mock_factory.return_value.__aenter__ = AsyncMock(return_value=mock_session)
             mock_factory.return_value.__aexit__ = AsyncMock(return_value=False)
             with patch("server.agent_runtime.session_manager.ConfigService") as MockSvc:
-                MockSvc.return_value.get_setting = AsyncMock(return_value="5")
+                MockSvc.return_value.get_setting = AsyncMock(side_effect=lambda _key, default: default)
                 result = await mgr._get_max_concurrent()
-        assert result == 5
+        assert result == 20
 
 
 class TestCleanup:

@@ -67,7 +67,7 @@ from claude_agent_sdk.types import (
     PermissionResultDeny,
 )
 
-from lib.config.service import ConfigService
+from lib.config.service import DEFAULT_AGENT_MAX_CONCURRENT_SESSIONS, ConfigService
 from lib.db import async_session_factory
 from lib.ledger import Ledger
 from lib.providers import PROVIDER_ANTHROPIC
@@ -1723,15 +1723,18 @@ class SessionManager:
             return 300
 
     async def _get_max_concurrent(self) -> int:
-        """返回最大并发会话数，默认 5。"""
+        """返回最大并发会话数。"""
         try:
             async with async_session_factory() as session:
                 svc = ConfigService(session)
-                val = await svc.get_setting("agent_max_concurrent_sessions", "5")
+                val = await svc.get_setting(
+                    "agent_max_concurrent_sessions",
+                    str(DEFAULT_AGENT_MAX_CONCURRENT_SESSIONS),
+                )
             return max(int(val), 1)
         except Exception:
             logger.warning("读取 max_concurrent 配置失败，使用默认值", exc_info=True)
-            return 5
+            return DEFAULT_AGENT_MAX_CONCURRENT_SESSIONS
 
     async def _ensure_capacity(self) -> None:
         """确保有空余并发槽位，必要时淘汰最久未活跃的非 running 会话。"""

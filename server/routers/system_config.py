@@ -32,7 +32,7 @@ from lib.config.model_settings import parse_model_settings, serialize_model_sett
 from lib.config.registry import PROVIDER_REGISTRY
 from lib.config.repository import mask_secret
 from lib.config.resolver import ConfigResolver
-from lib.config.service import ConfigService
+from lib.config.service import DEFAULT_AGENT_MAX_CONCURRENT_SESSIONS, ConfigService
 from lib.db import get_async_session
 from lib.httpx_shared import get_http_client
 from lib.i18n import Translator
@@ -349,7 +349,9 @@ async def get_system_config(
         "anthropic_default_sonnet_model": all_s.get("anthropic_default_sonnet_model") or None,
         "claude_code_subagent_model": all_s.get("claude_code_subagent_model") or None,
         "agent_session_cleanup_delay_seconds": int(all_s.get("agent_session_cleanup_delay_seconds") or "300"),
-        "agent_max_concurrent_sessions": int(all_s.get("agent_max_concurrent_sessions") or "5"),
+        "agent_max_concurrent_sessions": int(
+            all_s.get("agent_max_concurrent_sessions") or DEFAULT_AGENT_MAX_CONCURRENT_SESSIONS
+        ),
         "croco_characters_api_url": all_s.get("croco_characters_api_url") or "",
         "croco_characters_api_token": {
             "is_set": bool(all_s.get("croco_characters_api_token")),
@@ -444,10 +446,9 @@ async def patch_system_config(
     for field_name in req.model_fields_set:
         patch[field_name] = getattr(req, field_name)
 
-    if (
-        {"croco_characters_api_url", "croco_characters_api_token"} & patch.keys()
-        and await svc.get_setting("croco_characters_management_source") == "arcreel_cloud"
-    ):
+    if {"croco_characters_api_url", "croco_characters_api_token"} & patch.keys() and await svc.get_setting(
+        "croco_characters_management_source"
+    ) == "arcreel_cloud":
         raise HTTPException(status_code=409, detail=_t("character_catalog_centrally_managed"))
 
     # Validate backend references (empty string = auto-resolve)
