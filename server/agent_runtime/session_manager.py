@@ -14,6 +14,7 @@ from pathlib import Path
 from typing import Any, Optional
 from uuid import uuid4
 
+from lib.agent_session_store import make_project_key
 from lib.db.base import DEFAULT_USER_ID
 from lib.i18n import DEFAULT_LOCALE
 from lib.logging_config import resolve_log_dir
@@ -197,6 +198,7 @@ class _SubagentActivity:
     message_tokens: dict[str, int] = field(default_factory=dict)
     reported_total_tokens: int = 0
     active_tool_use_ids: set[str] = field(default_factory=set)
+    transcript_seq: int = -1
     stalled: bool = False
     stop_requested: bool = False
 
@@ -1268,6 +1270,96 @@ class SessionManager:
             activity.last_progress_at = time.monotonic()
 
     @staticmethod
+    def _apply_subagent_transcript_entries(
+        activity: _SubagentActivity,
+        entries: list[dict[str, Any]],
+    ) -> bool:
+        """Fold durable child transcript deltas into watchdog activity.
+
+        The SDK can finish the parent response while an async child keeps
+        working. Later child messages then reach the eager SessionStore mirror
+        without traversing ``receive_response``. Treat each appended child
+        conversation entry as a heartbeat and reconstruct in-flight tools from
+        their raw tool_use/tool_result blocks.
+        """
+        progressed = False
+        for entry in entries:
+            entry_type = entry.get("type")
+            if entry_type not in {"assistant", "user"}:
+                continue
+            message = entry.get("message")
+            if not isinstance(message, dict):
+                continue
+            content = message.get("content")
+            if not isinstance(content, (str, list)):
+                continue
+            progressed = True
+            if isinstance(content, list):
+                for block in content:
+                    if not isinstance(block, dict):
+                        continue
+                    block_type = block.get("type")
+                    tool_use_id = block.get("id") if block_type == "tool_use" else block.get("tool_use_id")
+                    if not isinstance(tool_use_id, str) or not tool_use_id:
+                        continue
+                    if block_type == "tool_use":
+                        activity.active_tool_use_ids.add(tool_use_id)
+                    elif block_type == "tool_result":
+                        activity.active_tool_use_ids.discard(tool_use_id)
+
+            if entry_type != "assistant":
+                continue
+            usage = message.get("usage")
+            if not isinstance(usage, dict):
+                continue
+            _input_tokens, _output_tokens, total_tokens = extract_text_token_usage({"usage": usage})
+            if total_tokens is None:
+                continue
+            raw_message_id = message.get("id") or message.get("message_id") or entry.get("uuid")
+            message_id = str(raw_message_id) if raw_message_id else f"transcript-{activity.transcript_seq}"
+            activity.message_tokens[message_id] = max(activity.message_tokens.get(message_id, 0), total_tokens)
+        return progressed
+
+    async def _reconcile_subagent_transcript(
+        self,
+        managed: ManagedSession,
+        activity: _SubagentActivity,
+        *,
+        observed_at: float,
+    ) -> None:
+        """Refresh one child watchdog from the authoritative transcript mirror."""
+        store = self._build_session_store()
+        if store is None:
+            return
+        try:
+            project_cwd = self._resolve_project_cwd(managed.project_name)
+        except (FileNotFoundError, ValueError):
+            return
+        try:
+            transcript_seq, entries = await store.load_after(
+                {
+                    "project_key": make_project_key(project_cwd),
+                    "session_id": managed.session_id,
+                    "subpath": f"subagents/agent-{activity.task_id}",
+                },
+                after_seq=activity.transcript_seq,
+            )
+        except Exception:
+            logger.warning(
+                "读取 subagent 心跳失败 session_id=%s task_id=%s",
+                managed.session_id,
+                activity.task_id,
+                exc_info=True,
+            )
+            return
+        if transcript_seq <= activity.transcript_seq:
+            return
+        activity.transcript_seq = transcript_seq
+        if self._apply_subagent_transcript_entries(activity, entries):
+            activity.last_progress_at = observed_at
+            managed.subagent_projection_revision += 1
+
+    @staticmethod
     def _record_subagent_tokens(managed: ManagedSession, msg_dict: dict[str, Any]) -> None:
         if msg_dict.get("type") != "assistant":
             return
@@ -1726,6 +1818,7 @@ class SessionManager:
                     continue
                 if activity.task_id != task_id or activity.stalled or activity.stop_requested:
                     continue
+                await self._reconcile_subagent_transcript(managed, activity, observed_at=observed_at)
                 if activity.active_tool_use_ids:
                     continue
                 if observed_at - activity.last_progress_at < timeout:

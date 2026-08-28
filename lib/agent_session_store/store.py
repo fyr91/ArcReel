@@ -251,6 +251,31 @@ class DbSessionStore:
             return None
         return payloads
 
+    async def load_after(self, key: dict, *, after_seq: int) -> tuple[int, list[dict]]:
+        """Return transcript entries appended after ``after_seq``.
+
+        This ArcReel extension lets runtime observers follow a long-running
+        sub-agent without reloading its complete transcript on every poll. The
+        returned revision is the greatest observed sequence number, or the
+        supplied cursor when no newer row exists.
+        """
+        project_key, session_id, subpath = _normalize_key(key)
+        async with self._session_factory() as session:
+            result = await session.execute(
+                select(AgentSessionEntry.seq, AgentSessionEntry.payload)
+                .where(
+                    AgentSessionEntry.project_key == project_key,
+                    AgentSessionEntry.session_id == session_id,
+                    AgentSessionEntry.subpath == subpath,
+                    AgentSessionEntry.seq > after_seq,
+                )
+                .order_by(AgentSessionEntry.seq)
+            )
+            rows = result.all()
+        if not rows:
+            return after_seq, []
+        return int(rows[-1][0]), [row[1] for row in rows]
+
     async def session_revision(self, key: dict) -> tuple[int, int]:
         """Return an append-only revision for a session, including subagents.
 

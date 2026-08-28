@@ -95,6 +95,11 @@ class TestCloseSession:
 
 
 class TestConfigReading:
+    def test_subagent_stall_timeout_defaults_to_five_minutes(self, tmp_path, monkeypatch):
+        monkeypatch.delenv("ASSISTANT_SUBAGENT_STALL_TIMEOUT_SECONDS", raising=False)
+        mgr = _make_manager(tmp_path)
+        assert mgr.subagent_stall_timeout_seconds == 300
+
     def test_subagent_stall_timeout_env_override(self, tmp_path, monkeypatch):
         monkeypatch.setenv("ASSISTANT_SUBAGENT_STALL_TIMEOUT_SECONDS", "180")
         mgr = _make_manager(tmp_path)
@@ -618,5 +623,127 @@ class TestSubagentStallWatchdog:
 
             assert managed.subagent_activity["tu-1"].active_tool_use_ids == set()
             assert managed.subagent_activity["tu-1"].last_progress_at == 1_000.0
+        finally:
+            await mgr.close_session("s1")
+
+    async def test_durable_child_heartbeat_protects_long_mcp_tool_and_restarts_deadline(self, tmp_path):
+        mgr = _make_manager(tmp_path)
+        mgr.subagent_stall_timeout_seconds = 300
+        (mgr.projects_root / "demo").mkdir(parents=True)
+        managed, _ = _make_managed("s1", status="completed")
+        await _start(managed)
+        mgr.sessions["s1"] = managed
+        self._launch(managed, "tu-1", "agent-1")
+        activity = managed.subagent_activity["tu-1"]
+        activity.last_progress_at = 100.0
+        managed.send_stop_task = AsyncMock()
+
+        tool_use = {
+            "type": "assistant",
+            "uuid": "assistant-tool-use",
+            "message": {
+                "id": "model-message-1",
+                "role": "assistant",
+                "usage": {
+                    "input_tokens": 120_000,
+                    "cache_read_input_tokens": 10_000,
+                    "output_tokens": 220,
+                },
+                "content": [
+                    {
+                        "type": "tool_use",
+                        "id": "call-generate-script",
+                        "name": "mcp__arcreel__generate_episode_script",
+                        "input": {"episode": 1},
+                    }
+                ],
+            },
+        }
+        tool_result = {
+            "type": "user",
+            "uuid": "user-tool-result",
+            "message": {
+                "role": "user",
+                "content": [
+                    {
+                        "type": "tool_result",
+                        "tool_use_id": "call-generate-script",
+                        "content": "script generated",
+                    }
+                ],
+            },
+        }
+        store = AsyncMock()
+        store.load_after = AsyncMock(
+            side_effect=[
+                (20, [tool_use]),
+                (20, []),
+                (21, [tool_result]),
+                (21, []),
+                (21, []),
+            ]
+        )
+
+        try:
+            with patch.object(mgr, "_build_session_store", return_value=store):
+                await mgr._subagent_watchdog_once(now=401.0)
+                await mgr._subagent_watchdog_once(now=1_000.0)
+                managed.send_stop_task.assert_not_awaited()
+                assert activity.active_tool_use_ids == {"call-generate-script"}
+                assert activity.total_tokens == 130_220
+
+                await mgr._subagent_watchdog_once(now=1_000.0)
+                assert activity.active_tool_use_ids == set()
+                assert activity.last_progress_at == 1_000.0
+
+                await mgr._subagent_watchdog_once(now=1_299.0)
+                managed.send_stop_task.assert_not_awaited()
+                await mgr._subagent_watchdog_once(now=1_301.0)
+                managed.send_stop_task.assert_awaited_once_with("agent-1")
+        finally:
+            await mgr.close_session("s1")
+
+    async def test_durable_child_output_resets_deadline_without_token_usage(self, tmp_path):
+        mgr = _make_manager(tmp_path)
+        mgr.subagent_stall_timeout_seconds = 300
+        (mgr.projects_root / "demo").mkdir(parents=True)
+        managed, _ = _make_managed("s1", status="completed")
+        await _start(managed)
+        mgr.sessions["s1"] = managed
+        self._launch(managed, "tu-1", "agent-1")
+        activity = managed.subagent_activity["tu-1"]
+        activity.last_progress_at = 100.0
+        managed.send_stop_task = AsyncMock()
+        store = AsyncMock()
+        store.load_after = AsyncMock(
+            side_effect=[
+                (
+                    5,
+                    [
+                        {
+                            "type": "assistant",
+                            "uuid": "heartbeat-without-usage",
+                            "message": {
+                                "role": "assistant",
+                                "content": [{"type": "text", "text": "still working"}],
+                            },
+                        }
+                    ],
+                ),
+                (5, []),
+                (5, []),
+            ]
+        )
+
+        try:
+            with patch.object(mgr, "_build_session_store", return_value=store):
+                await mgr._subagent_watchdog_once(now=401.0)
+                assert activity.last_progress_at == 401.0
+                managed.send_stop_task.assert_not_awaited()
+
+                await mgr._subagent_watchdog_once(now=700.0)
+                managed.send_stop_task.assert_not_awaited()
+                await mgr._subagent_watchdog_once(now=702.0)
+                managed.send_stop_task.assert_awaited_once_with("agent-1")
         finally:
             await mgr.close_session("s1")
