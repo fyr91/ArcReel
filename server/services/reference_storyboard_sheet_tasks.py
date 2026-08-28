@@ -11,7 +11,6 @@ from typing import Any
 
 from lib.db.base import DEFAULT_USER_ID
 from lib.generation_queue_client import TaskSpec
-from lib.image_reference_snapshot import freeze_image_references
 from lib.path_safety import PathTraversalError, safe_join
 from lib.reference_video.keyframes import without_keyframe_mentions
 from lib.reference_video.request_projection import resolve_reference_assets
@@ -19,11 +18,9 @@ from lib.resource_paths import resource_relative_path
 from lib.video_visual_provenance import resolve_video_aspect_ratio
 from server.services.generation_context import ImageLaneRequest, resolve_generation_context
 from server.services.generation_tasks import get_project_manager
+from server.services.qwen_image_reference_collage import prepare_qwen_image_references
 from server.services.reference_image_binding import (
     bind_resolved_assets,
-    prompt_roster,
-    provider_inputs,
-    visual_references,
 )
 from server.services.video_caps import project_video_caps
 
@@ -315,18 +312,24 @@ async def execute_reference_storyboard_sheet_task(
     )
     assets = tuple(asset for asset in resolved if asset.reference.type not in {"keyframe", "storyboard_sheet"})
     bindings = bind_resolved_assets(assets)
-    frozen = freeze_image_references(provider_inputs(bindings), visual_references(bindings, role="storyboard_subject"))
+    ctx = await resolve_generation_context(
+        project_name,
+        payload,
+        project=project,
+        user_id=user_id,
+        image=ImageLaneRequest(
+            capability="i2i" if bindings else "t2i",
+            stage="storyboard",
+        ),
+    )
+    prepared = await asyncio.to_thread(
+        prepare_qwen_image_references,
+        bindings,
+        provider_id=ctx.image.backend_name,
+        model_id=ctx.image.backend_model,
+        role="storyboard_subject",
+    )
     try:
-        ctx = await resolve_generation_context(
-            project_name,
-            payload,
-            project=project,
-            user_id=user_id,
-            image=ImageLaneRequest(
-                capability="i2i" if bindings else "t2i",
-                stage="storyboard",
-            ),
-        )
         panel_ratio = resolve_video_aspect_ratio(project)
         count = _panel_count(unit)
 
@@ -340,12 +343,12 @@ async def execute_reference_storyboard_sheet_task(
                 unit,
                 panel_ratio=panel_ratio,
                 panel_count=count,
-                reference_roster=prompt_roster(bindings),
+                reference_roster=prepared.reference_roster,
                 instructions=str(payload.get("storyboard_instructions") or "").strip() or None,
             ),
             resource_type="storyboard_sheets",
             resource_id=resource_id,
-            reference_images=frozen.reference_images,
+            reference_images=prepared.reference_images,
             aspect_ratio=_sheet_aspect_ratio(panel_ratio, count),
             image_size=None,
             before_submit=_before_submit,
@@ -355,7 +358,7 @@ async def execute_reference_storyboard_sheet_task(
             panel_count=count,
         )
     finally:
-        await asyncio.to_thread(frozen.cleanup)
+        await asyncio.to_thread(prepared.cleanup)
     await asyncio.to_thread(
         _commit_sheet_pointer,
         project_name,

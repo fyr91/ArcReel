@@ -205,6 +205,7 @@ class DashScopeImageBackend:
             provider=PROVIDER_DASHSCOPE,
             model=self._model,
             image_uri=url,
+            image_input_count=min(len(request.reference_images), self._ref_limit),
         )
 
     def _resolve_size(self, request: ImageGenerationRequest, has_refs: bool) -> str:

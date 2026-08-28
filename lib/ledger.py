@@ -55,6 +55,7 @@ def _settlement_from_result(call_type: CallType, result: Any, *, service_tier: s
             image_output_tokens=result.image_output_tokens,
             text_input_tokens=result.text_input_tokens,
             text_output_tokens=result.text_output_tokens,
+            image_input_count=getattr(result, "image_input_count", None),
         )
     if call_type == "audio":
         return SettlementInput(usage_tokens=result.characters)

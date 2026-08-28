@@ -57,6 +57,7 @@ class SettlementInput:
     image_output_tokens: int | None = None
     text_input_tokens: int | None = None
     text_output_tokens: int | None = None
+    image_input_count: int | None = None
 
 
 @dataclass(frozen=True)
@@ -262,6 +263,7 @@ class UsageRepository(BaseRepository):
                 image_output_tokens=settlement.image_output_tokens,
                 text_input_tokens=settlement.text_input_tokens,
                 text_output_tokens=settlement.text_output_tokens,
+                image_input_count=settlement.image_input_count,
             )
             cost_amount, currency = cost_calculator.calculate_cost(
                 effective_provider,

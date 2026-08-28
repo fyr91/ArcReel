@@ -55,6 +55,7 @@ class PricingParams:
     image_output_tokens: int | None = None
     text_input_tokens: int | None = None
     text_output_tokens: int | None = None
+    image_input_count: int | None = None
     n: int = 1
 
 
@@ -78,7 +79,9 @@ def _per_image_by_resolution(pricing: PerImageByResolution, params: PricingParam
     own_1k = model_costs.get("1K")
     default_cost = own_1k if own_1k is not None else pricing.rates[pricing.default_model].get("1K", 0.0)
     resolution = params.resolution or "1K"
-    return model_costs.get(resolution.upper(), default_cost) * params.n, pricing.currency
+    output_cost = model_costs.get(resolution.upper(), default_cost) * params.n
+    input_cost = max(0, params.image_input_count or 0) * pricing.input_per_image
+    return output_cost + input_cost, pricing.currency
 
 
 def _per_image_openai_token(pricing: PerImageOpenAIToken, params: PricingParams) -> tuple[float, str]:
