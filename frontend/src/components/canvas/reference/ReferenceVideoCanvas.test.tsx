@@ -479,7 +479,12 @@ describe("ReferenceVideoCanvas", () => {
     expect(within(assets).getByText("教室")).toBeInTheDocument();
     expect(within(assets).getByText("学员")).toBeInTheDocument();
     expect(within(assets).getByText("课本")).toBeInTheDocument();
-    expect(assets.querySelector("select, input, button, textarea")).toBeNull();
+    expect(
+      within(assets).getAllByRole("button", {
+        name: /Click to enlarge image|点击放大图片/,
+      }),
+    ).toHaveLength(3);
+    expect(assets.querySelector("select, input, textarea")).toBeNull();
 
     fireEvent.change(textarea, { target: { value: "@[操场] 空无一人。" } });
     expect(within(assets).getByText("操场")).toBeInTheDocument();

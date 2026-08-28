@@ -1,4 +1,4 @@
-import { render, screen, within } from "@testing-library/react";
+import { fireEvent, render, screen, within } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 import type { ProjectData } from "@/types";
 import { CourseUnitAssets, deriveCourseUnitAssets } from "./CourseUnitAssets";
@@ -62,7 +62,12 @@ describe("CourseUnitAssets", () => {
     expect(within(region).getByText("学员")).toBeInTheDocument();
     expect(within(region).getByText("课本")).toBeInTheDocument();
     expect(region.querySelectorAll("img.rounded-full")).toHaveLength(3);
-    expect(region.querySelector("select, input, button, textarea")).toBeNull();
+    expect(
+      within(region).getAllByRole("button", {
+        name: /Click to enlarge image|点击放大图片/,
+      }),
+    ).toHaveLength(3);
+    expect(region.querySelector("select, input, textarea")).toBeNull();
 
     rerender(
       <CourseUnitAssets projectName="course" project={PROJECT} text="@[操场] 空无一人。" />,
@@ -72,5 +77,30 @@ describe("CourseUnitAssets", () => {
     expect(within(region).queryByText("学员")).toBeNull();
     expect(within(region).queryByText("课本")).toBeNull();
     expect(region.querySelector("span.rounded-full")).toHaveTextContent("操");
+    expect(within(region).queryByRole("button")).toBeNull();
+  });
+
+  it("opens the shared image lightbox when an asset thumbnail is clicked", () => {
+    render(
+      <CourseUnitAssets projectName="course" project={PROJECT} text="@[教室] 空无一人。" />,
+    );
+    const region = screen.getByRole("region", {
+      name: /Assets referenced by the script|文稿相关素材/,
+    });
+
+    fireEvent.click(
+      within(region).getByRole("button", {
+        name: /教室.*(?:Click to enlarge image|点击放大图片)/,
+      }),
+    );
+
+    expect(screen.getByRole("dialog", { name: "教室 全屏预览" })).toBeInTheDocument();
+    expect(screen.getByRole("img", { name: "教室" })).toHaveAttribute(
+      "src",
+      "/api/v1/files/course/scenes/classroom.png",
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "关闭图片预览" }));
+    expect(screen.queryByRole("dialog", { name: "教室 全屏预览" })).toBeNull();
   });
 });
