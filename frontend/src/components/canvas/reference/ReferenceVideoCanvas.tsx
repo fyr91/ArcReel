@@ -1220,7 +1220,9 @@ export function ReferenceVideoCanvas({
               episodeOverview ? (
                 <CourseEpisodeOverviewCard
                   key={`${episode}:${episodeOverviewStatus ?? "legacy"}:${episodeOverview.generated_at ?? ""}:${episodeOverview.synopsis}`}
+                  projectName={projectName}
                   overview={episodeOverview}
+                  videoStyle={project?.video_style}
                   status={episodeOverviewStatus}
                   onConfirm={onConfirmOverview}
                   onRegenerate={onRegenerateOverview}

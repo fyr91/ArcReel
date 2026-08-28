@@ -284,6 +284,18 @@ class TestOverviewPrompt:
         assert "不要照抄文件名" in prompt
         assert "景泰蓝的掐丝与点蓝工艺" in prompt
 
+    def test_first_analysis_requests_one_project_video_style(self):
+        prompt = build_overview_prompt(
+            "剧本正文",
+            include_video_style=True,
+            visual_style="写实电影感",
+        )
+
+        assert "video_style_prompt" in prompt
+        assert "写实电影感" in prompt
+        assert "后续文档不会重新分析" in prompt
+        assert "video_style_prompt" not in build_overview_prompt("剧本正文")
+
 
 class TestDramaDurationSpeechLowerBound:
     """drama step1 时长指引的「台词口播时长」单向下界软指引（生成期，纯 prompt 软约束）。

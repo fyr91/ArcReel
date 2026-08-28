@@ -16,6 +16,7 @@ from lib.text_backends.base import TextGenerationRequest, TextTaskType
 from lib.text_generator import TextGenerator
 from lib.text_utils import strip_json_code_fences
 from lib.video_style import (
+    VIDEO_STYLE_ANALYSIS_GUIDANCE,
     UnifiedVideoStyle,
     UnifiedVideoStyleDraft,
     UnifiedVideoStylePatch,
@@ -25,23 +26,10 @@ from lib.video_style import (
 _ANALYSIS_CONTEXT_LIMIT = 18_000
 _STYLE_LOCKS: WeakKeyDictionary[asyncio.AbstractEventLoop, dict[str, asyncio.Lock]] = WeakKeyDictionary()
 
-_ANALYSIS_SYSTEM_PROMPT = """You are ArcReel's project-level video director.
-Infer one unified video style that can guide every video unit in the project.
-Return only the requested JSON schema with one `prompt` string. Write one concise, coherent paragraph in the
-project's source language. Do not use headings, bullets, field labels or JSON-like fragments inside the paragraph.
-
-Before writing the paragraph, internally check these dimensions:
-- moving-image treatment beyond the existing still-image style anchor;
-- shot scale, lens feeling, camera motion, movement intensity and stability;
-- shot duration, cut density, action density and rhythm;
-- sound focus: balanced, ASMR, dialogue, ambience or silence;
-- background music: forbid it only when project material explicitly forbids it, describe it only when explicit,
-  otherwise leave the choice open in natural language;
-- ambience and physical sound design; for ASMR, name the close-miked material and action sounds;
-- any other constraint that truly applies to every video unit.
-
-Do not invent a hard prohibition such as no music. Do not repeat character, plot or per-shot facts as project-wide style.
-"""
+_ANALYSIS_SYSTEM_PROMPT = (
+    "You are ArcReel's project-level video director. Return only the requested JSON schema with one `prompt` string.\n\n"
+    + VIDEO_STYLE_ANALYSIS_GUIDANCE
+)
 
 GeneratorFactory = Callable[[str], Awaitable[TextGenerator]]
 

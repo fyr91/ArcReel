@@ -808,6 +808,8 @@ export default {
   'video_style_prompt': 'Prompt phong cách video',
   'video_style_prompt_placeholder': 'Ví dụ: Dùng phong cách phim tài liệu chân thực, chủ yếu là máy quay cố định với các cú đẩy chậm, nhịp thư thả và ít cắt cảnh, làm nổi bật âm thanh vật liệu và môi trường, không dùng nhạc nền.',
   'video_style_prompt_hint': 'Agent vẫn phân tích nội bộ các chiều hình ảnh, máy quay, nhịp độ, âm thanh và âm nhạc, sau đó chỉ tạo và sử dụng đoạn văn này.',
+  'analysis_video_style_shared_hint': 'Đây là phong cách dùng chung cho toàn dự án. Phân tích các tập sau chỉ hiển thị và tái sử dụng; chỉnh sửa tại đây sẽ ảnh hưởng toàn bộ dự án.',
+  'analysis_video_style_missing_hint': 'Dự án chưa có phong cách video thống nhất. Nhập và lưu tại đây để dùng cho toàn dự án.',
   'video_model': 'Mô hình video',
   'current_global_hint': 'Toàn cục hiện tại: {{value}}',
   'aspect_ratio_label': 'Tỉ lệ khung hình',

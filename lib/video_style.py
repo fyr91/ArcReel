@@ -11,6 +11,23 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 VideoStyleSource = Literal["agent", "user"]
 VIDEO_STYLE_PROMPT_MAX_LENGTH = 16_000
 
+VIDEO_STYLE_ANALYSIS_GUIDANCE = """Infer one unified video style that can guide every video unit in the project.
+Write one concise, coherent paragraph in the project's source language. Do not use headings, bullets, field labels or
+JSON-like fragments inside the paragraph.
+
+Before writing the paragraph, internally check these dimensions:
+- moving-image treatment beyond the existing still-image style anchor;
+- shot scale, lens feeling, camera motion, movement intensity and stability;
+- shot duration, cut density, action density and rhythm;
+- sound focus: balanced, ASMR, dialogue, ambience or silence;
+- background music: forbid it only when project material explicitly forbids it, describe it only when explicit,
+  otherwise leave the choice open in natural language;
+- ambience and physical sound design; for ASMR, name the close-miked material and action sounds;
+- any other constraint that truly applies to every video unit.
+
+Do not invent a hard prohibition such as no music. Do not repeat character, plot or per-shot facts as project-wide style.
+"""
+
 
 class UnifiedVideoStyleDraft(BaseModel):
     """The single user-editable project-level video style prompt."""
@@ -162,6 +179,7 @@ def video_style_summary(style: UnifiedVideoStyle, *, max_length: int = 160) -> s
 
 
 __all__ = [
+    "VIDEO_STYLE_ANALYSIS_GUIDANCE",
     "VIDEO_STYLE_PROMPT_MAX_LENGTH",
     "UnifiedVideoStyle",
     "UnifiedVideoStyleDraft",

@@ -90,21 +90,35 @@ class _FakeTextBackend:
         from lib.text_backends.base import TextGenerationResult
 
         self.last_request = request
+        payload = {
+            "title": "景泰蓝制作工艺",
+            "synopsis": "故事梗概",
+            "genre": "悬疑",
+            "theme": "真相",
+            "world_setting": "古代",
+            "language": self._language,
+        }
+        if "video_style_prompt" in request.response_schema.model_fields:
+            payload["video_style_prompt"] = "固定机位与缓慢推镜为主，节奏舒缓，突出环境声与材质声。"
         return TextGenerationResult(
-            text=json.dumps(
-                {
-                    "title": "景泰蓝制作工艺",
-                    "synopsis": "故事梗概",
-                    "genre": "悬疑",
-                    "theme": "真相",
-                    "world_setting": "古代",
-                    "language": self._language,
-                },
-                ensure_ascii=False,
-            ),
+            text=json.dumps(payload, ensure_ascii=False),
             provider="fake",
             model="fake-model",
         )
+
+
+def _install_fake_text_generator(monkeypatch: pytest.MonkeyPatch, backend: _FakeTextBackend) -> None:
+    """Keep ProjectManager unit tests independent from the usage-ledger database."""
+
+    class _Generator:
+        async def generate(self, request, *, project_name):
+            assert project_name == "demo"
+            return await backend.generate(request)
+
+    async def _fake_create(*args, **kwargs):
+        return _Generator()
+
+    monkeypatch.setattr("lib.text_generator.TextGenerator.create", _fake_create)
 
 
 class TestProjectManagerMore:
@@ -754,16 +768,16 @@ class TestProjectManagerMore:
         content = pm._read_source_files("demo", max_chars=15)
         assert "1.txt" in content
 
-        async def _fake_create_backend(*args, **kwargs):
-            return _FakeTextBackend(), "gemini-aistudio"
-
-        monkeypatch.setattr("lib.text_generator.create_text_backend_for_task", _fake_create_backend)
+        _install_fake_text_generator(monkeypatch, _FakeTextBackend())
         overview = await pm.generate_overview("demo")
         assert overview["genre"] == "悬疑"
         assert "generated_at" in overview
         assert overview["language"] == "zh"
         # 顶层 source_language 必须由 generate_overview 写入,与 overview.language 同源
-        assert pm.load_project("demo")["source_language"] == "zh"
+        saved = pm.load_project("demo")
+        assert saved["source_language"] == "zh"
+        assert saved["video_style"]["source"] == "agent"
+        assert "固定机位" in saved["video_style"]["prompt"]
 
         with warnings.catch_warnings(record=True) as captured:
             warnings.simplefilter("always")
@@ -786,10 +800,7 @@ class TestProjectManagerMore:
         pm.create_project_metadata("demo", "Demo")
         _write(pm.get_project_path("demo") / "source" / "1.txt", "source body")
 
-        async def _fake_create_backend(*args, **kwargs):
-            return _FakeTextBackend(language=lang), "gemini-aistudio"
-
-        monkeypatch.setattr("lib.text_generator.create_text_backend_for_task", _fake_create_backend)
+        _install_fake_text_generator(monkeypatch, _FakeTextBackend(language=lang))
         overview = await pm.generate_overview("demo")
         assert overview["language"] == lang
         assert pm.load_project("demo")["source_language"] == lang
@@ -805,10 +816,7 @@ class TestProjectManagerMore:
         pm.create_project_metadata("demo", "Demo")
         _write(pm.get_project_path("demo") / "source" / "1.txt", "source body")
 
-        async def _fake_create_backend(*args, **kwargs):
-            return _FakeTextBackend(language="chinese"), "gemini-aistudio"  # 非枚举值
-
-        monkeypatch.setattr("lib.text_generator.create_text_backend_for_task", _fake_create_backend)
+        _install_fake_text_generator(monkeypatch, _FakeTextBackend(language="chinese"))  # 非枚举值
         with pytest.raises(ValidationError):
             await pm.generate_overview("demo")
         assert "source_language" not in pm.load_project("demo")
@@ -825,15 +833,37 @@ class TestProjectManagerMore:
 
         backend = _FakeTextBackend()
 
-        async def _fake_create_backend(*args, **kwargs):
-            return backend, "gemini-aistudio"
-
-        monkeypatch.setattr("lib.text_generator.create_text_backend_for_task", _fake_create_backend)
+        _install_fake_text_generator(monkeypatch, backend)
         await pm.generate_overview("demo")
 
         source_content = pm._read_source_files("demo")
         assert backend.last_request is not None
-        assert backend.last_request.prompt == build_overview_prompt(source_content)
+        assert backend.last_request.prompt == build_overview_prompt(
+            source_content,
+            include_video_style=True,
+        )
+
+    @pytest.mark.unit
+    @pytest.mark.asyncio
+    async def test_generate_overview_reuses_existing_video_style(self, tmp_path, monkeypatch):
+        pm = ProjectManager(tmp_path / "projects")
+        pm.create_project("demo")
+        pm.create_project_metadata("demo", "Demo", content_mode="drama")
+        _write(pm.get_project_path("demo") / "source" / "1.txt", "源文本内容")
+        existing = {
+            "prompt": "用户确认的项目级视频风格。",
+            "source": "user",
+            "updated_at": "2026-08-28T01:00:00Z",
+        }
+        pm.update_project("demo", lambda project: project.__setitem__("video_style", existing))
+        backend = _FakeTextBackend()
+
+        _install_fake_text_generator(monkeypatch, backend)
+        await pm.generate_overview("demo")
+
+        assert backend.last_request is not None
+        assert "video_style_prompt" not in backend.last_request.response_schema.model_fields
+        assert pm.load_project("demo")["video_style"] == existing
 
     @pytest.mark.unit
     @pytest.mark.parametrize("dirty_source_language", [123, ["zh"], {}, "", "   "])
@@ -853,15 +883,16 @@ class TestProjectManagerMore:
 
         backend = _FakeTextBackend()
 
-        async def _fake_create_backend(*args, **kwargs):
-            return backend, "gemini-aistudio"
-
-        monkeypatch.setattr("lib.text_generator.create_text_backend_for_task", _fake_create_backend)
+        _install_fake_text_generator(monkeypatch, backend)
         await pm.generate_overview("demo")
 
         source_content = pm._read_source_files("demo")
         assert backend.last_request is not None
-        assert backend.last_request.prompt == build_overview_prompt(source_content, target_language="中文")
+        assert backend.last_request.prompt == build_overview_prompt(
+            source_content,
+            target_language="中文",
+            include_video_style=True,
+        )
 
     @pytest.mark.unit
     @pytest.mark.asyncio
@@ -933,6 +964,63 @@ class TestProjectManagerMore:
         assert regenerated_project["episodes"][1]["title"] == "人工确认标题"
         assert regenerated_project["episodes"][1]["overview_status"] == "draft"
         assert pm.load_script("demo", "episode_2.json")["title"] == "人工确认标题"
+
+    @pytest.mark.unit
+    @pytest.mark.asyncio
+    async def test_first_course_episode_analysis_creates_video_style_only_once(self, tmp_path, monkeypatch):
+        pm = ProjectManager(tmp_path / "projects")
+        pm.create_project("demo")
+        pm.create_project_metadata(
+            "demo",
+            "Demo",
+            content_mode="course",
+            extras={"generation_mode": "reference_video"},
+        )
+        project_path = pm.get_project_path("demo")
+        _write(project_path / "source" / "first.md", "FIRST_COURSE_TOPIC")
+        _write(project_path / "source" / "second.md", "SECOND_COURSE_TOPIC")
+
+        def _bind(project: dict) -> None:
+            project["episodes"] = [
+                {
+                    "episode": 1,
+                    "title": "First",
+                    "script_file": "scripts/episode_1.json",
+                    "source_file": "source/first.md",
+                },
+                {
+                    "episode": 2,
+                    "title": "Second",
+                    "script_file": "scripts/episode_2.json",
+                    "source_file": "source/second.md",
+                },
+            ]
+
+        pm.update_project("demo", _bind)
+        backend = _FakeTextBackend()
+
+        class _Generator:
+            async def generate(self, request, *, project_name):
+                return await backend.generate(request)
+
+        async def _fake_create(*args, **kwargs):
+            return _Generator()
+
+        monkeypatch.setattr("lib.text_generator.TextGenerator.create", _fake_create)
+        await pm.generate_episode_overview("demo", 1)
+
+        saved = pm.load_project("demo")
+        first_style = saved["video_style"]
+        assert first_style["source"] == "agent"
+        assert "固定机位" in first_style["prompt"]
+        assert backend.last_request is not None
+        assert "video_style_prompt" in backend.last_request.response_schema.model_fields
+
+        await pm.generate_episode_overview("demo", 2)
+
+        assert backend.last_request is not None
+        assert "video_style_prompt" not in backend.last_request.response_schema.model_fields
+        assert pm.load_project("demo")["video_style"] == first_style
 
     @pytest.mark.unit
     def test_course_source_edit_invalidates_only_bound_episode_analysis(self, tmp_path):

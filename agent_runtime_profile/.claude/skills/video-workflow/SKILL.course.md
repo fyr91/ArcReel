@@ -11,7 +11,7 @@ description: 编排课程视频项目的单文档单集工作流；用户说继�
 ## 固定流程
 
 1. 用户在 Episode 栏右上角添加文档；一份文档只绑定一个 Episode。
-2. `analyze_episode`：调用 `mcp__arcreel__generate_episode_overview`，只分析 `next_action.args.episode` 绑定的文档。各集可完全无关，禁止读取或回退到其他集剧情。生成结果是待复核草稿：先向用户展示并允许修改，得到明确确认后把完整四字段与原样 `source_revision` 交给 `mcp__arcreel__confirm_episode_overview`；不得替用户自动确认。
+2. `analyze_episode`：调用 `mcp__arcreel__generate_episode_overview`，只分析 `next_action.args.episode` 绑定的文档。各集可完全无关，禁止读取或回退到其他集剧情。第 1 集首次解析在项目尚无配置时会一并创建统一视频风格；后续集只复用并展示该项目级对象，不重新分析。生成结果是待复核草稿：先向用户展示并允许修改，得到明确确认后把完整四字段与原样 `source_revision` 交给 `mcp__arcreel__confirm_episode_overview`；不得替用户自动确认。
 3. `analyze_assets`：严格传入计划给出的 `episode`、单文件 `scope` 和 revision；提取角色、场景、道具。角色以 `course_role` 区分一位主讲、零到多位特邀和故事演员。能匹配全局角色则复用，否则新建。
 4. `generate_asset_sheets`：沿用现有资产图流程；讲师额外生成 1:1 方形头像衍生图。
 5. `prepare_step1`：dispatch `next_action.args.preprocessor` 指定的子任务，产出单集 course video units；不调用 episode planning。

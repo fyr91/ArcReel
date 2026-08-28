@@ -827,6 +827,8 @@ export default {
   'video_style_prompt': '视频风格提示词',
   'video_style_prompt_placeholder': '例如：以写实纪录片质感呈现，固定机位为主并辅以缓慢推拉，整体节奏舒缓、减少切换，突出材质与环境声，不使用背景音乐。',
   'video_style_prompt_hint': 'Agent 仍会从画面、镜头、节奏、声音与音乐等维度分析，最终只生成并使用这一段提示词。',
+  'analysis_video_style_shared_hint': '这是全项目共用的视频风格。后续单集解析只展示并沿用它；在此修改会影响整个项目。',
+  'analysis_video_style_missing_hint': '项目尚未配置统一视频风格，可在此填写并保存为全项目共用设置。',
   'video_model': '视频模型',
   'current_global_hint': '当前全局: {{value}}',
   'aspect_ratio_label': '画面比例',

@@ -81,6 +81,7 @@ from lib.script_models import get_generated_assets
 from lib.source_revision import SourceScope, compute_source_revision
 from lib.style_templates import LEGACY_STYLE_MAP, resolve_template_prompt
 from lib.validation_messages import ValidationResult
+from lib.video_style import VIDEO_STYLE_PROMPT_MAX_LENGTH, UnifiedVideoStyle
 
 logger = logging.getLogger(__name__)
 
@@ -218,6 +219,26 @@ class CourseEpisodeOverview(ProjectOverview):
     """课程分集解析结果；title 写入分集索引，其余字段保存为该集 overview。"""
 
     title: str = Field(min_length=1, description="简洁、具体的课程单集标题，不含集号或文件名")
+
+
+class InitialProjectOverview(ProjectOverview):
+    """First project analysis also establishes the shared video direction."""
+
+    video_style_prompt: str = Field(
+        min_length=1,
+        max_length=VIDEO_STYLE_PROMPT_MAX_LENGTH,
+        description="供整个项目所有视频单元共用的统一视频风格提示词",
+    )
+
+
+class InitialCourseEpisodeOverview(CourseEpisodeOverview):
+    """First course episode analysis also establishes the shared video direction."""
+
+    video_style_prompt: str = Field(
+        min_length=1,
+        max_length=VIDEO_STYLE_PROMPT_MAX_LENGTH,
+        description="供整个项目所有视频单元共用的统一视频风格提示词",
+    )
 
 
 def _rename_agnostic_errors(
@@ -3586,26 +3607,45 @@ class ProjectManager:
         target_language = (
             raw_source_language if isinstance(raw_source_language, str) and raw_source_language.strip() else "中文"
         )
-        prompt = build_overview_prompt(source_content, target_language=target_language)
+        include_video_style = (
+            project_data.get("content_mode") in {"drama", "narration"} and project_data.get("video_style") is None
+        )
+        response_schema = InitialProjectOverview if include_video_style else ProjectOverview
+        prompt = build_overview_prompt(
+            source_content,
+            target_language=target_language,
+            include_video_style=include_video_style,
+            visual_style=project_data.get("style_description") or project_data.get("style"),
+        )
 
         result = await generator.generate(
             TextGenerationRequest(
                 prompt=prompt,
-                response_schema=ProjectOverview,
+                response_schema=response_schema,
             ),
             project_name=project_name,
         )
         response_text = result.text
 
         # 解析并验证响应
-        overview = ProjectOverview.model_validate_json(response_text)
-        overview_dict = overview.model_dump()
-        overview_dict["generated_at"] = datetime.now(UTC).isoformat()
+        generated = response_schema.model_validate_json(response_text)
+        video_style_prompt = generated.video_style_prompt if isinstance(generated, InitialProjectOverview) else None
+        overview_dict = generated.model_dump(exclude={"video_style_prompt"})
+        generated_at = datetime.now(UTC)
+        overview_dict["generated_at"] = generated_at.isoformat()
 
         # 保存到 project.json（RMW 在单一 _project_lock 内完成，避免并发覆盖其它字段）
         def _mutate(project: dict) -> None:
             project["overview"] = overview_dict
             project["source_language"] = overview_dict["language"]
+            # The first analysis owns initial inference only. A user save or another
+            # concurrent creator that landed while the model was running always wins.
+            if video_style_prompt is not None and project.get("video_style") is None:
+                project["video_style"] = UnifiedVideoStyle(
+                    prompt=video_style_prompt,
+                    source="agent",
+                    updated_at=generated_at,
+                ).model_dump(mode="json")
 
         self.update_project(project_name, _mutate)
 
@@ -3660,23 +3700,31 @@ class ProjectManager:
         target_language = (
             raw_source_language if isinstance(raw_source_language, str) and raw_source_language.strip() else "中文"
         )
+        include_video_style = episode == 1 and project.get("video_style") is None
+        response_schema = InitialCourseEpisodeOverview if include_video_style else CourseEpisodeOverview
         generator = await TextGenerator.create(TextTaskType.OVERVIEW, project_name)
         result = await generator.generate(
             TextGenerationRequest(
                 prompt=build_course_episode_overview_prompt(
                     source_content,
                     target_language=target_language,
+                    include_video_style=include_video_style,
+                    visual_style=project.get("style_description") or project.get("style"),
                 ),
-                response_schema=CourseEpisodeOverview,
+                response_schema=response_schema,
             ),
             project_name=project_name,
         )
-        generated = CourseEpisodeOverview.model_validate_json(result.text)
+        generated = response_schema.model_validate_json(result.text)
+        video_style_prompt = (
+            generated.video_style_prompt if isinstance(generated, InitialCourseEpisodeOverview) else None
+        )
         episode_title = generated.title.strip()
         if not episode_title:
             raise ValueError("course episode title must not be blank")
-        overview = generated.model_dump(exclude={"title"})
-        overview["generated_at"] = datetime.now(UTC).isoformat()
+        overview = generated.model_dump(exclude={"title", "video_style_prompt"})
+        generated_at = datetime.now(UTC)
+        overview["generated_at"] = generated_at.isoformat()
 
         persisted: dict[str, Any] | None = None
         persisted_title: str | None = None
@@ -3724,6 +3772,12 @@ class ProjectManager:
             current_entry["source_revision"] = after.revision
             if episode == 1:
                 current["overview"] = overview
+                if video_style_prompt is not None and current.get("video_style") is None:
+                    current["video_style"] = UnifiedVideoStyle(
+                        prompt=video_style_prompt,
+                        source="agent",
+                        updated_at=generated_at,
+                    ).model_dump(mode="json")
 
         self.update_project(project_name, _mutate)
         if persisted is None or persisted_title is None:  # pragma: no cover - callback 会执行或抛错

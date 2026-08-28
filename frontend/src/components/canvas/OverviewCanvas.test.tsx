@@ -75,6 +75,26 @@ describe("OverviewCanvas", () => {
     expect(screen.getByText("Demo")).toBeInTheDocument();
   });
 
+  it("shows the project-wide video style beside the first drama analysis", () => {
+    render(
+      <OverviewCanvas
+        projectName="demo"
+        projectData={makeProjectData({
+          content_mode: "drama",
+          video_style: {
+            prompt: "写实镜头与缓慢运镜，保持舒缓节奏。",
+            source: "agent",
+            updated_at: "2026-08-28T01:00:00Z",
+          },
+        })}
+      />,
+    );
+
+    expect(screen.getByLabelText("视频风格提示词")).toHaveValue(
+      "写实镜头与缓慢运镜，保持舒缓节奏。",
+    );
+  });
+
   it("reports the storyboard count per episode on the storyboard route", () => {
     // 分镜路线上三种创作类型同一口径：广告/短片也报分镜数，不再另说一套。
     render(

@@ -12,6 +12,7 @@
 from lib.prompt_rules.episode_pacing import render_pacing_section
 from lib.speech_rate import speech_rate_units_per_second
 from lib.text_metrics import reading_unit_noun
+from lib.video_style import VIDEO_STYLE_ANALYSIS_GUIDANCE
 
 # 用户意见（instructions）注入分节的统一标题：五个分集生成入口（plan / step1 三工具 / step2）
 # 共用，措辞保持中性——遵循强度由意见正文自行表达，注入模板不添加任何强度限定词。
@@ -779,7 +780,26 @@ _OVERVIEW_TASK_SCREENPLAY = (
 )
 
 
-def build_overview_prompt(source_content: str, target_language: str = "中文") -> str:
+def _initial_video_style_section(visual_style: str | None) -> str:
+    anchor = (
+        visual_style.strip() if isinstance(visual_style, str) and visual_style.strip() else "（未配置静态视觉风格）"
+    )
+    return (
+        "\n\n# 项目统一视频风格\n"
+        "这是项目第一次内容解析。除概述外，请同时输出 `video_style_prompt`，作为后续全部视频单元共用的"
+        "项目级视听方向；后续文档不会重新分析这一字段。\n"
+        f"当前静态视觉风格锚点：{anchor}\n\n"
+        f"{VIDEO_STYLE_ANALYSIS_GUIDANCE}"
+    )
+
+
+def build_overview_prompt(
+    source_content: str,
+    target_language: str = "中文",
+    *,
+    include_video_style: bool = False,
+    visual_style: str | None = None,
+) -> str:
     """构建项目概述（overview）生成 prompt。
 
     输入固定为成品剧本。作者若写下创作方案前言（题材 / 主题 / 一句话故事 / 世界观，
@@ -788,16 +808,29 @@ def build_overview_prompt(source_content: str, target_language: str = "中文") 
     overview 产出的字段会注入后续所有生成 prompt，输出语言须与其余 builder 同口径
     （target_language 由调用方按 project.json 的 source_language 解析）。
     """
-    return f"{_OVERVIEW_TASK_SCREENPLAY}\n\n**输出语言**：所有字符串值必须使用 {target_language}；JSON 键名 / 枚举值保持英文。\n\n{source_content}"
+    style_section = _initial_video_style_section(visual_style) if include_video_style else ""
+    return (
+        f"{_OVERVIEW_TASK_SCREENPLAY}{style_section}\n\n"
+        f"**输出语言**：所有字符串值必须使用 {target_language}；JSON 键名 / 枚举值保持英文。\n\n"
+        f"{source_content}"
+    )
 
 
-def build_course_episode_overview_prompt(source_content: str, target_language: str = "中文") -> str:
+def build_course_episode_overview_prompt(
+    source_content: str,
+    target_language: str = "中文",
+    *,
+    include_video_style: bool = False,
+    visual_style: str | None = None,
+) -> str:
     """构建单份课程文档的独立解析 prompt，并为该集提炼可读标题。"""
 
+    style_section = _initial_video_style_section(visual_style) if include_video_style else ""
     return (
         "请分析以下单集课程文档，提炼本集概述（内容梗概 / 题材 / 主题 / 背景设定），"
         "并生成一个简洁、具体、能准确概括本集教学主题的标题。\n"
         "标题不要照抄文件名，不要包含‘第几集’或 Episode 编号，也不要使用空泛的‘课程介绍’。\n\n"
+        f"{style_section}\n\n"
         f"**输出语言**：所有字符串值必须使用 {target_language}；JSON 键名 / 枚举值保持英文。\n\n"
         f"{source_content}"
     )

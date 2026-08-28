@@ -21,7 +21,7 @@ def _project(tmp_path: Path) -> ProjectManager:
         "demo",
         "景泰蓝",
         "写实",
-        "narration",
+        "drama",
         extras={
             "generation_mode": "reference_video",
             "source_language": "zh",

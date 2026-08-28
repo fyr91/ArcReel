@@ -15,7 +15,8 @@ def generate_episode_overview_tool(ctx: ToolContext):
     @tool(
         "generate_episode_overview",
         "仅分析课程项目指定集绑定的 source_file，并保存该集独立 overview 待复核草稿；"
-        "不会读取其他集原文，用户确认后再调用 confirm_episode_overview。",
+        "不会读取其他集原文。第 1 集首次解析会在项目尚无配置时一并创建统一视频风格，"
+        "后续集只复用现有风格、不重新分析；用户确认概述后再调用 confirm_episode_overview。",
         {
             "type": "object",
             "properties": {"episode": {"type": "integer", "minimum": 1}},

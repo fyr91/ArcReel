@@ -2,10 +2,13 @@ import { useId, useState } from "react";
 import { CheckCircle2, Pencil, RefreshCw, Sparkles } from "lucide-react";
 import { useTranslation } from "react-i18next";
 
-import type { ProjectOverview } from "@/types";
+import type { ProjectOverview, UnifiedVideoStyle } from "@/types";
+import { UnifiedVideoStyleEditor } from "../UnifiedVideoStyleEditor";
 
 interface CourseEpisodeOverviewCardProps {
+  projectName: string;
   overview: ProjectOverview;
+  videoStyle?: UnifiedVideoStyle | null;
   status?: "draft" | "confirmed";
   onConfirm?: (overview: ProjectOverview) => Promise<void>;
   onRegenerate?: () => Promise<void>;
@@ -24,7 +27,9 @@ function overviewDraft(overview: ProjectOverview): ProjectOverview {
 }
 
 export function CourseEpisodeOverviewCard({
+  projectName,
   overview,
+  videoStyle,
   status = "confirmed",
   onConfirm,
   onRegenerate,
@@ -259,6 +264,10 @@ export function CourseEpisodeOverviewCard({
           </div>
         </div>
       )}
+
+      <div className="mt-5 border-t border-[var(--color-hairline-soft)] pt-5">
+        <UnifiedVideoStyleEditor projectName={projectName} videoStyle={videoStyle} />
+      </div>
     </section>
   );
 }

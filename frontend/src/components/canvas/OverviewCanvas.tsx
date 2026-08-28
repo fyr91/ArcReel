@@ -20,6 +20,7 @@ import { AdInitCanvas } from "./AdInitCanvas";
 import { ConflictModal, type ConflictResolution } from "./ConflictModal";
 import { AgentHandoffHint } from "@/components/copilot/AgentHandoffHint";
 import { ONBOARDING_ANCHORS } from "@/onboarding/anchors";
+import { UnifiedVideoStyleEditor } from "./UnifiedVideoStyleEditor";
 
 interface OverviewCanvasProps {
   projectName: string;
@@ -602,6 +603,14 @@ export function OverviewCanvas({
                 </button>
               )}
             </section>
+
+            {!isAd && (
+              <UnifiedVideoStyleEditor
+                projectName={projectName}
+                videoStyle={projectData.video_style}
+                readOnly={readOnly}
+              />
+            )}
 
             {/* Asset progress — characters / scenes / props */}
             {status && (

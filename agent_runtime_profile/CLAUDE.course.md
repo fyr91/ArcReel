@@ -29,6 +29,8 @@ opening 与 closing 必须共用同一个场景和同一组至少一位角色。
 单元类型以只读 tag 展示，场景、角色和道具由当前正文的 `@[名称]` mention 实时派生为只读素材预览。
 用户要改变相关素材时直接修改正文引用，不维护第二份素材选择结果。
 
+第 1 集首次解析会在项目尚无配置时一并创建唯一的 Unified Video Style 提示词。第 2 集及后续分集只展示并复用这份项目级风格，不重新分析或覆盖；用户要求调整时调用 `update_video_style` 编辑同一个对象。
+
 explanation 的依赖按顺序机械派生：故事后的第一条依赖该 story；连续 explanation 依赖前一条 explanation；遇到新 story 开启新链。不同 story 链可并行。
 
 ## 生成与确认

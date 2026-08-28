@@ -828,6 +828,8 @@ export default {
   'video_style_prompt': 'Video style prompt',
   'video_style_prompt_placeholder': 'For example: Use a realistic documentary treatment with mostly locked shots and slow push-ins, relaxed pacing and sparse cuts, foregrounding material and ambient sounds without background music.',
   'video_style_prompt_hint': 'The Agent still analyzes visuals, camera, pacing, sound and music internally, then produces and uses only this paragraph.',
+  'analysis_video_style_shared_hint': 'This is the project-wide style. Later episode analysis only displays and reuses it; edits here affect the whole project.',
+  'analysis_video_style_missing_hint': 'No project-wide style is configured. Enter one here to save it for the whole project.',
   'video_model': 'Video Model',
   'current_global_hint': 'Current global: {{value}}',
   'aspect_ratio_label': 'Aspect Ratio',
