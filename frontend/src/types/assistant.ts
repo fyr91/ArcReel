@@ -150,6 +150,7 @@ export interface SubagentTaskSnapshot {
   task_id: string | null;
   agent_type: string;
   description: string;
+  started_at: string | null;
   status: SubagentStatus;
   summary: string;
   usage: { total_tokens?: number; tool_uses?: number; duration_ms?: number } | null;

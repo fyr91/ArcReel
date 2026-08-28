@@ -1,5 +1,5 @@
-import { fireEvent, render, screen } from "@testing-library/react";
-import { beforeEach, describe, expect, it } from "vitest";
+import { act, fireEvent, render, screen } from "@testing-library/react";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { ContentBlock, Turn } from "@/types";
 import { useAssistantStore } from "@/stores/assistant-store";
 import { SkillChip } from "./SkillChip";
@@ -78,6 +78,10 @@ describe("SubagentCard", () => {
     useAssistantStore.getState().setSubagentSnapshots([]);
   });
 
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
   function makeCardBlock(overrides: Partial<ContentBlock> = {}): ContentBlock {
     const subTurns: Turn[] = [
       { type: "user", content: [{ type: "text", text: "内部 prompt" }], uuid: "s-u1" },
@@ -138,9 +142,10 @@ describe("SubagentCard", () => {
         task_id: "agent-1",
         agent_type: "Explore",
         description: "探索费用计算逻辑",
+        started_at: "2026-08-28T00:00:00Z",
         status: "stalled",
         summary: "",
-        usage: { total_tokens: 63258 },
+        usage: { total_tokens: 63258, duration_ms: 20_000 },
         stall_timeout_seconds: 300,
         entries: [],
       },
@@ -150,7 +155,57 @@ describe("SubagentCard", () => {
 
     expect(screen.getByText("执行停滞")).toBeInTheDocument();
     expect(screen.getByText("63258 tokens")).toBeInTheDocument();
+    expect(screen.getByText("20s")).toBeInTheDocument();
     expect(screen.getByText("连续 5 分钟无输出或工具活动，已自动终止")).toBeInTheDocument();
+  });
+
+  it("keeps a running task expandable before its first entry and advances elapsed time", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-08-28T00:00:14Z"));
+    useAssistantStore.getState().setSubagentSnapshots([
+      {
+        tool_use_id: "tu-agent",
+        task_id: "agent-1",
+        agent_type: "Explore",
+        description: "探索费用计算逻辑",
+        started_at: "2026-08-28T00:00:00Z",
+        status: "running",
+        summary: "",
+        usage: { total_tokens: 68657, duration_ms: 14_000 },
+        entries: [],
+      },
+    ]);
+
+    render(<SubagentCard block={makeCardBlock({ sub_turns: [] })} />);
+
+    const toggle = screen.getByRole("button");
+    expect(screen.getByText("14s")).toBeInTheDocument();
+    fireEvent.click(toggle);
+    expect(toggle).toHaveAttribute("aria-expanded", "true");
+    expect(screen.getAllByText("正在后台独立运行")).toHaveLength(2);
+
+    act(() => vi.advanceTimersByTime(1000));
+    expect(screen.getByText("15s")).toBeInTheDocument();
+
+    act(() => {
+      useAssistantStore.getState().setSubagentSnapshots([
+        {
+          tool_use_id: "tu-agent",
+          task_id: "agent-1",
+          agent_type: "Explore",
+          description: "探索费用计算逻辑",
+          started_at: "2026-08-28T00:00:00Z",
+          status: "completed",
+          summary: "探索完成",
+          usage: { total_tokens: 70_000, duration_ms: 123_000 },
+          entries: [],
+        },
+      ]);
+    });
+    expect(screen.getByText("2m 3s")).toBeInTheDocument();
+
+    act(() => vi.advanceTimersByTime(5000));
+    expect(screen.getByText("2m 3s")).toBeInTheDocument();
   });
 
   it("dispatches Agent tool_use blocks to the card", () => {

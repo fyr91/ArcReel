@@ -22,6 +22,11 @@ def _content(message: dict[str, Any]) -> list[dict[str, Any]]:
     return [item for item in value if isinstance(item, dict)] if isinstance(value, list) else []
 
 
+def _timestamp(message: dict[str, Any]) -> str | None:
+    value = message.get("timestamp")
+    return value if isinstance(value, str) and value else None
+
+
 def _tool_result_id(message: dict[str, Any]) -> str | None:
     for block in _content(message):
         if block.get("type") == "tool_result" and isinstance(block.get("tool_use_id"), str):
@@ -132,6 +137,7 @@ def build_subagent_snapshot(
                     "task_id": None,
                     "agent_type": str(input_data.get("subagent_type") or ""),
                     "description": str(input_data.get("description") or input_data.get("prompt") or ""),
+                    "started_at": _timestamp(message),
                     "status": "running",
                     "summary": "",
                     "usage": None,
@@ -158,6 +164,7 @@ def build_subagent_snapshot(
                 "task_id": None,
                 "agent_type": "",
                 "description": str(result.get("description") or ""),
+                "started_at": _timestamp(message),
                 "status": "running",
                 "summary": "",
                 "usage": None,
@@ -165,6 +172,8 @@ def build_subagent_snapshot(
             },
         )
         task["task_id"] = agent_id
+        if task.get("started_at") is None:
+            task["started_at"] = _timestamp(message)
         raw_status = str(result.get("status") or "").strip().lower()
         task["status"] = (
             "stalled"
@@ -191,6 +200,8 @@ def build_subagent_snapshot(
                 continue
             if isinstance(task_id, str) and task_id:
                 task["task_id"] = task_id
+            if entry.get("subtype") == "task_started" and _timestamp(entry) is not None:
+                task["started_at"] = _timestamp(entry)
             status = str(entry.get("task_status") or "").strip().lower()
             if status:
                 task["status"] = "stalled" if status == "killed" else status

@@ -1,4 +1,4 @@
-import { useId, useMemo, useState } from "react";
+import { useEffect, useId, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Bot, CheckCircle2, ChevronDown, ChevronRight, CircleStop, LoaderCircle, TimerOff, XCircle } from "lucide-react";
 import type { ContentBlock, Turn } from "@/types";
@@ -45,6 +45,30 @@ function formatDuration(durationMs: number | undefined): string | null {
   return `${Math.floor(seconds / 60)}m ${seconds % 60}s`;
 }
 
+function parseTimestamp(timestamp: string | null | undefined): number | null {
+  if (!timestamp) return null;
+  const value = Date.parse(timestamp);
+  return Number.isFinite(value) ? value : null;
+}
+
+function useDisplayedDuration(
+  status: CardStatus,
+  startedAt: string | null | undefined,
+  reportedDurationMs: number | undefined,
+): number | undefined {
+  const [now, setNow] = useState(() => Date.now());
+  const startedAtMs = useMemo(() => parseTimestamp(startedAt), [startedAt]);
+
+  useEffect(() => {
+    if (status !== "running" || startedAtMs == null) return;
+    const timer = window.setInterval(() => setNow(Date.now()), 1000);
+    return () => window.clearInterval(timer);
+  }, [startedAtMs, status]);
+
+  if (status !== "running" || startedAtMs == null) return reportedDurationMs;
+  return Math.max(reportedDurationMs ?? 0, now - startedAtMs, 0);
+}
+
 function deriveDescription(block: ContentBlock): string {
   const input = block.input ?? {};
   const fromInput = typeof input.description === "string" ? input.description : "";
@@ -80,12 +104,14 @@ export function SubagentCard({ block, projectName }: SubagentCardProps) {
   );
   const subTurns = streamedTurns ?? block.sub_turns ?? [];
   const resultText = typeof block.result === "string" ? block.result : "";
-  const expandable = subTurns.length > 0 || resultText.trim() !== "";
+  const expandable = status === "running" || subTurns.length > 0 || resultText.trim() !== "";
 
   const summary = liveSnapshot?.summary || block.task_info?.summary || "";
   const usage = liveSnapshot?.usage ?? block.task_info?.usage;
   const tokens = usage?.total_tokens;
-  const duration = formatDuration(usage?.duration_ms);
+  // 这里展示子任务总运行时长；无活动 watchdog 的 stall_timeout_seconds 只负责停滞判定与说明。
+  const displayedDurationMs = useDisplayedDuration(status, liveSnapshot?.started_at, usage?.duration_ms);
+  const duration = formatDuration(displayedDurationMs);
   const agentType = liveSnapshot?.agent_type || (typeof block.input?.subagent_type === "string" ? block.input.subagent_type : "");
 
   const statusLabelKeys: Record<CardStatus, string> = {
@@ -187,7 +213,7 @@ export function SubagentCard({ block, projectName }: SubagentCardProps) {
         <div className="flex w-full items-start px-3.5 py-3">{header}</div>
       )}
 
-      {isExpanded && (
+      {isExpanded && expandable && (
         <div id={detailsId} className="px-3.5 pb-3" style={{ borderTop: "1px solid var(--color-hairline-soft)" }}>
           {subTurns.length > 0 ? (
             <div className="mt-2 ml-1 pl-2.5" style={{ borderLeft: "2px solid var(--color-accent-soft)" }}>
@@ -195,13 +221,17 @@ export function SubagentCard({ block, projectName }: SubagentCardProps) {
                 <SubTimelineTurn key={turn.uuid || `sub-turn-${turnIndex}`} turn={turn} projectName={projectName} />
               ))}
             </div>
-          ) : (
+          ) : resultText.trim() !== "" ? (
             <pre
               className="num mt-2 max-h-48 overflow-y-auto whitespace-pre-wrap break-all text-[11px]"
               style={{ color: "var(--color-text-2)" }}
             >
               {resultText}
             </pre>
+          ) : (
+            <div className="mt-2 text-[11px]" style={{ color: "var(--color-text-3)" }}>
+              {t("subagent_background_active")}
+            </div>
           )}
         </div>
       )}

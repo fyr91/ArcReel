@@ -169,7 +169,7 @@ describe("useAssistantSession", () => {
       MockEventSource.instances[1].emit("snapshot", {
         session_id: "session-1",
         active: true,
-        tasks: [{ tool_use_id: "tu-1", task_id: "task-1", agent_type: "analyze-assets", description: "提取资产", status: "running", summary: "", usage: null, entries: [] }],
+        tasks: [{ tool_use_id: "tu-1", task_id: "task-1", agent_type: "analyze-assets", description: "提取资产", started_at: "2026-08-28T00:00:00Z", status: "running", summary: "", usage: null, entries: [] }],
       });
     });
     expect(MockEventSource.instances[0].close).toHaveBeenCalled();

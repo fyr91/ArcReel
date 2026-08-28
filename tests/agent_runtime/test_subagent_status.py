@@ -9,6 +9,7 @@ def test_async_agent_result_remains_running_until_task_notification() -> None:
     main = [
         {
             "type": "assistant",
+            "timestamp": "2026-08-28T00:00:00Z",
             "content": [
                 {
                     "type": "tool_use",
@@ -31,7 +32,29 @@ def test_async_agent_result_remains_running_until_task_notification() -> None:
     assert snapshot["active"] is True
     assert snapshot["tasks"][0]["status"] == "running"
     assert snapshot["tasks"][0]["task_id"] == "agent-1"
+    assert snapshot["tasks"][0]["started_at"] == "2026-08-28T00:00:00Z"
     assert snapshot["tasks"][0]["entries"][0]["content"][0]["text"] == "正在读取剧本"
+
+
+def test_task_started_timestamp_replaces_the_earlier_launch_anchor() -> None:
+    main = [
+        {
+            "type": "assistant",
+            "timestamp": "2026-08-28T00:00:00Z",
+            "content": [{"type": "tool_use", "id": "tu-1", "name": "Agent", "input": {}}],
+        },
+        {
+            "type": "system",
+            "subtype": "task_started",
+            "timestamp": "2026-08-28T00:00:05Z",
+            "task_id": "agent-1",
+            "tool_use_id": "tu-1",
+        },
+    ]
+
+    snapshot = build_subagent_snapshot(main, {}, runtime_alive=True)
+
+    assert snapshot["tasks"][0]["started_at"] == "2026-08-28T00:00:05Z"
 
 
 def test_completion_notification_sets_terminal_summary_and_usage() -> None:
