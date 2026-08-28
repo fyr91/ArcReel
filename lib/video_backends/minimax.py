@@ -28,7 +28,6 @@ import httpx
 
 from lib.config.registry import model_info_for
 from lib.logging_utils import format_kwargs_for_log
-from lib.minimax_h3_prompt import H3_MAX_PROMPT_CHARS
 from lib.minimax_shared import (
     MINIMAX_VIDEO_POLL_INTERVAL_SECONDS,
     extract_minimax_download_url,
@@ -213,7 +212,6 @@ class MiniMaxVideoBackend(ProviderJobIdPersistenceMixin):
                 # 段数与总时长两个维度独立声明：3 段各 10 秒都在单段合法区间内，合计已超 15 秒。
                 max_reference_audio_count=_H3_MAX_REFERENCE_AUDIO,
                 max_reference_audio_total_seconds=_H3_MAX_REFERENCE_AUDIO_TOTAL_SECONDS,
-                max_prompt_chars=H3_MAX_PROMPT_CHARS,
                 first_frame_ratio_adaptive_only=True,
             )
         return VideoCapabilities(first_frame=True)

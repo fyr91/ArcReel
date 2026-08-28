@@ -330,7 +330,7 @@ class TestH3V2Capabilities:
         assert caps.reference_audio_mode is ReferenceAudioMode.DIRECT
         assert caps.max_reference_audio_count == 3
         assert caps.max_reference_audio_total_seconds == 15.0
-        assert caps.max_prompt_chars == 7000
+        assert caps.max_prompt_chars is None
         assert caps.first_frame_ratio_adaptive_only is True
 
     def test_first_frame_ratio_resolves_to_adaptive(self):

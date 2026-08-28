@@ -138,7 +138,7 @@ class TestVideoCapabilitiesForModel:
         assert caps.last_frame is True
         assert caps.reference_audio_mode is ReferenceAudioMode.DIRECT
         assert caps.max_reference_audio_count == 3
-        assert caps.max_prompt_chars == 7000
+        assert caps.max_prompt_chars is None
         assert caps.first_frame_ratio_adaptive_only is True
 
     @pytest.mark.unit

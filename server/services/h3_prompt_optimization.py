@@ -14,12 +14,11 @@ from typing import Any
 from lib.asset_types import ASSET_SPECS, normalize_asset_bucket
 from lib.db import async_session_factory
 from lib.minimax_h3_prompt import (
-    H3_MAX_PROMPT_CHARS,
+    H3_RECOMMENDED_PROMPT_CHARS,
     H3PromptArtifact,
     H3PromptReference,
     H3PromptSections,
     H3PromptState,
-    H3PromptTooLongError,
     canonical_basis_digest,
     confirm_h3_prompt_artifact,
     file_sha256,
@@ -54,7 +53,6 @@ from server.services.video_style import VideoStyleService
 
 logger = logging.getLogger(__name__)
 
-_H3_OPTIMIZATION_MAX_ATTEMPTS = 3
 _H3_OPTIMIZATION_MAX_CONCURRENCY = 3
 _STORYBOARD_SEQUENCE_CONSTRAINT = (
     "Use Picture {picture_number} as sequential shot guidance, not as a static image. "
@@ -224,23 +222,13 @@ def _optimizer_user_prompt(payload: dict[str, Any]) -> str:
         "requests ASMR, foreground the specified close physical sounds in overall_soundscape. "
         "Keep every timestamp within request.duration_seconds. Return only the six required sections. "
         f"{storyboard_instruction} "
-        f"The complete response, including all section headers, must not exceed {H3_MAX_PROMPT_CHARS} "
+        f"The complete response, including all section headers, must not exceed {H3_RECOMMENDED_PROMPT_CHARS} "
         "characters.\n\n" + json.dumps(payload, ensure_ascii=False, indent=2)
     )
 
 
 def _storyboard_sequence_constraint(picture_number: int | str) -> str:
     return _STORYBOARD_SEQUENCE_CONSTRAINT.format(picture_number=picture_number)
-
-
-def _optimizer_retry_prompt(user_prompt: str, error: H3PromptTooLongError) -> str:
-    return (
-        f"{user_prompt}\n\n"
-        f"Your previous response rendered to {error.actual_chars} characters, exceeding the "
-        f"{error.max_chars}-character provider limit. Regenerate all six required sections and compress "
-        f"the wording so the complete response, including all section headers, does not exceed "
-        f"{error.max_chars} characters. Preserve every other instruction and required fact."
-    )
 
 
 async def _generate_valid_h3_prompt(
@@ -250,42 +238,25 @@ async def _generate_valid_h3_prompt(
     system_prompt: str,
     project_name: str,
 ) -> tuple[TextGenerationResult, H3PromptSections]:
-    """Generate once normally, retrying only provider-length validation failures."""
+    """Generate and validate one H3 prompt without imposing an output-size limit."""
 
-    user_prompt = context.user_prompt
     duration = context.projection.request_duration
     assert duration is not None
-    for attempt in range(1, _H3_OPTIMIZATION_MAX_ATTEMPTS + 1):
-        result = await generator.generate(
-            TextGenerationRequest(
-                prompt=user_prompt,
-                system_prompt=system_prompt,
-                images=[ImageInput(path=path) for path in context.image_paths] or None,
-                max_output_tokens=8192,
-            ),
-            project_name=project_name,
-        )
-        try:
-            sections = parse_h3_prompt(
-                result.text,
-                duration_seconds=duration.seconds,
-                picture_count=len(context.image_paths),
-                audio_count=len(context.audio_paths),
-            )
-        except H3PromptTooLongError as exc:
-            if attempt >= _H3_OPTIMIZATION_MAX_ATTEMPTS:
-                raise
-            logger.warning(
-                "H3 prompt optimization attempt %d/%d exceeded the provider limit (%d > %d characters); retrying",
-                attempt,
-                _H3_OPTIMIZATION_MAX_ATTEMPTS,
-                exc.actual_chars,
-                exc.max_chars,
-            )
-            user_prompt = _optimizer_retry_prompt(context.user_prompt, exc)
-            continue
-        return result, sections
-    raise AssertionError("H3 prompt optimization retry loop did not return")
+    result = await generator.generate(
+        TextGenerationRequest(
+            prompt=context.user_prompt,
+            system_prompt=system_prompt,
+            images=[ImageInput(path=path) for path in context.image_paths] or None,
+        ),
+        project_name=project_name,
+    )
+    sections = parse_h3_prompt(
+        result.text,
+        duration_seconds=duration.seconds,
+        picture_count=len(context.image_paths),
+        audio_count=len(context.audio_paths),
+    )
+    return result, sections
 
 
 class H3PromptOptimizationService:
