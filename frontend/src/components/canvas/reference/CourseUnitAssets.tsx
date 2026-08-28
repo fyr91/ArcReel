@@ -1,6 +1,7 @@
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { API } from "@/api";
+import { ImageLightbox } from "@/components/ui/ImageLightbox";
 import type { Character, ProjectData, Prop, Scene } from "@/types";
 import {
   buildMentionLookup,
@@ -92,13 +93,16 @@ function AssetGroup({
   projectName,
   kind,
   emptyLabel,
+  enlargeLabel,
 }: {
   label: string;
   items: AssetPreview[];
   projectName: string;
   kind: PreviewKind;
   emptyLabel: string;
+  enlargeLabel: string;
 }) {
+  const [lightbox, setLightbox] = useState<{ src: string; alt: string } | null>(null);
   const fallbackColor = {
     scene: "border-emerald-400/30 bg-emerald-400/10 text-emerald-200",
     character: "border-sky-400/30 bg-sky-400/10 text-sky-200",
@@ -117,13 +121,20 @@ function AssetGroup({
             return (
               <li key={item.name} className="flex min-w-0 items-center gap-2">
                 {previewUrl ? (
-                  <img
-                    src={previewUrl}
-                    alt=""
-                    aria-hidden="true"
-                    loading="lazy"
-                    className="h-9 w-9 shrink-0 rounded-full border border-[var(--color-hairline)] object-cover"
-                  />
+                  <button
+                    type="button"
+                    aria-label={`${item.name} ${enlargeLabel}`}
+                    onClick={() => setLightbox({ src: previewUrl, alt: item.name })}
+                    className="focus-ring h-9 w-9 shrink-0 cursor-zoom-in rounded-full border-0 bg-transparent p-0"
+                  >
+                    <img
+                      src={previewUrl}
+                      alt=""
+                      aria-hidden="true"
+                      loading="lazy"
+                      className="h-full w-full rounded-full border border-[var(--color-hairline)] object-cover"
+                    />
+                  </button>
                 ) : (
                   <span
                     aria-hidden="true"
@@ -145,6 +156,13 @@ function AssetGroup({
       ) : (
         <span className="text-[11.5px] text-[var(--color-text-4)]">{emptyLabel}</span>
       )}
+      {lightbox ? (
+        <ImageLightbox
+          src={lightbox.src}
+          alt={lightbox.alt}
+          onClose={() => setLightbox(null)}
+        />
+      ) : null}
     </div>
   );
 }
@@ -164,6 +182,7 @@ export function CourseUnitAssets({ projectName, project, text }: Props) {
         projectName={projectName}
         kind="scene"
         emptyLabel={t("course_unit_assets_empty")}
+        enlargeLabel={t("enlarge_image")}
       />
       <AssetGroup
         label={t("course_unit_characters")}
@@ -171,6 +190,7 @@ export function CourseUnitAssets({ projectName, project, text }: Props) {
         projectName={projectName}
         kind="character"
         emptyLabel={t("course_unit_assets_empty")}
+        enlargeLabel={t("enlarge_image")}
       />
       <AssetGroup
         label={t("course_unit_props")}
@@ -178,6 +198,7 @@ export function CourseUnitAssets({ projectName, project, text }: Props) {
         projectName={projectName}
         kind="prop"
         emptyLabel={t("course_unit_assets_empty")}
+        enlargeLabel={t("enlarge_image")}
       />
     </section>
   );
