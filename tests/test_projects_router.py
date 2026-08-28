@@ -17,12 +17,9 @@ from lib.i18n.zh import errors as zh_errors
 from lib.project_change_hints import get_project_change_source
 from lib.project_manager import EmptySourceError, ProjectManager
 from lib.release_defaults import (
-    RELEASE_COMPLEX_TEXT_BACKEND,
     RELEASE_IMAGE_BACKEND,
     RELEASE_IMAGE_RESOLUTION,
-    RELEASE_SIMPLE_TEXT_BACKEND,
     RELEASE_STORYBOARD_IMAGE_BACKEND,
-    RELEASE_TEXT_BACKEND,
     RELEASE_VIDEO_BACKEND,
     RELEASE_VIDEO_RESOLUTION,
 )
@@ -1935,9 +1932,9 @@ class TestProjectsRouter:
         assert data["video_backend"] == RELEASE_VIDEO_BACKEND
         assert data["default_image_backend"] == RELEASE_IMAGE_BACKEND
         assert data["image_provider_storyboard"] == RELEASE_STORYBOARD_IMAGE_BACKEND
-        assert data["default_text_backend"] == RELEASE_TEXT_BACKEND
-        assert data["text_backend_simple"] == RELEASE_SIMPLE_TEXT_BACKEND
-        assert data["text_backend_complex"] == RELEASE_COMPLEX_TEXT_BACKEND
+        assert "default_text_backend" not in data
+        assert "text_backend_simple" not in data
+        assert "text_backend_complex" not in data
         assert data["model_settings"] == {
             RELEASE_VIDEO_BACKEND: {"resolution": RELEASE_VIDEO_RESOLUTION},
             RELEASE_IMAGE_BACKEND: {"resolution": RELEASE_IMAGE_RESOLUTION},

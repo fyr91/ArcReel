@@ -14,6 +14,8 @@ import httpx
 
 from lib.aspect_size import IMAGE_TIER_SHORT_EDGE, aspect_size, resolution_to_short_edge
 from lib.dashscope_shared import (
+    DASHSCOPE_BASE_URL,
+    QWEN_IMAGE_3_BASE_URL,
     dashscope_headers,
     dashscope_native_base_url,
     extract_image_url,
@@ -35,7 +37,7 @@ from lib.video_backends.base import should_retry_submit, submit_post
 
 logger = logging.getLogger(__name__)
 
-DEFAULT_MODEL = "qwen-image-2.0"
+DEFAULT_MODEL = "qwen-image-3.0"
 
 _IMAGE_ENDPOINT = "/services/aigc/multimodal-generation/generation"
 
@@ -51,6 +53,7 @@ _WAN_REF_LIMIT = 9
 #   - qwen 融合系列 native 默认 2048²；wan 默认 2K 档；编辑系列由 max_long_edge 自然收口。
 _DEFAULT_WAN_BUDGET = "2K"
 _DEFAULT_SHORT_FUSION = 2048
+_DEFAULT_SHORT_QWEN_3 = 1024
 _DEFAULT_SHORT_WAN = 1440
 _DEFAULT_SHORT_EDIT = 2048
 
@@ -77,10 +80,23 @@ class DashScopeImageBackend:
         http_timeout: float = 120.0,
     ) -> None:
         self._api_key = resolve_dashscope_api_key(api_key)
-        self._base_url = dashscope_native_base_url(base_url)
         self._model = model or DEFAULT_MODEL
         self._http_timeout = http_timeout
         mid = self._model.lower()
+        configured_base = (base_url or "").strip().rstrip("/")
+        self._is_qwen_3 = mid.startswith("qwen-image-3")
+        self._base_url = (
+            QWEN_IMAGE_3_BASE_URL
+            if self._is_qwen_3
+            and configured_base
+            in {
+                "",
+                DASHSCOPE_BASE_URL,
+                f"{DASHSCOPE_BASE_URL}/api/v1",
+                f"{DASHSCOPE_BASE_URL}/compatible-mode/v1",
+            }
+            else dashscope_native_base_url(base_url)
+        )
         self._is_wan = mid.startswith("wan")
         self._is_edit = "qwen-image-edit" in mid
         self._capabilities = self._resolve_caps(self._model)
@@ -145,8 +161,9 @@ class DashScopeImageBackend:
         parameters: dict = {
             "n": 1,
             "watermark": False,
-            # ArcReel 剧本 prompt 已是 LLM 精炼描述，关闭智能改写保留原意
-            "prompt_extend": False,
+            # 3.0 按官方同步接口示例开启 Direct 提示词增强；旧系列继续保留原有关闭语义，
+            # 避免改变存量模型已验证的提示词表现。
+            "prompt_extend": self._is_qwen_3,
             "size": size,
         }
         if request.seed is not None:
@@ -188,6 +205,7 @@ class DashScopeImageBackend:
             provider=PROVIDER_DASHSCOPE,
             model=self._model,
             image_uri=url,
+            image_input_count=min(len(request.reference_images), self._ref_limit),
         )
 
     def _resolve_size(self, request: ImageGenerationRequest, has_refs: bool) -> str:
@@ -226,9 +244,12 @@ class DashScopeImageBackend:
             w, h = aspect_size(aspect, short, round_to=16, max_long_edge=_EDIT_MAX_LONG_EDGE, max_ratio=_EDIT_MAX_RATIO)
             return f"{w}*{h}"
 
-        # qwen-image-2.0 融合系列
+        # qwen-image-3.0 / 2.0 融合系列。3.0 的产品默认是自动推荐，但 ArcReel
+        # 出厂约定固定 1K；2.0 保持原有 2K 默认。
         short = resolution_to_short_edge(
-            explicit or None, tier_map=IMAGE_TIER_SHORT_EDGE, default_short=_DEFAULT_SHORT_FUSION
+            explicit or None,
+            tier_map=IMAGE_TIER_SHORT_EDGE,
+            default_short=_DEFAULT_SHORT_QWEN_3 if self._is_qwen_3 else _DEFAULT_SHORT_FUSION,
         )
         w, h = aspect_size(
             aspect, short, round_to=16, max_total_pixels=_STANDARD_PIXEL_BUDGET, max_ratio=_DASHSCOPE_MAX_RATIO

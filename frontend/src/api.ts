@@ -113,6 +113,14 @@ export interface ConfigImportStatus {
   issues: string[];
 }
 
+export interface ConfigImportPreview {
+  version: number;
+  builtin_providers: number;
+  custom_providers: number;
+  system_settings: number;
+  projects_to_update: number;
+}
+
 /** asset_type → REST 路径段（与后端 spec.subdir 对齐）。 */
 const ASSET_TYPE_PATH: Record<ProjectAssetType, string> = {
   character: "characters",
@@ -882,10 +890,16 @@ class API {
     return this.request("/config-import/status", { signal: options.signal });
   }
 
-  static async importConfigFile(file: File): Promise<ConfigImportStatus> {
+  static async importConfigFile(
+    file: File,
+    options: { replaceExisting?: boolean; updateProjects?: boolean } = {},
+  ): Promise<ConfigImportStatus> {
     const formData = new FormData();
     formData.append("file", file);
-    const endpoint = "/config-import/file";
+    const query = new URLSearchParams();
+    if (options.replaceExisting) query.set("replace_existing", "true");
+    if (options.updateProjects) query.set("update_projects", "true");
+    const endpoint = `/config-import/file${query.size ? `?${query.toString()}` : ""}`;
     const response = await fetch(
       `${API_BASE}${endpoint}`,
       withAuth(endpoint, { method: "POST", body: formData })
@@ -898,6 +912,24 @@ class API {
       throw new ApiRequestError(messageFromDetail(payload.detail, "配置导入失败"), payload.diagnostic);
     }
     return response.json() as Promise<ConfigImportStatus>;
+  }
+
+  static async previewConfigFile(file: File): Promise<ConfigImportPreview> {
+    const formData = new FormData();
+    formData.append("file", file);
+    const endpoint = "/config-import/preview";
+    const response = await fetch(
+      `${API_BASE}${endpoint}`,
+      withAuth(endpoint, { method: "POST", body: formData })
+    );
+    if (!response.ok) {
+      handleUnauthorized(response);
+      const payload = await response
+        .json()
+        .catch(() => ({ detail: response.statusText })) as ErrorResponse;
+      throw new ApiRequestError(messageFromDetail(payload.detail, "配置文件校验失败"), payload.diagnostic);
+    }
+    return response.json() as Promise<ConfigImportPreview>;
   }
 
   /**

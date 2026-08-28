@@ -102,6 +102,25 @@ class TestPerImageByResolution:
         amount, _ = calculate_pricing(pricing, PricingParams(call_type="image", model="free", resolution="4K"))
         assert amount == pytest.approx(0.0)
 
+    def test_reference_image_inputs_are_charged_separately(self):
+        pricing = PerImageByResolution(
+            rates={"qwen-image-3.0-pro": {"1K": 0.25, "2K": 0.5}},
+            default_model="qwen-image-3.0-pro",
+            currency="CNY",
+            input_per_image=0.02,
+        )
+        amount, currency = calculate_pricing(
+            pricing,
+            PricingParams(
+                call_type="image",
+                model="qwen-image-3.0-pro",
+                resolution="2K",
+                image_input_count=3,
+            ),
+        )
+        assert amount == pytest.approx(0.56)
+        assert currency == "CNY"
+
 
 class TestPerImageOpenAIToken:
     pricing = PerImageOpenAIToken(

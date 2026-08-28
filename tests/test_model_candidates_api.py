@@ -4,8 +4,8 @@
 桶归属的真相源判定（registry 图片能力声明 / backend 视频能力 / endpoint 系统判定 ⊕ 覆盖）
 在 lib.capability_buckets 层单独覆盖。
 
-dashscope 被选作内置侧的样本供应商：它同时提供 i2v-only、t2v-only、r2v 三类视频模型与
-t2i+i2i、i2i-only 两类图片模型，一个 ready 供应商就能把四个桶的过滤差异全部区分出来。
+dashscope 被选作内置侧的样本供应商：它同时提供 i2v-only、t2v-only、r2v 三类视频模型；
+图片目录按产品约束只公开 qwen-image-3.0 标准版与 Pro，二者都属于 t2i+i2i 桶。
 """
 
 from __future__ import annotations
@@ -37,8 +37,8 @@ DS_I2V_ONLY = "dashscope/wan2.7-i2v"  # i2v ✓ / r2v ✗
 DS_T2V_ONLY = "dashscope/wan2.7-t2v"  # i2v ✗ / r2v ✗
 DS_R2V = "dashscope/wan2.7-r2v"  # i2v ✓ / r2v ✓
 # dashscope 图片模型
-DS_IMAGE_BOTH = "dashscope/qwen-image-2.0"
-DS_IMAGE_I2I_ONLY = "dashscope/qwen-image-edit-plus"
+DS_IMAGE_BOTH = "dashscope/qwen-image-3.0"
+DS_IMAGE_PRO = "dashscope/qwen-image-3.0-pro"
 # 无桶维度的媒体类型样本（audio 不设桶）
 DS_AUDIO = "dashscope/qwen3-tts-flash"
 
@@ -150,15 +150,16 @@ class TestBuiltinBucketFiltering:
             body = client.get(CANDIDATES_URL).json()
         assert DS_IMAGE_BOTH in body["image"]["buckets"]["t2i"]
         assert DS_IMAGE_BOTH in body["image"]["buckets"]["i2i"]
-        assert DS_IMAGE_I2I_ONLY in body["image"]["buckets"]["i2i"]
-        assert DS_IMAGE_I2I_ONLY not in body["image"]["buckets"]["t2i"]
+        assert DS_IMAGE_PRO in body["image"]["buckets"]["t2i"]
+        assert DS_IMAGE_PRO in body["image"]["buckets"]["i2i"]
+        assert body["image"]["default"] == [DS_IMAGE_BOTH, DS_IMAGE_PRO]
 
     def test_default_tier_is_unfiltered(self, make_client):
         with make_client(["dashscope"]) as client:
             body = client.get(CANDIDATES_URL).json()
         # 默认层不承诺能力：无 i2v、无 r2v 的模型照样在列
         assert DS_T2V_ONLY in body["video"]["default"]
-        assert DS_IMAGE_I2I_ONLY in body["image"]["default"]
+        assert DS_IMAGE_PRO in body["image"]["default"]
 
     def test_unconfigured_providers_absent(self, make_client):
         with make_client([]) as client:

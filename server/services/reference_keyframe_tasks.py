@@ -7,17 +7,14 @@ from typing import Any
 
 from lib.db.base import DEFAULT_USER_ID
 from lib.generation_queue_client import TaskSpec
-from lib.image_reference_snapshot import freeze_image_references
 from lib.reference_video.keyframes import find_keyframe, without_keyframe_mentions
 from lib.reference_video.request_projection import resolve_reference_assets
 from lib.resource_paths import resource_relative_path
 from server.services.generation_context import ImageLaneRequest, resolve_generation_context
 from server.services.generation_tasks import get_aspect_ratio, get_project_manager
+from server.services.qwen_image_reference_collage import prepare_qwen_image_references
 from server.services.reference_image_binding import (
     bind_resolved_assets,
-    prompt_roster,
-    provider_inputs,
-    visual_references,
 )
 
 
@@ -62,9 +59,7 @@ def reference_keyframe_task_specs(
     return specs
 
 
-def build_keyframe_prompt(
-    project: dict[str, Any], manuscript: str, description: str, reference_roster: str
-) -> str:
+def build_keyframe_prompt(project: dict[str, Any], manuscript: str, description: str, reference_roster: str) -> str:
     style = str(project.get("style") or "").strip()
     style_description = str(project.get("style_description") or "").strip()
     return (
@@ -155,21 +150,24 @@ async def execute_reference_keyframe_task(
         {"text": f"{manuscript}\n{description}", "keyframes": []},
     )
     bindings = bind_resolved_assets(reference_assets)
-    frozen = freeze_image_references(
-        provider_inputs(bindings),
-        visual_references(bindings, role="keyframe_subject"),
+    ctx = await resolve_generation_context(
+        project_name,
+        payload,
+        project=project,
+        user_id=user_id,
+        image=ImageLaneRequest(
+            capability="i2i" if bindings else "t2i",
+            stage="keyframe",
+        ),
+    )
+    prepared = await asyncio.to_thread(
+        prepare_qwen_image_references,
+        bindings,
+        provider_id=ctx.image.backend_name,
+        model_id=ctx.image.backend_model,
+        role="keyframe_subject",
     )
     try:
-        ctx = await resolve_generation_context(
-            project_name,
-            payload,
-            project=project,
-            user_id=user_id,
-            image=ImageLaneRequest(
-                capability="i2i" if frozen.reference_images else "t2i",
-                stage="keyframe",
-            ),
-        )
 
         async def _before_submit() -> None:
             await asyncio.to_thread(
@@ -183,10 +181,10 @@ async def execute_reference_keyframe_task(
 
         image_path = resource_relative_path("keyframes", resource_id)
         _output, version = await ctx.generator.generate_image_async(
-            prompt=build_keyframe_prompt(project, manuscript, description, prompt_roster(bindings)),
+            prompt=build_keyframe_prompt(project, manuscript, description, prepared.reference_roster),
             resource_type="keyframes",
             resource_id=resource_id,
-            reference_images=frozen.reference_images,
+            reference_images=prepared.reference_images,
             aspect_ratio=get_aspect_ratio(project, "storyboards"),
             image_size=ctx.image.resolution,
             before_submit=_before_submit,
@@ -194,7 +192,7 @@ async def execute_reference_keyframe_task(
             script_file=script_file,
         )
     finally:
-        await asyncio.to_thread(frozen.cleanup)
+        await asyncio.to_thread(prepared.cleanup)
 
     await asyncio.to_thread(
         _commit_keyframe_pointer,

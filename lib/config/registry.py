@@ -131,6 +131,9 @@ class ProviderMeta:
     default_concurrency: dict[str, int] = field(default_factory=dict)
     # 前端 sidebar 分组：builtin = 平台预置供应商，own = 用户自有渠道（如 Runware / Croco GPU / 火山 TTS）。
     group: str = "builtin"
+    # False = 仅保留历史项目的解析/执行兼容，不再暴露到供应商设置页或新模型候选。
+    # 供应商级隐藏与 ModelInfo.hidden 对称：后者隐藏单个型号，本字段隐藏整条供应商目录。
+    visible: bool = True
 
     def __post_init__(self) -> None:
         # default_concurrency 是注册表静态声明：拼错的 lane key 会被静默忽略、该 lane 漂回
@@ -868,7 +871,7 @@ PROVIDER_REGISTRY: dict[str, ProviderMeta] = {
             ),
         },
         default_base_url="https://api.deepseek.com",
-        group="own",
+        visible=False,
     ),
     "grok": ProviderMeta(
         display_name="Grok",
@@ -1143,14 +1146,42 @@ PROVIDER_REGISTRY: dict[str, ProviderMeta] = {
                 pricing=_dashscope_text_pricing("qwen-long", 0.5, 2.0),
             ),
             # --- image ---
+            # qwen-image-3.0 融合系列：T2I + I2I，同步接口，参考图 1~3 张。
+            # 项目默认分辨率固定 1K；backend 在 image_size=None 时也按 1K 短边兜底，
+            # 避免未落 model_settings 的调用漂回旧 2.0 系列的 2K 默认。
+            "qwen-image-3.0": ModelInfo(
+                display_name="Qwen Image 3.0",
+                media_type="image",
+                capabilities=["text_to_image", "image_to_image"],
+                default=True,
+                resolutions=["1K", "2K"],
+                pricing=PerImageByResolution(
+                    rates={"qwen-image-3.0": {"1K": 0.18, "2K": 0.18}},
+                    default_model="qwen-image-3.0",
+                    currency="CNY",
+                    input_per_image=0.02,
+                ),
+            ),
+            "qwen-image-3.0-pro": ModelInfo(
+                display_name="Qwen Image 3.0 Pro",
+                media_type="image",
+                capabilities=["text_to_image", "image_to_image"],
+                resolutions=["1K", "2K"],
+                pricing=PerImageByResolution(
+                    rates={"qwen-image-3.0-pro": {"1K": 0.25, "2K": 0.5}},
+                    default_model="qwen-image-3.0-pro",
+                    currency="CNY",
+                    input_per_image=0.02,
+                ),
+            ),
             # qwen-image-2.0 融合系列：T2I + I2I 同模型，size 用像素值 宽*高。
             "qwen-image-2.0": ModelInfo(
                 display_name="Qwen Image 2.0",
                 media_type="image",
                 capabilities=["text_to_image", "image_to_image"],
-                default=True,
                 resolutions=["2048*2048", "2688*1536", "1536*2688", "2368*1728", "1728*2368"],
                 pricing=_dashscope_image_pricing("qwen-image-2.0", 0.2),
+                hidden=True,
             ),
             "qwen-image-2.0-pro": ModelInfo(
                 display_name="Qwen Image 2.0 Pro",
@@ -1158,6 +1189,7 @@ PROVIDER_REGISTRY: dict[str, ProviderMeta] = {
                 capabilities=["text_to_image", "image_to_image"],
                 resolutions=["2048*2048", "2688*1536", "1536*2688", "2368*1728", "1728*2368"],
                 pricing=_dashscope_image_pricing("qwen-image-2.0-pro", 0.5),
+                hidden=True,
             ),
             # 编辑专用系列：仅图生图（角色一致性增强）。
             "qwen-image-edit-plus": ModelInfo(
@@ -1167,6 +1199,7 @@ PROVIDER_REGISTRY: dict[str, ProviderMeta] = {
                 # 编辑系列宽高均 ∈ [512, 2048]，像素档不超过 2048
                 resolutions=["2048*2048", "2048*1152", "1152*2048", "2048*1536", "1536*2048"],
                 pricing=_dashscope_image_pricing("qwen-image-edit-plus", 0.2),
+                hidden=True,
             ),
             "qwen-image-edit-max": ModelInfo(
                 display_name="Qwen Image Edit Max",
@@ -1174,6 +1207,7 @@ PROVIDER_REGISTRY: dict[str, ProviderMeta] = {
                 capabilities=["image_to_image"],
                 resolutions=["2048*2048", "2048*1152", "1152*2048", "2048*1536", "1536*2048"],
                 pricing=_dashscope_image_pricing("qwen-image-edit-max", 0.5),
+                hidden=True,
             ),
             # 万相 2.7 图像系列：size 用档位 1K/2K(/4K)。
             "wan2.7-image": ModelInfo(
@@ -1182,6 +1216,7 @@ PROVIDER_REGISTRY: dict[str, ProviderMeta] = {
                 capabilities=["text_to_image", "image_to_image"],
                 resolutions=["1K", "2K"],
                 pricing=_dashscope_image_pricing("wan2.7-image", 0.2),
+                hidden=True,
             ),
             "wan2.7-image-pro": ModelInfo(
                 display_name="万相 2.7 图像 Pro",
@@ -1189,6 +1224,7 @@ PROVIDER_REGISTRY: dict[str, ProviderMeta] = {
                 capabilities=["text_to_image", "image_to_image"],
                 resolutions=["1K", "2K", "4K"],
                 pricing=_dashscope_image_pricing("wan2.7-image-pro", 0.5),
+                hidden=True,
             ),
             # --- video ---
             # HappyHorse 1.1 系列：480P ¥0.45/s，720P ¥0.9/s，1080P ¥1.2/s（音频恒开）。

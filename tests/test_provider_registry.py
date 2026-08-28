@@ -33,9 +33,9 @@ def test_ark_agent_plan_registered() -> None:
             assert m.resolutions, f"{mid} missing resolutions"
 
 
-def test_deepseek_registered_as_own_text_provider() -> None:
+def test_deepseek_kept_as_hidden_legacy_text_provider() -> None:
     p = PROVIDER_REGISTRY["deepseek"]
-    assert p.group == "own"
+    assert p.visible is False
     assert p.default_base_url == "https://api.deepseek.com"
     assert p.optional_keys == ["base_url"]
     assert {mid for mid, info in p.models.items() if info.media_type == "text"} == {
@@ -44,6 +44,29 @@ def test_deepseek_registered_as_own_text_provider() -> None:
     }
     assert p.models["deepseek-v4-flash-vision-exp"].default is True
     assert "vision" in p.models["deepseek-v4-flash-vision-exp"].capabilities
+
+
+def test_dashscope_qwen_image_30_is_default_image_model() -> None:
+    from lib.pricing.types import PerImageByResolution
+
+    p = PROVIDER_REGISTRY["dashscope"]
+    model = p.models["qwen-image-3.0"]
+    assert model.media_type == "image"
+    assert model.capabilities == ["text_to_image", "image_to_image"]
+    assert model.resolutions == ["1K", "2K"]
+    assert model.default is True
+    assert isinstance(model.pricing, PerImageByResolution)
+    assert model.pricing.rates["qwen-image-3.0"] == {"1K": 0.18, "2K": 0.18}
+    assert model.pricing.input_per_image == 0.02
+    pro = p.models["qwen-image-3.0-pro"]
+    assert pro.media_type == "image"
+    assert pro.capabilities == ["text_to_image", "image_to_image"]
+    assert pro.resolutions == ["1K", "2K"]
+    assert isinstance(pro.pricing, PerImageByResolution)
+    assert pro.pricing.rates["qwen-image-3.0-pro"] == {"1K": 0.25, "2K": 0.5}
+    assert pro.pricing.input_per_image == 0.02
+    visible_images = {mid for mid, info in p.models.items() if info.media_type == "image" and not info.hidden}
+    assert visible_images == {"qwen-image-3.0", "qwen-image-3.0-pro"}
 
 
 def test_ark_agent_plan_current_text_catalog_and_legacy_visibility() -> None:

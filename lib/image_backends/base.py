@@ -101,6 +101,8 @@ class ImageGenerationResult:
     image_output_tokens: int | None = None
     text_input_tokens: int | None = None
     text_output_tokens: int | None = None
+    # 按输入图片张数计费的供应商回填实际提交数；与 token 用量分开。
+    image_input_count: int | None = None
 
 
 class ImageBackend(Protocol):

@@ -486,6 +486,8 @@ MESSAGES = {
     "config_bundle_too_large": "The configuration file must be no larger than 1 MB",
     "config_bundle_invalid_encoding": "The configuration file must use UTF-8 encoding",
     "config_bundle_missing": "ARCREEL_CONFIG_BUNDLE is missing from the configuration file",
+    "config_bundle_custom_endpoint_unknown": "The configuration contains an unsupported custom-provider endpoint",
+    "config_bundle_custom_model_invalid": "The configuration contains an invalid or duplicate custom model",
     "config_bundle_invalid": "The configuration file is damaged or malformed",
     "config_bundle_version_unsupported": "This configuration version is unsupported; export it again",
     "config_bundle_agent_missing": "This instance has no active Agent configuration to export",

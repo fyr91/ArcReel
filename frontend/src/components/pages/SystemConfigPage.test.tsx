@@ -121,14 +121,40 @@ describe("SystemConfigPage", () => {
     expect(screen.getByText("系统配置与 API 访问管理")).toBeInTheDocument();
   });
 
-  it("renders all 6 sidebar sections", () => {
+  it("renders all 7 sidebar sections", () => {
     renderPage();
     expect(screen.getByRole("button", { name: /Agent/ })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /供应商/ })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /模型选择/ })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /用量统计/ })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /API 令牌/ })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /导入环境/ })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /关于/ })).toBeInTheDocument();
+  });
+
+  it("previews and confirms an authoritative environment import", async () => {
+    vi.spyOn(API, "previewConfigFile").mockResolvedValue({
+      version: 2,
+      builtin_providers: 3,
+      custom_providers: 1,
+      system_settings: 8,
+      projects_to_update: 4,
+    });
+    const importSpy = vi.spyOn(API, "importConfigFile").mockResolvedValue({
+      enabled: false,
+      ready: true,
+      issues: [],
+    });
+
+    renderPage("/app/settings?section=environment");
+    const file = new File(["ARCREEL_CONFIG_BUNDLE=abc"], ".env.release", { type: "text/plain" });
+    fireEvent.change(screen.getByLabelText("选择本地配置文件"), { target: { files: [file] } });
+
+    expect(await screen.findByText("内置渠道 3 个，自定义渠道 1 个")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "替换环境" }));
+    await waitFor(() => {
+      expect(importSpy).toHaveBeenCalledWith(file, { replaceExisting: true, updateProjects: true });
+    });
   });
 
   it("defaults to the 供应商 section", () => {

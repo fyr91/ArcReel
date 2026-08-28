@@ -42,11 +42,13 @@ class PerImageByResolution:
     """按张计费，单价随分辨率档位变化。``rates`` 形如 ``{model: {分辨率: 每张价}}``。
 
     分辨率键以大写形态存储（``1K`` / ``2K`` / ``4K`` / ``512PX``），查表前对入参 ``.upper()``。
+    ``input_per_image`` 用于另行按参考输入图张数收费的模型；默认 0 保持普通输出按张模型语义。
     """
 
     rates: dict[str, dict[str, float]]
     default_model: str
     currency: str
+    input_per_image: float = 0.0
     kind: Literal["per_image_by_resolution"] = "per_image_by_resolution"
 
 

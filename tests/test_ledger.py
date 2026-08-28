@@ -53,6 +53,7 @@ class _ImgResult:
     image_output_tokens: int | None = None
     text_input_tokens: int | None = None
     text_output_tokens: int | None = None
+    image_input_count: int | None = None
 
 
 @dataclass
@@ -75,9 +76,10 @@ class _TextResult:
 
 class TestSettlementDispatch:
     def test_image_extracts_token_and_quality_fields(self) -> None:
-        s = _settlement_from_result("image", _ImgResult(usage_tokens=8, quality="high"))
+        s = _settlement_from_result("image", _ImgResult(usage_tokens=8, quality="high", image_input_count=3))
         assert s.usage_tokens == 8
         assert s.quality == "high"
+        assert s.image_input_count == 3
 
     def test_audio_transcribes_characters_to_usage_tokens(self) -> None:
         # 语义转写①：合成字符数 → 计费 token
@@ -109,6 +111,21 @@ class TestSettlementDispatch:
 
 
 class TestRecordBracket:
+    async def test_dashscope_image_cost_includes_reference_image_inputs(self, factory: async_sessionmaker) -> None:
+        ledger = Ledger(session_factory=factory)
+        async with ledger.record(
+            project_name="demo",
+            call_type="image",
+            model="qwen-image-3.0-pro",
+            provider="dashscope",
+            resolution="2K",
+        ) as call:
+            call.success(_ImgResult(image_input_count=3))
+
+        row = await _only_row(factory)
+        assert row.cost_amount == pytest.approx(0.56)
+        assert row.currency == "CNY"
+
     async def test_call_id_available_in_block_and_success_flips_row(self, factory: async_sessionmaker) -> None:
         ledger = Ledger(session_factory=factory)
         seen_call_id: int | None = None
