@@ -100,6 +100,29 @@
           "type": "behavior"
         }
       ]
+    },
+    {
+      "id": 6,
+      "prompt": "我只需要前5个unit，帮我自动剪辑吧",
+      "expected_output": "应触发 hyperframes-auto-edit，并把完整剪辑任务分派给使用 haiku 简单视觉模型的 hyperframes-auto-editor；不得触发 compose-video 或用裸 ffmpeg concat 代替自动剪辑",
+      "target_skills": ["hyperframes-auto-edit"],
+      "assertions": [
+        {
+          "name": "uses_hyperframes_auto_edit",
+          "text": "调用 hyperframes-auto-edit 准备并编辑 HyperFrames 时间线",
+          "type": "behavior"
+        },
+        {
+          "name": "uses_simple_vision_editor",
+          "text": "完整任务分派给固定 haiku 槽位的 hyperframes-auto-editor",
+          "type": "behavior"
+        },
+        {
+          "name": "does_not_use_compose_video",
+          "text": "不触发 compose-video，也不用裸 ffmpeg concat 模拟自动剪辑",
+          "type": "constraint"
+        }
+      ]
     }
   ]
 }

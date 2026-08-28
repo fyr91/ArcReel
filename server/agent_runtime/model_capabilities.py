@@ -10,7 +10,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
-_TEXT_ONLY_MODEL_PREFIXES = ("deepseek-",)
+_IMAGE_CAPABLE_MODEL_PREFIXES = ("deepseek-v4-flash-vision-exp",)
+_TEXT_ONLY_MODEL_PREFIXES = ("deepseek-v4-pro",)
 
 _IMAGE_SUFFIXES = frozenset(
     {
@@ -39,6 +40,8 @@ def supports_agent_image_input(model: str) -> bool:
 
     normalized = model.strip().lower()
     if not normalized:
+        return True
+    if normalized.startswith(_IMAGE_CAPABLE_MODEL_PREFIXES):
         return True
     return not normalized.startswith(_TEXT_ONLY_MODEL_PREFIXES)
 

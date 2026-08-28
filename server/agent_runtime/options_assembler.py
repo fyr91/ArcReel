@@ -35,6 +35,8 @@ logger = logging.getLogger(__name__)
 from claude_agent_sdk import ClaudeAgentOptions
 from claude_agent_sdk.types import HookMatcher, SystemPromptPreset
 
+_HYPERFRAMES_AUTO_EDITOR_AGENT_TYPE = "hyperframes-auto-editor"
+
 SDK_AVAILABLE = True
 
 
@@ -238,6 +240,10 @@ class OptionsAssembler:
         provider_env = await self.build_provider_env_overrides()
         configured_model = str(provider_env.get("ANTHROPIC_MODEL") or "")
         image_input_supported = supports_agent_image_input(configured_model)
+        haiku_model = str(provider_env.get("ANTHROPIC_DEFAULT_HAIKU_MODEL") or configured_model)
+        image_capable_agent_types = (
+            frozenset({_HYPERFRAMES_AUTO_EDITOR_AGENT_TYPE}) if supports_agent_image_input(haiku_model) else frozenset()
+        )
 
         project_cwd = self._resolve_project_cwd(project_name)
 
@@ -251,6 +257,7 @@ class OptionsAssembler:
                 self._build_file_access_hook(
                     project_cwd,
                     image_input_supported=image_input_supported,
+                    image_capable_agent_types=image_capable_agent_types,
                 ),
             ]
             if can_use_tool is not None:
@@ -424,6 +431,7 @@ class OptionsAssembler:
         project_cwd: Path,
         *,
         image_input_supported: bool = True,
+        image_capable_agent_types: frozenset[str] = frozenset(),
     ) -> Callable[..., Any]:
         """Build a PreToolUse hook callback that enforces file access control.
 
@@ -447,7 +455,10 @@ class OptionsAssembler:
             path_key = path_tools[tool_name]
             file_path = tool_input.get(path_key)
 
-            if tool_name == "Read" and not image_input_supported and is_image_path(file_path):
+            active_model_supports_images = image_input_supported or (
+                input_data.get("agent_type") in image_capable_agent_types
+            )
+            if tool_name == "Read" and not active_model_supports_images and is_image_path(file_path):
                 return {
                     "hookSpecificOutput": {
                         "hookEventName": "PreToolUse",

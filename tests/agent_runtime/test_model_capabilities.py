@@ -7,8 +7,12 @@ from server.agent_runtime.model_capabilities import is_image_path, supports_agen
 pytestmark = pytest.mark.unit
 
 
-def test_observed_deepseek_agent_family_is_text_only() -> None:
+def test_deepseek_pro_agent_model_is_text_only() -> None:
     assert not supports_agent_image_input("deepseek-v4-pro-ga-260813")
+
+
+def test_deepseek_flash_vision_agent_model_accepts_images() -> None:
+    assert supports_agent_image_input("deepseek-v4-flash-vision-exp")
 
 
 def test_unknown_custom_model_remains_image_enabled() -> None:

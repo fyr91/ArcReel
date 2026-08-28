@@ -1,11 +1,18 @@
 ---
 name: hyperframes-auto-edit
-description: 把 ArcReel 已生成的视频单元转成项目内 HyperFrames 工程，并根据剧本与用户 Instruction 自动生成剪辑方案、调整成片时间线、配置背景音乐或使用 HyperFrames Studio。
+description: ArcReel 自动剪辑专用入口。把已生成的视频片段或 Video Unit/reference_video 单元转成项目内 HyperFrames 工程，并根据剧本与用户 Instruction 做抽帧视觉分析、trim、节奏、转场、字幕与背景音乐；用户说“自动剪辑”“帮我剪一下”或点名若干 unit 成片时使用。
 ---
 
 # HyperFrames 自动剪辑
 
 使用 ArcReel 提供的工程边界接入官方 HyperFrames Studio，不复制、不修改 HyperFrames 框架。
+
+## 执行模型与分派
+
+- 主 Agent 加载本 skill 后，必须立即通过 Agent 工具把整次任务分派给 `hyperframes-auto-editor`，原样传入集号、声音版本和用户 Instruction，并等待它完成；主 Agent 不自行准备工程、抽帧、读图或修改时间线。
+- `hyperframes-auto-editor` 是固定使用 `haiku` 槽位的轻量视觉子代理。该槽位应映射到支持 vision 的简单模型，负责从媒体分析到 HTML 落盘、lint 和最终 inspect 的完整闭环。
+- 当前已经是 `hyperframes-auto-editor` 时，跳过上述分派，直接执行下文工作流，不得再次启动同名子代理。
+- 如果轻量模型未配置 vision，图片读取会被运行时拒绝。此时报告模型配置阻断，不回退到不支持视觉的复杂模型，也不以静音检测、文件名或剧本文字冒充画面审核。
 
 ## 指令来源与优先级
 
@@ -22,7 +29,7 @@ description: 把 ArcReel 已生成的视频单元转成项目内 HyperFrames 工
 
 1. 调用 `mcp__arcreel__prepare_hyperframes_episode`，传入集号和本次声音版本。如果当前集含已确认的 MiniMax H3 480P 首采，该工具会先统一完成“高清”任务，只有全部成功才物化剪辑媒体；任一失败就保留原 480P 视频并停止导入。**该工具只生成可播放的顺序拼接底稿（assembly draft），不是 AI 剪辑完成态。** HyperFrames 没有另一个“自动替你剪完”的黑盒调用；Agent 对 `index.html` 的具体 Edit/Write 才是剪辑执行。
 2. 读取工具返回的 `source_script`、`workspace.write_boundary`、`workspace.entry_file`、`workspace.editing_plan_file`，再读取工程内 `manifest.json` 与 `DESIGN.md`。
-3. 在写方案前分析真实媒体，而不只读剧本文字：
+3. 在写方案前由当前 `hyperframes-auto-editor` 分析真实媒体，而不只读剧本文字：
    - 用 `ffprobe` 读取每段真实时长、音视频流；
    - 用 `ffmpeg` 在每段开头、中部、结尾与相邻边界生成临时抽帧/联系表并查看，判断生成模型的起落稳定帧、重复动作、空拍、动作接点、构图变化与可用转场；
    - 临时分析文件只能放在 `write_boundary/.analysis/`，完成后删除，不修改 `media/` 中的素材副本；

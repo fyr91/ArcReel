@@ -1,6 +1,6 @@
 ---
 name: compose-video
-description: 把已生成的视频片段按剧本顺序拼接为单集成片，可选混入 BGM 与场景间转场。当用户说"拼成片"、"合成本集视频"或"加背景音乐"时使用。
+description: 仅用于 drama + storyboard 项目中明确要求的简单顺序拼接或 BGM 混入。用户要求自动剪辑、节奏调整、trim、字幕、Video Unit/reference_video 成片或 HyperFrames 时不得使用，必须改用 hyperframes-auto-edit。
 ---
 
 # 合成视频
@@ -9,9 +9,16 @@ description: 把已生成的视频片段按剧本顺序拼接为单集成片，�
 
 ## 适用范围（重要）
 
-- **仅 drama 模式** — 脚本读取剧本顶层 `scenes[]`；narration（`segments[]`）、ad（`shots[]`）和 reference_video（`video_units[]`）会被脚本拒绝。这些模式的成片导出请走 Web 端剪映草稿导出（ad 草稿含视频轨 + 口播文案字幕轨，导出后在剪映配音成片）
+- **仅 `content_mode=drama` 且 `generation_mode=storyboard`** — 脚本读取剧本顶层 `scenes[]`；narration（`segments[]`）、ad（`shots[]`）和 reference_video（`video_units[]`）会被脚本拒绝
 - **单集拼接** — 一次只处理一份剧本文件，不支持多集合并
 - **不实现片头片尾 / BGM 音量调节** — 这些需求请走 Web 端剪映草稿导出
+
+## 路由硬门禁
+
+- 用户说“自动剪辑”“帮我剪一下”“调整节奏”“裁掉空拍”“trim”“加字幕”“做完整成片”，或目标素材是 `video_units[]` / reference_video 时，使用 `hyperframes-auto-edit`。
+- 即使用户只点名“前几个 unit”，只要意图是剪辑而非原样拼接，也属于 HyperFrames；不得把“自动剪辑”降级解释为 concat。
+- 本 skill 的脚本拒绝当前项目结构时，原样报告不适用并切换正确入口；禁止绕过脚本后用裸 `ffmpeg concat` 模拟成片。
+- 只有用户明确要求“原样按顺序拼接/快速预览拼接”且项目满足上述结构时，才使用本 skill。
 
 ## 声音与字幕的真相源
 

@@ -37,6 +37,7 @@
 - **编辑项目 JSON**：修改剧本（`scripts/*.json`）或角色/场景/道具（`project.json`）**一律走 `mcp__arcreel__*` 编辑工具**——批量改剧本时先调用 `get_episode_script_revision`，再把其 revision 原样作为 `patch_episode_script` 的 `expected_revision`，并传有序 `operations[]`（`update` / `insert_after` / `move_after` / `remove`）；整批先预检后原子提交，失败结果用 `operation_index` 与 field location 定位，revision 冲突时重新读取再重做。分集标题、结尾钩子与导览大纲用 `patch_episode_meta` 一次批量更新，增/删/拆分镜的便捷工具也委托同一事务编辑器；角色/场景/道具用 `patch_project`。**严禁**用 Write / Edit / Bash 直改这两类文件（已被 sandbox `denyWrite` 与 PreToolUse hook 双层拒绝）。**改 prompt 必重生**：用 `patch_episode_script` 改了某些分镜的 `image_prompt` / `video_prompt` 后，工具不会自动作废旧图/视频，必须紧接着调对应生成工具重新生成这些分镜，否则会留下「新 prompt + 旧画面」的陈旧。
 - **统一视频风格**：首次项目概述分析会一并创建项目唯一的 Unified Video Style 提示词，后续概述重生不重复分析或覆盖。旧项目仍缺失时可调用 `analyze_video_style` 补建；已有配置会直接返回。用户要求无 BGM、ASMR、镜头语言、节奏或其他项目级视频方向时，用完整的新提示词调用 `update_video_style`，不要另写第二份 Agent 风格。
 - **参考生视频 unit 边界修改**：`generation_mode=reference_video` 的 drama 项目已有 step1 时，用户要求新增、删除、拆分、合并或重排 video unit，必须 dispatch `split-reference-video-units` 走「`open_step1_for_edit` → 修改草稿数组 → `validate_and_promote_draft`」，再 dispatch `create-episode-script` 重生 JSON 剧本；不要直接用 `insert_segment` / `remove_segment` / `split_segment` 改最终剧本，避免 step1 与 `scripts/episode_N.json` 分叉。
+- **成片路由**：自动剪辑、若干 Video Unit/reference_video 成片、trim、节奏、字幕或复杂转场一律使用 `hyperframes-auto-edit`；`compose-video` 仅用于 `drama + storyboard` 的明确原样拼接或 BGM 混入。技能不适用时不得绕过后直接用裸 ffmpeg concat 模拟自动剪辑。
 - **Bash 用途**：仅供通用排查与文件浏览（`ls / cat / jq / python / curl` 等），以及 `compose-video` skill 内还保留的 Python 脚本。
 - **敏感文件保护**：`.env` / `vertex_keys/` / `.system_config.json*` / `.arcreel.db*` / `.claude/settings.json` 由 sandbox profile（`filesystem.denyRead`）内核级拒绝读取，并由 PreToolUse 文件访问 hook 双重防御；代码文件（.py/.js/.ts/.tsx/.sh/.yaml/.yml/.toml）受运行时 hook 阻止写入。
 
@@ -128,8 +129,8 @@ agent session 的当前工作目录（cwd）已绑定到当前项目根，**所�
 | generate-storyboard | `/generate-storyboard` | 生成分镜图片（storyboard 模式） |
 | generate-grid | `/generate-grid` | 生成宫格分镜图（`grid_storyboard=true` 时：按 segment_break 分组的链式宫格） |
 | generate-video | `/generate-video` | 生成视频 |
-| compose-video | `/compose-video` | 单集片段串接 + 可选 BGM（仅 drama，ffmpeg） |
-| hyperframes-auto-edit | — | 将已生成视频转为项目内 HyperFrames 工程，并编辑 HTML 时间线 |
+| compose-video | `/compose-video` | drama + storyboard 原样串接或 BGM（非自动剪辑） |
+| hyperframes-auto-edit | — | Video Unit/已生成视频的 HyperFrames 自动剪辑与 HTML 时间线 |
 
 ## 快速开始
 
