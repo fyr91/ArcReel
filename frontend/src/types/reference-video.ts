@@ -298,6 +298,7 @@ export type ScriptPreviewUtterance =
 
 export interface ScriptPreviewWarning {
   key: string;
+  params?: Record<string, unknown>;
   message: string;
 }
 

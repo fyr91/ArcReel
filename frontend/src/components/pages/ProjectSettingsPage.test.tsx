@@ -598,6 +598,35 @@ describe("ProjectSettingsPage – style picker", () => {
     expect(screen.queryByRole("switch", { name: /多宫格分镜生视频/ })).not.toBeInTheDocument();
   });
 
+  it("saves a registered character as the project default H3 narrator", async () => {
+    vi.spyOn(API, "getProject").mockResolvedValue({
+      project: {
+        title: "Demo",
+        content_mode: "drama",
+        generation_mode: "reference_video",
+        narrator_character: "旁白甲",
+        episodes: [],
+        characters: { 旁白甲: { description: "" }, 旁白乙: { description: "" } },
+        clues: {},
+      },
+      scripts: {},
+    } as unknown as Awaited<ReturnType<typeof API.getProject>>);
+    const updateSpy = vi.spyOn(API, "updateProject").mockResolvedValue({
+      success: true,
+      project: { title: "Demo" } as unknown as Awaited<ReturnType<typeof API.updateProject>>["project"],
+    });
+
+    renderAt("/app/projects/demo/settings");
+    fireEvent.change(await screen.findByLabelText(/旁白角色|Narrator character/), {
+      target: { value: "旁白乙" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: /^(保存|Save)$/i }));
+
+    await waitFor(() =>
+      expect(updateSpy).toHaveBeenCalledWith("demo", expect.objectContaining({ narrator_character: "旁白乙" })),
+    );
+  });
+
   it("saves the grid assembly toggle on the storyboard route", async () => {
     vi.spyOn(API, "getProject").mockResolvedValue({
       project: {

@@ -9,6 +9,7 @@ import pytest
 
 from lib.reference_video.prompt_render import (
     render_unit_prompt,
+    render_video_unit_prompt,
     resolve_reference_audio_paths,
 )
 from lib.reference_video.script_preview import (
@@ -230,6 +231,53 @@ def test_speaker_without_reference_audio_warns_and_keeps_voice_style():
 def test_voiceover_line_renders_as_offscreen_speech():
     rendered = render_unit_prompt("镜头1：空镜。\n{多年以后他仍记得这句话。}", _project(), [], _SOFT)
     assert "画外音说 {多年以后他仍记得这句话。}" in rendered.prompt
+
+
+def test_native_default_narrator_binds_h3_audio_and_names_offscreen_speaker():
+    """裸旁白仍是画外音，但 H3 同时收到角色身份与同序的 @音频N 参考。"""
+    project = _project()
+    project["characters"]["旁白人"]["reference_audio"] = "characters/refs_audio/旁白人.wav"
+
+    rendered = render_unit_prompt(
+        "镜头1：空镜。\n{多年以后他仍记得这句话。}",
+        project,
+        [],
+        VoiceRenderSettings(
+            voice_consistency="native",
+            max_reference_audio=3,
+            audio_ready={"旁白人"},
+        ),
+        default_narrator="旁白人",
+    )
+
+    assert rendered.audio_speakers == ["旁白人"]
+    assert rendered.audio_speaker_reference_index == [None]
+    assert "<旁白人>的画外音音色参考 @音频1，声音特征：温和中年男声。" in rendered.prompt
+    assert "<旁白人>以画外音说 {多年以后他仍记得这句话。}" in rendered.prompt
+    assert rendered.warnings == []
+
+
+def test_episode_narrator_overrides_project_default_when_rendering_h3_prompt():
+    project = _project(
+        narrator_character="张三",
+        episodes=[{"episode": 1, "narrator_character": "李四"}],
+    )
+    rendered = render_video_unit_prompt(
+        {"unit_id": "E1U01", "text": "{本集由李四讲述。}"},
+        project,
+        VoiceRenderSettings(
+            voice_consistency="native",
+            max_reference_audio=3,
+            audio_ready={"张三", "李四"},
+        ),
+        request_references=[],
+        episode=1,
+    )
+
+    assert rendered.audio_speakers == ["李四"]
+    assert "<李四>的画外音音色参考 @音频1" in rendered.prompt
+    assert "<李四>以画外音说 {本集由李四讲述。}" in rendered.prompt
+    assert "<张三>" not in rendered.prompt
 
 
 def test_inline_speech_renders_the_same_official_phrasing_as_the_whole_line_form():

@@ -19,9 +19,25 @@ export interface EpisodeHeaderProps {
   units: EpisodeHeaderUnit[];
   onSaveTitle?: (next: string) => Promise<void>;
   canEditTitle?: boolean;
+  characterNames?: string[];
+  projectNarrator?: string | null;
+  episodeNarrator?: string | null;
+  onNarratorChange?: (name: string | null) => Promise<void>;
+  narratorSaving?: boolean;
 }
 
-export function EpisodeHeader({ episode, title, units, onSaveTitle, canEditTitle }: EpisodeHeaderProps) {
+export function EpisodeHeader({
+  episode,
+  title,
+  units,
+  onSaveTitle,
+  canEditTitle,
+  characterNames = [],
+  projectNarrator,
+  episodeNarrator,
+  onNarratorChange,
+  narratorSaving = false,
+}: EpisodeHeaderProps) {
   const { t } = useTranslation("dashboard");
   const epCost = useCostStore((s) => s._episodeIndex.get(episode));
 
@@ -78,6 +94,50 @@ export function EpisodeHeader({ episode, title, units, onSaveTitle, canEditTitle
           headingClassName="m-0 truncate text-[26px] font-medium leading-[1.15] tracking-tight"
           headingStyle={{ fontFamily: "var(--font-display)" }}
         />
+        {onNarratorChange && (
+          <div className="mt-2 inline-flex items-center gap-2 text-[11px] text-[var(--color-text-3)]">
+            <span>{t("episode_narrator_label")}</span>
+            <details className={`group relative ${narratorSaving ? "pointer-events-none opacity-50" : ""}`}>
+              <summary className="focus-ring max-w-[240px] cursor-pointer list-none rounded-md border border-[var(--color-hairline)] bg-[oklch(0.18_0.010_265_/_0.7)] px-2 py-1 text-[11px] text-[var(--color-text-2)] [&::-webkit-details-marker]:hidden">
+                {episodeNarrator ?? (
+                  projectNarrator
+                    ? t("episode_narrator_inherit_value", { name: projectNarrator })
+                    : t("episode_narrator_inherit_empty")
+                )}
+              </summary>
+              <div
+                aria-label={t("episode_narrator_label")}
+                className="absolute left-0 top-full z-30 mt-1 min-w-56 overflow-hidden rounded-md border border-[var(--color-hairline)] bg-[oklch(0.16_0.012_265)] p-1 shadow-xl"
+              >
+                <button
+                  type="button"
+                  onClick={(event) => {
+                    event.currentTarget.closest("details")?.removeAttribute("open");
+                    void onNarratorChange(null);
+                  }}
+                  className="focus-ring block w-full rounded px-2 py-1.5 text-left hover:bg-white/5"
+                >
+                  {projectNarrator
+                    ? t("episode_narrator_inherit_value", { name: projectNarrator })
+                    : t("episode_narrator_inherit_empty")}
+                </button>
+                {characterNames.map((name) => (
+                  <button
+                    key={name}
+                    type="button"
+                    onClick={(event) => {
+                      event.currentTarget.closest("details")?.removeAttribute("open");
+                      void onNarratorChange(name);
+                    }}
+                    className="focus-ring block w-full rounded px-2 py-1.5 text-left text-[var(--color-text-2)] hover:bg-white/5"
+                  >
+                    {name}
+                  </button>
+                ))}
+              </div>
+            </details>
+          </div>
+        )}
       </div>
 
       <div className="flex shrink-0 items-stretch gap-0">

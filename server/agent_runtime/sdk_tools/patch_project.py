@@ -19,6 +19,7 @@ from typing import Any
 from claude_agent_sdk import tool
 
 from lib.asset_types import ASSET_SPECS
+from lib.narrator import NARRATOR_CHARACTER_FIELD, set_project_narrator
 from server.agent_runtime.sdk_tools._context import ToolContext, tool_error
 
 # 资产表清单从 ASSET_SPECS 派生，新增资产类型时 schema enum 自动跟进。
@@ -38,6 +39,7 @@ _SETTINGS_WHITELIST = (
     "planning_max_episodes",
     "narration_voice",
     "narration_speed",
+    NARRATOR_CHARACTER_FIELD,
 )
 _SOURCE_LANGUAGE_VALUES = ("zh", "en", "vi")
 _POSITIVE_INT_SETTINGS = ("episode_target_units", "planning_window_chars", "planning_max_episodes")
@@ -144,6 +146,15 @@ def _apply_settings(ctx: ToolContext, settings: dict[str, Any]) -> dict[str, Any
             raise ValueError("brief 仅广告/短片项目（content_mode=ad）可用")
         for key, value in coerced.items():
             current = project.get(key)
+            if key == NARRATOR_CHARACTER_FIELD:
+                narrator = set_project_narrator(project, value)
+                if current == narrator:
+                    diagnostics[key] = ("noop", current)
+                elif narrator is None:
+                    diagnostics[key] = ("clear", None)
+                else:
+                    diagnostics[key] = ("set", narrator)
+                continue
             if value is None:
                 if key in project:
                     del project[key]
@@ -248,6 +259,12 @@ def _coerce_setting_value(key: str, value: Any) -> Any:
         if not isinstance(value, str) or not value.strip():
             raise ValueError(f"narration_voice 必须是非空字符串或 null,收到 {value!r}")
         return value
+    if key == NARRATOR_CHARACTER_FIELD:
+        if value is None:
+            return None
+        if not isinstance(value, str) or not value.strip():
+            raise ValueError(f"narrator_character 必须是非空角色名或 null,收到 {value!r}")
+        return value.strip()
     if key == "narration_speed":
         if value is None:
             return None

@@ -206,6 +206,8 @@ export function ProjectSettingsPage() {
   const [audioBackend, setAudioBackend] = useState<string>("");
   const [narrationVoice, setNarrationVoice] = useState<string>("");
   const [narrationSpeed, setNarrationSpeed] = useState<number | null>(null);
+  const [narratorCharacter, setNarratorCharacter] = useState<string>("");
+  const [characters, setCharacters] = useState<Record<string, unknown>>({});
   const [textDefault, setTextDefault] = useState<string>("");
   const [textSimple, setTextSimple] = useState<string>("");
   const [textComplex, setTextComplex] = useState<string>("");
@@ -255,6 +257,7 @@ export function ProjectSettingsPage() {
     imageBackendAsset: "", imageBackendReference: "", imageBackendStoryboard: "", imageBackendKeyframe: "",
     audioOverride: null as boolean | null,
     audioBackend: "", narrationVoice: "", narrationSpeed: null as number | null,
+    narratorCharacter: "",
     textDefault: "", textSimple: "", textComplex: "",
     aspectRatio: "", gridStoryboard: false,
     defaultDuration: null as number | null,
@@ -344,6 +347,7 @@ export function ProjectSettingsPage() {
       const nv = (project.narration_voice as string | undefined) ?? "";
       const rawSpeed = project.narration_speed;
       const ns = typeof rawSpeed === "number" && Number.isFinite(rawSpeed) ? rawSpeed : null;
+      const narrator = typeof project.narrator_character === "string" ? project.narrator_character : "";
       const td = (project.default_text_backend as string | undefined) ?? "";
       const tsi = (project.text_backend_simple as string | undefined) ?? "";
       const tcx = (project.text_backend_complex as string | undefined) ?? "";
@@ -373,6 +377,12 @@ export function ProjectSettingsPage() {
       setAudioBackend(ab);
       setNarrationVoice(nv);
       setNarrationSpeed(ns);
+      setNarratorCharacter(narrator);
+      setCharacters(
+        project.characters && typeof project.characters === "object"
+          ? project.characters as Record<string, unknown>
+          : {},
+      );
       setTextDefault(td);
       setTextSimple(tsi);
       setTextComplex(tcx);
@@ -427,6 +437,7 @@ export function ProjectSettingsPage() {
         imageBackendStoryboard: ibStoryboard, imageBackendKeyframe: ibKeyframe,
         audioOverride: ao,
         audioBackend: ab, narrationVoice: nv, narrationSpeed: ns,
+        narratorCharacter: narrator,
         textDefault: td, textSimple: tsi, textComplex: tcx,
         aspectRatio: ar, gridStoryboard: grid, defaultDuration: dd, speechRate: sr,
         videoResolution: vRes, imageResolution: iRes,
@@ -491,6 +502,7 @@ export function ProjectSettingsPage() {
     audioBackend !== initialRef.current.audioBackend ||
     narrationVoice !== initialRef.current.narrationVoice ||
     narrationSpeed !== initialRef.current.narrationSpeed ||
+    narratorCharacter !== initialRef.current.narratorCharacter ||
     textDefault !== initialRef.current.textDefault ||
     textSimple !== initialRef.current.textSimple ||
     textComplex !== initialRef.current.textComplex ||
@@ -680,6 +692,9 @@ export function ProjectSettingsPage() {
 
   // 宫格是分镜路线内的装配选项；参考路线与不支持宫格的 ad 项目下既不呈现也不参与保存
   const gridToggleVisible = generationRoute === "storyboard" && contentMode !== "ad";
+  const nativeNarratorVisible = generationRoute === "reference_video" && (
+    contentMode === "drama" || contentMode === "course"
+  );
 
   const handleSave = useCallback(async () => {
     setSaving(true);
@@ -715,6 +730,7 @@ export function ProjectSettingsPage() {
         audio_backend: audioBackend || null,
         narration_voice: trimmedVoice || null,
         narration_speed: narrationSpeed,
+        ...(nativeNarratorVisible ? { narrator_character: narratorCharacter || null } : {}),
         // null 即清除项目级覆盖、回退语言默认
         speech_rate_units_per_second: speechRate,
         default_text_backend: textDefault || null,
@@ -735,6 +751,7 @@ export function ProjectSettingsPage() {
         imageBackendDefault, imageBackendT2I, imageBackendI2I, audioOverride,
         imageBackendAsset, imageBackendReference, imageBackendStoryboard, imageBackendKeyframe,
         audioBackend, narrationVoice: trimmedVoice, narrationSpeed,
+        narratorCharacter,
         textDefault, textSimple, textComplex,
         aspectRatio, gridStoryboard, defaultDuration, speechRate,
         videoResolution, imageResolution,
@@ -748,7 +765,7 @@ export function ProjectSettingsPage() {
     } finally {
       setSaving(false);
     }
-  }, [modelSettings, videoBackend, videoProviderI2V, videoProviderR2V, imageBackendDefault, imageBackendT2I, imageBackendI2I, imageBackendAsset, imageBackendReference, imageBackendStoryboard, imageBackendKeyframe, audioOverride, audioBackend, narrationVoice, narrationSpeed, textDefault, textSimple, textComplex, aspectRatio, generationRoute, gridStoryboard, gridToggleVisible, defaultDuration, speechRate, contentMode, videoResolution, imageResolution, projectName, t, globalDefaults]);
+  }, [modelSettings, videoBackend, videoProviderI2V, videoProviderR2V, imageBackendDefault, imageBackendT2I, imageBackendI2I, imageBackendAsset, imageBackendReference, imageBackendStoryboard, imageBackendKeyframe, audioOverride, audioBackend, narrationVoice, narrationSpeed, narratorCharacter, nativeNarratorVisible, textDefault, textSimple, textComplex, aspectRatio, generationRoute, gridStoryboard, gridToggleVisible, defaultDuration, speechRate, contentMode, videoResolution, imageResolution, projectName, t, globalDefaults]);
 
   const handleResetAgentProfile = useCallback(async () => {
     if (profileResetProject !== projectName) {
@@ -1209,6 +1226,30 @@ export function ProjectSettingsPage() {
                   sourceLanguage={sourceLanguage}
                 />
               </SectionCard>
+
+              {nativeNarratorVisible && (
+                <SectionCard kicker="Native Voice" title={t("default_narrator_title")}>
+                  <label htmlFor="project-default-narrator" className="block">
+                    <span className="mb-1.5 block text-[12px] font-medium text-text-2">
+                      {t("default_narrator_label")}
+                    </span>
+                    <select
+                      id="project-default-narrator"
+                      value={narratorCharacter}
+                      onChange={(event) => setNarratorCharacter(event.target.value)}
+                      className="w-full rounded-[8px] border border-hairline bg-bg-grad-a/55 px-3 py-2 text-[12.5px] text-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+                    >
+                      <option value="">{t("default_narrator_none")}</option>
+                      {Object.keys(characters).sort().map((name) => (
+                        <option key={name} value={name}>{name}</option>
+                      ))}
+                    </select>
+                  </label>
+                  <p className="mt-1.5 text-[11px] leading-relaxed text-text-4">
+                    {t("default_narrator_hint")}
+                  </p>
+                </SectionCard>
+              )}
 
               {/* 旁白配音（TTS）：仅 narration 模式消费——TTS 绑定 segment.novel_text，drama/ad 无该字段，
                   故与两个画布的批量旁白按钮（contentMode === "narration"）同口径门控，避免对无效模式展示配音卡 */}

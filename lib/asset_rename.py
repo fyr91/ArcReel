@@ -118,6 +118,10 @@ def rewrite_payload_references(payload: dict, asset_type: str, old_name: str, ne
                     node[key] = new_name
                     count += 1
                     continue
+                if key == "narrator_character" and asset_type == "character" and _matches(value):
+                    node[key] = new_name
+                    count += 1
+                    continue
                 if key in ("shots", "units", "video_units") and isinstance(value, list):
                     # 参考路线的 mention 落在 unit 正文（``video_units[].text``，隔离草稿里是
                     # ``units[].text``）；ad 分镜的 shot 还带引用数组与 video_prompt.dialogue，

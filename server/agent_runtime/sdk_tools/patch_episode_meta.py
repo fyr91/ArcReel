@@ -16,6 +16,7 @@ def patch_episode_meta_tool(ctx: ToolContext):
         "批量编辑分集元数据，与 Web API 共用同一业务操作；正式文稿存在时原子镜像到 episodes[]，"
         "课程分集尚无正式文稿时也可单独修改 title。"
         f"updates 白名单字段 {list(EDITABLE_EPISODE_METADATA_FIELDS)}：title 为非空字符串；hook 为字符串或 null；"
+        "narrator_character 为已登记角色名，null 表示清除本集覆盖并继承项目默认；"
         "outline 为 {story_beats: string[], next_episode_teaser: string} 或 null。一次调用可同时修改多个字段；"
         "分镜内部字段仍使用 patch_episode_script。",
         {
@@ -27,6 +28,10 @@ def patch_episode_meta_tool(ctx: ToolContext):
                     "properties": {
                         "title": {"type": "string", "description": "非空分集标题"},
                         "hook": {"type": ["string", "null"], "description": "本集结尾钩子；null 表示清除"},
+                        "narrator_character": {
+                            "type": ["string", "null"],
+                            "description": "本集默认旁白角色；null 表示继承项目默认",
+                        },
                         "outline": {
                             "type": ["object", "null"],
                             "description": "本集导览；null 表示清除",

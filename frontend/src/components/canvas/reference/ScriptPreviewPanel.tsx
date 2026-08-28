@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
+import { useLocation } from "wouter";
 import { AlertTriangle, Loader2 } from "lucide-react";
 import { API } from "@/api";
 import { ScriptHighlight } from "@/components/shared/ScriptHighlight";
@@ -7,6 +8,8 @@ import { assetColor } from "./asset-colors";
 import type { MentionLookup } from "@/hooks/useUnitPromptHighlight";
 import { errMsg } from "@/utils/async";
 import type { ScriptPreview } from "@/types";
+import { projectCharactersNavigationTarget } from "@/app-routes";
+import { useAppStore } from "@/stores/app-store";
 
 /** 停止输入到发起解析请求的等待时长（ms）：解析是纯读，节流只为省往返。 */
 const DEBOUNCE_MS = 400;
@@ -38,6 +41,7 @@ export interface ScriptPreviewPanelProps {
  */
 export function ScriptPreviewPanel({ projectName, episode, unitId, text, lookup }: ScriptPreviewPanelProps) {
   const { t } = useTranslation("dashboard");
+  const [, navigate] = useLocation();
   const [preview, setPreview] = useState<ScriptPreview | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -96,6 +100,15 @@ export function ScriptPreviewPanel({ projectName, episode, unitId, text, lookup 
   );
 
   const warnings = preview?.warnings ?? [];
+  const defineVoice = (name: string) => {
+    const route = projectCharactersNavigationTarget(projectName);
+    useAppStore.getState().triggerScrollTo({
+      type: "character_voice",
+      id: name,
+      route,
+    });
+    navigate(route);
+  };
   const stale =
     appliedFor !== null &&
     (appliedFor.projectName !== projectName ||
@@ -132,12 +145,26 @@ export function ScriptPreviewPanel({ projectName, episode, unitId, text, lookup 
             stale ? "opacity-45" : ""
           }`}
         >
-          {warnings.map((w, i) => (
-            <li key={`${w.key}-${i}`} className="flex gap-1.5 text-[11.5px] leading-relaxed text-amber-200">
+          {warnings.map((w, i) => {
+            const characterName = typeof w.params?.name === "string" ? w.params.name : null;
+            const canDefineVoice = characterName !== null && (
+              w.key === "ref_warn_speaker_without_audio" ||
+              w.key === "ref_warn_speaker_audio_unavailable"
+            );
+            return <li key={`${w.key}-${i}`} className="flex gap-1.5 text-[11.5px] leading-relaxed text-amber-200">
               <AlertTriangle className="mt-0.5 h-3 w-3 shrink-0" aria-hidden="true" />
-              <span>{w.message}</span>
-            </li>
-          ))}
+              <span className="min-w-0 flex-1">{w.message}</span>
+              {canDefineVoice && (
+                <button
+                  type="button"
+                  onClick={() => defineVoice(characterName)}
+                  className="focus-ring shrink-0 rounded px-1.5 py-0.5 font-medium text-amber-100 underline decoration-amber-300/50 underline-offset-2 hover:bg-amber-400/10"
+                >
+                  {t("script_preview_define_voice")}
+                </button>
+              )}
+            </li>;
+          })}
         </ul>
       )}
 

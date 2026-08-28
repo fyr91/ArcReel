@@ -93,6 +93,7 @@ export interface WorkspaceFocusTarget {
   request_id: string;
   type:
     | "character"
+    | "character_voice"
     | "scene"
     | "prop"
     | "product"

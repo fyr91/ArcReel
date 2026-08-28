@@ -33,6 +33,7 @@ export function CharactersPage({ projectName, characters, onSaveCharacter, onGen
   const [picking, setPicking] = useState(false);
 
   useScrollTarget("character");
+  useScrollTarget("character_voice");
 
   const entries = Object.entries(characters);
 

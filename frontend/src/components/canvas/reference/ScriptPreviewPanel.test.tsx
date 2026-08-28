@@ -1,9 +1,10 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { ScriptPreviewPanel } from "./ScriptPreviewPanel";
 import { API } from "@/api";
 import type { MentionLookup } from "@/hooks/useUnitPromptHighlight";
 import type { ScriptPreview } from "@/types";
+import { useAppStore } from "@/stores/app-store";
 
 const LOOKUP: MentionLookup = { 张三: "character", 酒馆: "scene" };
 
@@ -26,6 +27,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  useAppStore.getState().clearScrollTarget();
   vi.useRealTimers();
   vi.restoreAllMocks();
 });
@@ -38,7 +40,13 @@ describe("ScriptPreviewPanel", () => {
           { index: 1, kind: "dialogue", speaker: "张三", text: "我来了" },
           { index: 2, kind: "voiceover", speaker: null, text: "那年冬天格外冷" },
         ],
-        warnings: [{ key: "ref_warn_speaker_without_audio", message: "角色「张三」未设置参考音频" }],
+        warnings: [
+          {
+            key: "ref_warn_speaker_without_audio",
+            params: { name: "张三" },
+            message: "角色「张三」未设置参考音频",
+          },
+        ],
       }),
     );
 
@@ -48,6 +56,31 @@ describe("ScriptPreviewPanel", () => {
     await waitFor(() => expect(spy).toHaveBeenCalledTimes(1));
     expect(await screen.findByText("1 句台词 · 1 段画外音")).toBeTruthy();
     expect(screen.getByText("角色「张三」未设置参考音频")).toBeTruthy();
+  });
+
+  it("offers a direct voice-definition target for missing character audio", async () => {
+    vi.spyOn(API, "previewReferenceScript").mockResolvedValue(
+      mkPreview({
+        warnings: [
+          {
+            key: "ref_warn_speaker_without_audio",
+            params: { name: "张三" },
+            message: "角色「张三」未设置参考音频",
+          },
+        ],
+      }),
+    );
+
+    renderPanel("@[张三]：{我来了}");
+    await vi.advanceTimersByTimeAsync(500);
+    fireEvent.click(await screen.findByRole("button", { name: /去定义音色|Set voice/ }));
+
+    expect(useAppStore.getState().scrollTarget).toMatchObject({
+      type: "character_voice",
+      id: "张三",
+      route: "~/app/projects/demo/characters",
+      highlight: true,
+    });
   });
 
   // 未登记的 `@[名称]` 只是提示：正文照旧可保存、可生成，面板不给任何阻断信号。

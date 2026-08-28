@@ -265,6 +265,20 @@ def test_warn_speaker_without_reference_audio_only_on_native():
     assert keys(soft) == []
 
 
+def test_default_narrator_without_reference_audio_warns_without_blocking_voiceover():
+    preview = build_script_preview(
+        "开场。\n{那年冬天格外冷}",
+        PROJECT,
+        VoiceRenderSettings(voice_consistency="native", max_reference_audio=3),
+        default_narrator="李四",
+    )
+
+    assert [(item.kind, item.speaker, item.text) for item in preview.utterances] == [
+        ("voiceover", None, "那年冬天格外冷")
+    ]
+    assert preview.warnings == [{"key": WARN_SPEAKER_WITHOUT_AUDIO, "params": {"name": "李四"}}]
+
+
 def test_warn_speaker_audio_unavailable_distinguished_from_unset():
     """``audio_ready`` 非 None 时，字段有值但音频不可用（不在 audio_ready 内）与字段未设置
     要发不同的 warning：前者字段已填好、该去查它指向的音频，后者该去角色设置里补音频。"""

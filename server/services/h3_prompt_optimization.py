@@ -347,6 +347,7 @@ class H3PromptOptimizationService:
             project,
             voice_settings,
             request_references=[entry.reference for entry in projection.request_assets],
+            episode=episode,
         )
         audio_names = rendered.audio_speakers
         audio_paths = tuple(resolved_audio[name] for name in audio_names)

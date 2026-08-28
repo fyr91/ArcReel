@@ -5,10 +5,11 @@ from __future__ import annotations
 import copy
 from typing import Any
 
+from lib.narrator import NARRATOR_CHARACTER_FIELD, normalize_narrator_character, set_episode_narrator
 from lib.path_safety import safe_join
 from lib.project_manager import EpisodeScriptReboundError, ProjectManager
 
-EDITABLE_EPISODE_METADATA_FIELDS = ("title", "hook", "outline")
+EDITABLE_EPISODE_METADATA_FIELDS = ("title", "hook", "outline", NARRATOR_CHARACTER_FIELD)
 _OUTLINE_FIELDS = ("story_beats", "next_episode_teaser")
 
 
@@ -61,6 +62,12 @@ def normalize_episode_metadata_updates(updates: dict[str, Any]) -> dict[str, Any
                 normalized_outline["next_episode_teaser"] = teaser.strip()
             normalized["outline"] = normalized_outline
 
+    if NARRATOR_CHARACTER_FIELD in updates:
+        narrator = updates[NARRATOR_CHARACTER_FIELD]
+        if narrator is not None and (not isinstance(narrator, str) or not narrator.strip()):
+            raise ValueError("narrator_character 必须是非空角色名或 null")
+        normalized[NARRATOR_CHARACTER_FIELD] = narrator.strip() if isinstance(narrator, str) else None
+
     return normalized
 
 
@@ -81,6 +88,11 @@ def update_episode_metadata(
         meta = next((entry for entry in episodes if entry.get("episode") == episode), None)
         if meta is None or not meta.get("script_file"):
             raise EpisodeMetadataNotFoundError(f"第 {episode} 集不存在或尚无正式文稿")
+        if NARRATOR_CHARACTER_FIELD in normalized:
+            normalized[NARRATOR_CHARACTER_FIELD] = normalize_narrator_character(
+                project,
+                normalized[NARRATOR_CHARACTER_FIELD],
+            )
         return str(meta["script_file"])
 
     try:
@@ -91,7 +103,7 @@ def update_episode_metadata(
         # 课程分集在解析完成、正式 step2 文稿尚未生成时，title 的真相源只能暂存于
         # episodes[] 导览条目。脚本一旦存在仍必须走上面的正式文稿 → 镜像链路；hook / outline
         # 也从不允许在无文稿状态下制造第二份真相源。
-        if set(normalized) != {"title"}:
+        if not set(normalized) <= {"title", NARRATOR_CHARACTER_FIELD}:
             raise
         load_readonly = getattr(manager, "load_project_readonly", manager.load_project)
         project = load_readonly(project_name)
@@ -104,6 +116,11 @@ def update_episode_metadata(
             raise EpisodeMetadataNotFoundError(f"第 {episode} 集不存在") from missing_script
         if project.get("content_mode") != "course" or not meta.get("script_file"):
             raise
+        if NARRATOR_CHARACTER_FIELD in normalized:
+            normalized[NARRATOR_CHARACTER_FIELD] = normalize_narrator_character(
+                project,
+                normalized[NARRATOR_CHARACTER_FIELD],
+            )
 
         norm = manager.normalize_script_filename(str(meta["script_file"]))
         script_path = safe_join(manager.get_project_path(project_name) / "scripts", norm)
@@ -126,8 +143,16 @@ def update_episode_metadata(
                     raise EpisodeScriptReboundError(f"episode {episode} script binding changed")
                 if script_path.is_file():
                     raise EpisodeScriptReboundError(f"episode {episode} script appeared during title update")
-                current_meta["title"] = normalized["title"]
-                captured.update(episode=episode, title=normalized["title"])
+                captured["episode"] = episode
+                if "title" in normalized:
+                    current_meta["title"] = normalized["title"]
+                    captured["title"] = normalized["title"]
+                if NARRATOR_CHARACTER_FIELD in normalized:
+                    captured[NARRATOR_CHARACTER_FIELD] = set_episode_narrator(
+                        current,
+                        episode,
+                        normalized[NARRATOR_CHARACTER_FIELD],
+                    )
 
             manager.update_project(project_name, _mutate)
 

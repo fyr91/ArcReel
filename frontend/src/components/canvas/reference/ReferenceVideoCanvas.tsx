@@ -227,7 +227,26 @@ export function ReferenceVideoCanvas({
   const [h3PromptDrafts, setH3PromptDrafts] = useState<Record<string, string>>({});
   const [editingH3PromptKey, setEditingH3PromptKey] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  const [narratorSaving, setNarratorSaving] = useState(false);
   const [h3PromptSaving, setH3PromptSaving] = useState(false);
+
+  const narratorConfigVisible = project?.content_mode === "drama" || project?.content_mode === "course";
+  const episodeNarrator = project?.episodes.find((item) => item.episode === episode)?.narrator_character ?? null;
+  const handleNarratorChange = useCallback(async (name: string | null) => {
+    setNarratorSaving(true);
+    try {
+      await API.updateEpisode(projectName, episode, { narrator_character: name });
+      const refreshResult = await useProjectsStore.getState().refreshProject(projectName, {
+        onError: (error) => toastError(error),
+      });
+      if (refreshResult !== "success") return;
+      useAppStore.getState().pushToast(t("episode_narrator_saved"), "success");
+    } catch (error) {
+      toastError(error);
+    } finally {
+      setNarratorSaving(false);
+    }
+  }, [episode, projectName, t]);
 
   // resource（=unit）→ 最新任务行。「最新行胜出」下沉到 store selector：
   // store 不保证 tasks 顺序（SSE 原位 upsert），重试的新行不被旧失败行盖住。
@@ -1170,6 +1189,11 @@ export function ReferenceVideoCanvas({
         units={units}
         onSaveTitle={onSaveTitle}
         canEditTitle={canEditTitle}
+        characterNames={narratorConfigVisible ? Object.keys(project?.characters ?? {}).sort() : []}
+        projectNarrator={project?.narrator_character}
+        episodeNarrator={episodeNarrator}
+        onNarratorChange={narratorConfigVisible ? handleNarratorChange : undefined}
+        narratorSaving={narratorSaving}
       />
 
       {/* Tabs + request-local generation controls */}

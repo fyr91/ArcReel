@@ -119,6 +119,7 @@ def _render_unit_prompt(
     settings: VoiceRenderSettings,
     *,
     request_references: list[ReferenceResource] | None = None,
+    episode: int | None = None,
 ) -> RenderedUnitPrompt:
     """把 unit 的书写文稿渲染成三段论 backend prompt（见 ``lib.reference_video.prompt_render``）。
 
@@ -138,6 +139,7 @@ def _render_unit_prompt(
         project,
         settings,
         request_references=request_references,
+        episode=episode,
     )
 
 
@@ -584,6 +586,7 @@ async def execute_reference_video_task(
             unit=unit,
             request_assets=constrained_entries,
             candidate=candidate,
+            episode=script_input.episode,
         )
         return (
             canonical_json_digest({"visual_basis_digest": digest, "video_dependency": dependency_evidence})
@@ -693,6 +696,7 @@ async def execute_reference_video_task(
         project,
         voice_settings,
         request_references=[entry.reference for entry in constrained_entries],
+        episode=script_input.episode,
     )
     rendered_prompt = rendered.prompt
     if is_minimax_h3_model(candidate.model_id):

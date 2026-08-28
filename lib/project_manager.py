@@ -1185,11 +1185,17 @@ class ProjectManager:
         # 同步核心元数据（不包含统计字段，统计字段由项目摘要读时计算）
         episode_entry["title"] = episode_title
         episode_entry["script_file"] = script_file
-        for field in ("hook", "outline"):
+        for field in ("hook", "outline", "narrator_character"):
             if field in script:
                 value = script[field]
                 if value is None:
                     episode_entry.pop(field, None)
+                elif field == "narrator_character":
+                    narrator_key = resolve_asset_key(project.get("characters"), value)
+                    if narrator_key is None:
+                        episode_entry.pop(field, None)
+                    else:
+                        episode_entry[field] = narrator_key
                 else:
                     episode_entry[field] = copy.deepcopy(value)
         episodes.sort(key=lambda x: x["episode"])
@@ -1911,9 +1917,7 @@ class ProjectManager:
                                 episodes.remove(episode)
                             workflow = project.get("workflow")
                             per_episode = (
-                                workflow.get("asset_inventory_by_episode")
-                                if isinstance(workflow, dict)
-                                else None
+                                workflow.get("asset_inventory_by_episode") if isinstance(workflow, dict) else None
                             )
                             if isinstance(per_episode, dict):
                                 per_episode.pop(str(episode_num), None)
@@ -1955,11 +1959,7 @@ class ProjectManager:
                         if episode_number == 1:
                             project.pop("overview", None)
                         workflow = project.get("workflow")
-                        per_episode = (
-                            workflow.get("asset_inventory_by_episode")
-                            if isinstance(workflow, dict)
-                            else None
-                        )
+                        per_episode = workflow.get("asset_inventory_by_episode") if isinstance(workflow, dict) else None
                         if isinstance(per_episode, dict):
                             per_episode.pop(str(episode_number), None)
                         changed = True
@@ -2756,6 +2756,7 @@ class ProjectManager:
         """
 
         from lib.artifact_activation import forget_current_resource_artifact
+        from lib.narrator import clear_narrator_references
 
         asset_type = self._resolve_asset_type(table)
         spec = ASSET_SPECS[asset_type]
@@ -2769,6 +2770,8 @@ class ProjectManager:
             if not isinstance(bucket, dict) or key is None:
                 raise KeyError(f"{spec.label_zh} '{name}' 不存在")
             deleted_name = key
+            if asset_type == "character":
+                clear_narrator_references(project, key)
             del bucket[key]
 
         def _forget_claim(_project_file: Path) -> None:
@@ -2835,6 +2838,7 @@ class ProjectManager:
         """
         # data_validator 在模块级 import 本模块，惰性 import 破环（与 upsert_assets 同理）。
         from lib.data_validator import DataValidator
+        from lib.narrator import rename_narrator_references
         from lib.version_manager import VersionManager
 
         asset_type = self._resolve_asset_type(table)
@@ -2981,6 +2985,8 @@ class ProjectManager:
             entry = rekey_equivalent_entries(mutated[spec.bucket_key], old_key, new_clean)
             if isinstance(entry, dict):
                 rewrite_entry_paths(entry, spec, old_key, new_clean)
+            if asset_type == "character":
+                references += rename_narrator_references(mutated, old_key, new_clean)
             if self._requires_unique_asset_namespace(mutated):
                 ensure_project_asset_namespace(mutated)
             after_errors = _rename_agnostic_errors(validator.validate_project_payload(mutated), old_key, new_clean)

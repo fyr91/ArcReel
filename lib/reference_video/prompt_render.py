@@ -25,6 +25,7 @@ from typing import Any
 
 from lib.asset_types import BUCKET_KEY, asset_name_comparison_key, normalize_asset_bucket
 from lib.audio_utils import resolve_audio_ref_path
+from lib.narrator import resolve_effective_narrator
 from lib.prompt_builders import append_product_fidelity_tail
 from lib.prompt_utils import normalize_style
 from lib.reference_video.keyframes import KEYFRAME_MENTION_PREFIX
@@ -100,6 +101,7 @@ def render_unit_prompt(
     settings: VoiceRenderSettings,
     *,
     style: str | None = None,
+    default_narrator: str | None = None,
 ) -> RenderedUnitPrompt:
     """把一个 unit 的书写文稿渲染成三段论 backend prompt。
 
@@ -146,6 +148,7 @@ def render_unit_prompt(
         characters,
         settings,
         speakers_with_reference_image=set(character_image_no),
+        default_narrator=default_narrator,
     )
     warnings.extend(bindings.warnings)
 
@@ -168,8 +171,9 @@ def render_unit_prompt(
             audio_no,
             characters,
             settings,
+            narrator_speaker=bindings.narrator_speaker,
         ),
-        _render_segment_two(text, subjects, characters),
+        _render_segment_two(text, subjects, characters, default_narrator=bindings.narrator_speaker),
         _render_segment_three(sum(1 for ref in references if ref.type == "character"), style),
     ]
     prompt = "\n\n".join(seg for seg in segments if seg)
@@ -187,6 +191,7 @@ def render_video_unit_prompt(
     settings: VoiceRenderSettings,
     *,
     request_references: list[ReferenceResource] | None = None,
+    episode: int | None = None,
 ) -> RenderedUnitPrompt:
     """Render the exact reference-video prompt from one current projected unit."""
 
@@ -203,6 +208,7 @@ def render_video_unit_prompt(
         references,
         settings,
         style=project.get("style"),
+        default_narrator=resolve_effective_narrator(project, episode),
     )
     product_names = list(dict.fromkeys(reference.name for reference in references if reference.type == "product"))
     return replace(rendered, prompt=append_product_fidelity_tail(rendered.prompt, product_names))
@@ -217,10 +223,12 @@ def _render_voice_declarations(
     audio_no: dict[str, int],
     characters: dict,
     settings: VoiceRenderSettings,
+    *,
+    narrator_speaker: str | None = None,
 ) -> list[str]:
     """声音声明行：``<X>的台词音色参考 @音频N，声音特征：…``。剧集与 ad 路径共用——两者的
     主体绑定行统一使用 mention 派生的 ``ReferenceResource``；声音声明只认「已登记的
-    dialogue speaker」，与主体绑定行解耦，可整段复用。
+    dialogue speaker / 默认旁白角色」，与主体绑定行解耦，可整段复用。
 
     两条无声路径（``settings.is_silent``：模型不产音的 C 类、本集关闭音频）都不注入声音声明；
     听得到声音的 A/B 类均注入声音特征——官方建议音色还原不佳时补描述。台词渲染不受影响，
@@ -234,8 +242,9 @@ def _render_voice_declarations(
     lines: list[str] = []
     for name in speakers:
         parts: list[str] = []
+        voice_kind = "画外音" if name == narrator_speaker else "台词"
         if name in audio_no:
-            parts.append(f"台词音色参考 @音频{audio_no[name]}")
+            parts.append(f"{voice_kind}音色参考 @音频{audio_no[name]}")
         char_data = characters.get(name)
         voice_style = str((char_data.get("voice_style") if isinstance(char_data, dict) else None) or "").strip()
         if voice_style:
@@ -267,6 +276,8 @@ def _render_segment_one(
     audio_no: dict[str, int],
     characters: dict,
     settings: VoiceRenderSettings,
+    *,
+    narrator_speaker: str | None = None,
 ) -> str:
     """主体绑定 + 声音声明。
 
@@ -282,11 +293,25 @@ def _render_segment_one(
     bindings = "、".join(f"<{label}>@图片{i}" for i, label in enumerate(labels, start=1) if label)
     if bindings:
         lines.append(bindings + "。")
-    lines.extend(_render_voice_declarations(speakers, audio_no, characters, settings))
+    lines.extend(
+        _render_voice_declarations(
+            speakers,
+            audio_no,
+            characters,
+            settings,
+            narrator_speaker=narrator_speaker,
+        )
+    )
     return "\n".join(lines)
 
 
-def _render_segment_two(text: str, subjects: Collection[str], characters: dict) -> str:
+def _render_segment_two(
+    text: str,
+    subjects: Collection[str],
+    characters: dict,
+    *,
+    default_narrator: str | None = None,
+) -> str:
     """单元正文段：画面描述做 mention 替换，发声记号就地重组为官方句式。
 
     ``subjects`` 是已登记的 mention 名（未经能力上限裁剪）——主体记号 ``<X>`` 表达「画面里的
@@ -306,7 +331,11 @@ def _render_segment_two(text: str, subjects: Collection[str], characters: dict) 
             if isinstance(part, str):
                 pieces.append(render_mentions_as_subjects(part, subjects))
             elif not part.speaker:
-                pieces.append(f"画外音说 {{{part.text}}}")
+                pieces.append(
+                    f"<{default_narrator}>以画外音说 {{{part.text}}}"
+                    if default_narrator
+                    else f"画外音说 {{{part.text}}}"
+                )
             elif part.speaker in characters:
                 pieces.append(f"<{part.speaker}>说 {{{part.text}}}")
             else:

@@ -44,6 +44,7 @@ from lib.narration_delivery import (
     video_request_reuses_current_visual,
     video_workflow_uses_narration_delivery,
 )
+from lib.narrator import resolve_effective_narrator
 from lib.path_safety import PathTraversalError, safe_join
 from lib.project_change_hints import project_change_source
 from lib.project_manager import get_project_manager, is_reference_video_project
@@ -1215,13 +1216,16 @@ async def preview_script(
         voice_settings,
         max_reference_images=caps.get("max_reference_images"),
         unit=unit,
+        default_narrator=resolve_effective_narrator(project, episode),
     )
     return {
         "utterances": [
             {"index": index, "kind": u.kind, "speaker": u.speaker, "text": u.text}
             for index, u in enumerate(preview.utterances, start=1)
         ],
-        "warnings": [{"key": w["key"], "message": _t(w["key"], **w["params"])} for w in preview.warnings],
+        "warnings": [
+            {"key": w["key"], "params": w["params"], "message": _t(w["key"], **w["params"])} for w in preview.warnings
+        ],
     }
 
 

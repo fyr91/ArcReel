@@ -182,6 +182,30 @@ describe("ReferenceVideoCanvas", () => {
     expect(screen.getByTestId("unit-row-E1U2")).toBeInTheDocument();
   });
 
+  it("sets an episode narrator override from the header menu", async () => {
+    const refreshProject = vi.fn().mockResolvedValue("success");
+    useProjectsStore.setState({
+      currentProjectName: "proj",
+      currentProjectData: {
+        ...STUB_PROJECT,
+        narrator_character: "旁白甲",
+        characters: { 旁白甲: { description: "" }, 旁白乙: { description: "" } },
+        episodes: [{ episode: 1, title: "E1", script_file: "scripts/episode_1.json" }],
+      },
+      refreshProject,
+    });
+    vi.spyOn(API, "listReferenceVideoUnits").mockResolvedValue({ units: [mkUnit("E1U1")] });
+    const update = vi.spyOn(API, "updateEpisode").mockResolvedValue({ success: true });
+
+    render(<ReferenceVideoCanvas projectName="proj" episode={1} />);
+    fireEvent.click(await screen.findByRole("button", { name: "旁白乙" }));
+
+    await waitFor(() =>
+      expect(update).toHaveBeenCalledWith("proj", 1, { narrator_character: "旁白乙" }),
+    );
+    expect(refreshProject).toHaveBeenCalledWith("proj", expect.objectContaining({ onError: expect.any(Function) }));
+  });
+
   it("opens project settings at the app root from the nested workspace", async () => {
     vi.spyOn(API, "listReferenceVideoUnits").mockResolvedValue({ units: [mkUnit("E1U1")] });
     const location = memoryLocation({

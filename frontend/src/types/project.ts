@@ -120,6 +120,8 @@ export interface EpisodeMeta {
   episode: number;
   title: string;
   script_file: string;
+  /** 本集 H3 旁白角色覆盖；缺失时继承项目 narrator_character。 */
+  narrator_character?: string | null;
   /** 课程项目中一份文档对应本集的规范化源文件。 */
   source_file?: string | null;
   /** 课程模式中只由本集 source_file 生成的独立内容概述。 */
@@ -246,6 +248,8 @@ export interface ProjectData {
   audio_backend?: string | null;
   narration_voice?: string | null;
   narration_speed?: number | null;
+  /** H3 原生音轨使用的项目默认旁白角色；不是 TTS voice id。 */
+  narrator_character?: string | null;
   /** 源文语言码（zh / en / vi），由内容分析写入；界面只读，用于口播语速的单位名词 */
   source_language?: string | null;
   /** 口播语速估算（阅读单位 / 秒）项目级覆盖；留空即按项目语言的默认速度估算 */

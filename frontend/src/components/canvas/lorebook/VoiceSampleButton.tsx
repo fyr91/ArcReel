@@ -220,6 +220,7 @@ export function VoiceSampleButton({
   return (
     <>
       <button
+        id={`character_voice-${characterName}`}
         type="button"
         onClick={openModal}
         disabled={disabled}

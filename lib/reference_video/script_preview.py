@@ -97,13 +97,15 @@ def derive_utterances(text: str) -> tuple[list[Utterance], list[dict[str, Any]]]
 class VoiceBindings:
     """一份文稿的声音派生结果：谁在说话、谁绑到了第几段参考音频。
 
-    ``speakers`` 是已登记的 dialogue speaker（首现顺序）——第一段声音特征声明按此顺序逐条发出。
+    ``speakers`` 是已登记的 dialogue speaker，以及实际被裸旁白使用的默认旁白角色（首现顺序）
+    ——第一段声音特征声明按此顺序逐条发出。
     ``audio_speakers`` 是其中真正绑上参考音频的子集，**顺序即 ``@音频N`` 编号与
     ``VideoGenerationRequest.reference_audio_files`` 的字段顺序**（两者同一份派生，不各自重算）。
     """
 
     speakers: list[str]
     audio_speakers: list[str]
+    narrator_speaker: str | None
     warnings: list[dict[str, Any]]
 
 
@@ -113,6 +115,7 @@ def derive_voice_bindings(
     settings: VoiceRenderSettings,
     *,
     speakers_with_reference_image: Collection[str] | None = None,
+    default_narrator: str | None = None,
 ) -> VoiceBindings:
     """从 utterances 机械派生声音绑定：说话人顺序、参考音频编号与降级 warning。
 
@@ -155,9 +158,15 @@ def derive_voice_bindings(
     warnings: list[dict[str, Any]] = []
     characters = normalize_asset_bucket(characters)
 
+    narrator = asset_name_comparison_key(default_narrator or "") or None
     seen: list[str] = []
+    narrator_used = False
     for entry in utterances:
-        speaker = asset_name_comparison_key(entry.speaker or "")
+        if entry.kind == "voiceover" and narrator is not None:
+            speaker = narrator
+            narrator_used = True
+        else:
+            speaker = asset_name_comparison_key(entry.speaker or "")
         if speaker and speaker not in seen:
             seen.append(speaker)
 
@@ -211,7 +220,12 @@ def derive_voice_bindings(
             else:
                 audio_speakers.append(speaker)
 
-    return VoiceBindings(speakers=registered, audio_speakers=audio_speakers, warnings=warnings)
+    return VoiceBindings(
+        speakers=registered,
+        audio_speakers=audio_speakers,
+        narrator_speaker=narrator if narrator_used and narrator in registered else None,
+        warnings=warnings,
+    )
 
 
 def build_script_preview(
@@ -221,6 +235,7 @@ def build_script_preview(
     *,
     max_reference_images: int | None = None,
     unit: dict[str, Any] | None = None,
+    default_narrator: str | None = None,
 ) -> ScriptPreview:
     """把视频单元正文派生成 utterances + 降级可见性 warning。
 
@@ -271,6 +286,7 @@ def build_script_preview(
         project.get(BUCKET_KEY["character"]) or {},
         settings,
         speakers_with_reference_image=character_image_names,
+        default_narrator=default_narrator,
     )
     warnings.extend(bindings.warnings)
 

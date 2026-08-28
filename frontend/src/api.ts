@@ -1446,6 +1446,7 @@ class API {
       title?: string;
       hook?: string | null;
       outline?: { story_beats?: string[]; next_episode_teaser?: string } | null;
+      narrator_character?: string | null;
     }
   ): Promise<SuccessResponse> {
     return this.request(

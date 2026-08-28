@@ -36,6 +36,11 @@ export function projectSettingsNavigationTarget(projectName: string): `~${string
   return `~${ROUTE_APP_PROJECTS}/${encodeURIComponent(projectName)}/${WORKSPACE_ROUTE_SETTINGS}`;
 }
 
+/** Jump to the character library from any nested project workspace route. */
+export function projectCharactersNavigationTarget(projectName: string): `~${string}` {
+  return `~${ROUTE_APP_PROJECTS}/${encodeURIComponent(projectName)}/${WORKSPACE_ROUTE_CHARACTERS}`;
+}
+
 /** 无子路径、直接匹配的工作区叶子路由段。`source` 除了列表页本身还接受 `/:filename`，
  *  在下面的正则里额外拼一条 `source/[^/]+` 分支覆盖后者。 */
 const WORKSPACE_STATIC_LEAF_ROUTES = [

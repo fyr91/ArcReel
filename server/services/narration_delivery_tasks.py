@@ -665,6 +665,7 @@ def reference_video_visual_basis_digest(
     unit: dict[str, Any],
     request_assets: Sequence[ResolvedReferenceAsset],
     candidate: ProviderProjectionCandidate,
+    episode: int | None = None,
 ) -> str:
     """Hash the exact projected reference request and every prompt-affecting input."""
 
@@ -681,6 +682,7 @@ def reference_video_visual_basis_digest(
             requires_reference_image=candidate.reference_audio_per_image,
         ),
         request_references=[asset.reference for asset in request_assets],
+        episode=episode,
     )
     if candidate.reference_audio_per_image:
         audio_wiring = [

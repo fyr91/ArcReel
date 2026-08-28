@@ -48,6 +48,17 @@ def test_course_episode_without_formal_script_rejects_non_title_metadata(tmp_pat
     assert "hook" not in episode
 
 
+def test_course_episode_narrator_can_be_set_before_formal_script_exists(tmp_path) -> None:
+    manager = _course_manager(tmp_path)
+    manager.upsert_assets("course", "characters", {"讲师": {"description": "主讲人"}})
+
+    updated = update_episode_metadata(manager, "course", 1, {"narrator_character": "讲师"})
+
+    assert updated == {"episode": 1, "narrator_character": "讲师"}
+    assert manager.load_project("course")["episodes"][0]["narrator_character"] == "讲师"
+    assert not (manager.get_project_path("course") / "scripts" / "episode_1.json").exists()
+
+
 @pytest.mark.asyncio
 async def test_agent_can_rename_course_episode_before_formal_script_exists(tmp_path) -> None:
     manager = _course_manager(tmp_path)

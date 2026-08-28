@@ -42,6 +42,7 @@ from lib.config.resolver import ConfigResolver, VideoBucketCapabilityError
 from lib.db import async_session_factory
 from lib.i18n import Translator
 from lib.json_io import domain_error_on_value_error
+from lib.narrator import NarratorSettingsError, set_project_narrator
 from lib.profile_manifest import ContentMode
 from lib.project_change_hints import project_change_source
 from lib.project_manager import EmptySourceError, EpisodeScriptReboundError, get_project_manager
@@ -302,6 +303,8 @@ class UpdateProjectRequest(BaseModel):
     audio_backend: str | None = None
     narration_voice: str | None = None
     narration_speed: float | None = None
+    # H3 原生音轨的项目默认旁白角色；null/空串清除。与 TTS narration_voice 无关。
+    narrator_character: str | None = None
     # 口播语速估算（阅读单位 / 秒）项目级覆盖；null = 清除、回退语言默认
     speech_rate_units_per_second: SpeechRateOverride = None
     # 文本任务档位（docs/adr/0051）项目级覆盖 + 项目默认模型；空值 = 清除、继承全局
@@ -1049,6 +1052,11 @@ async def update_project(name: str, req: UpdateProjectRequest, _t: Translator):
                         if not math.isfinite(speed) or speed <= 0:
                             raise HTTPException(status_code=422, detail=_t("narration_speed_must_be_positive"))
                         project["narration_speed"] = speed
+                if "narrator_character" in req.model_fields_set:
+                    try:
+                        set_project_narrator(project, req.narrator_character)
+                    except NarratorSettingsError as exc:
+                        raise HTTPException(status_code=422, detail=_t(exc.code, **exc.params)) from exc
                 # 口播语速估算（阅读单位 / 秒）：宽松硬区间，null = 清除、回退语言默认
                 if "speech_rate_units_per_second" in req.model_fields_set:
                     if req.speech_rate_units_per_second is None:
@@ -1510,6 +1518,8 @@ class UpdateEpisodeRequest(BaseModel):
     title: str | None = None
     hook: str | None = None
     outline: dict[str, Any] | None = None
+    # H3 原生画外音角色；null 清除本集覆盖并继承项目默认。
+    narrator_character: str | None = None
 
 
 class ReferenceTextReplacementRequest(BaseModel):
@@ -1628,6 +1638,8 @@ async def update_episode(name: str, episode: int, req: UpdateEpisodeRequest, _t:
                 except EpisodeScriptReboundError as exc:
                     logger.info("episode script rebound during title update: %s", exc)
                     raise HTTPException(status_code=409, detail=_t("ref_script_rebound")) from exc
+                except NarratorSettingsError as exc:
+                    raise HTTPException(status_code=422, detail=_t(exc.code, **exc.params)) from exc
                 except ValueError as exc:
                     raise HTTPException(
                         status_code=422, detail=_t("script_validation_failed", details=str(exc))
