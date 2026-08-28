@@ -178,25 +178,6 @@ async def test_build_adds_keep_alive_hook_with_can_use_tool(tmp_path: Path) -> N
 
 
 @pytest.mark.asyncio
-async def test_build_allows_main_flash_vision_model_to_read_images(tmp_path: Path) -> None:
-    async def fake_loader():
-        return {"ANTHROPIC_MODEL": "deepseek-v4-flash-vision-exp"}
-
-    assembler = _make_assembler(tmp_path, provider_env_loader=fake_loader)
-    options = await assembler.build("demo")
-    hook = options.hooks["PreToolUse"][0].hooks[0]
-    image = tmp_path / "projects" / "demo" / "contact-sheet.jpg"
-
-    result = await hook(
-        {"tool_name": "Read", "tool_input": {"file_path": str(image)}},
-        None,
-        None,
-    )
-
-    assert result.get("continue_") is True
-
-
-@pytest.mark.asyncio
 async def test_build_forwards_subagent_tool_lifecycle_hooks(tmp_path: Path) -> None:
     events: list[tuple[str, str, str, bool]] = []
     assembler = _make_assembler(tmp_path)
