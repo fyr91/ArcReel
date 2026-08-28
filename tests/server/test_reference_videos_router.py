@@ -114,6 +114,40 @@ def test_confirm_video_uses_shared_operation(client: TestClient, monkeypatch: py
 
 
 @pytest.mark.unit
+def test_cancel_video_tasks_uses_shared_operation(
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from server.routers import reference_videos as router_mod
+
+    operation = AsyncMock(
+        return_value={
+            "success": True,
+            "episode": 1,
+            "unit_id": "E1U01",
+            "scope": "unit",
+            "matched_task_ids": ["video-1"],
+            "cancelled": [],
+            "cancelling": ["video-1"],
+            "already_cancelling": [],
+            "skipped_terminal": [],
+            "affected_count": 1,
+        }
+    )
+    monkeypatch.setattr(router_mod, "cancel_reference_video_tasks", operation)
+
+    response = client.post(
+        "/api/v1/projects/demo/reference-videos/episodes/1/video-tasks/cancel",
+        json={"unit_id": "E1U01"},
+    )
+
+    assert response.status_code == 200
+    assert response.json()["affected_count"] == 1
+    assert operation.await_args.args[1:3] == ("demo", 1)
+    assert operation.await_args.kwargs == {"unit_id": "E1U01", "user_id": "u1"}
+
+
+@pytest.mark.unit
 def test_hd_status_uses_shared_operation(client: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:
     from server.routers import reference_videos as router_mod
 

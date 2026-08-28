@@ -100,6 +100,10 @@ from server.services.reference_video_review import (
     ReferenceVideoReviewUnavailable,
     confirm_reference_video,
 )
+from server.services.reference_video_task_cancellation import (
+    ReferenceVideoTaskCancellationUnavailable,
+    cancel_reference_video_tasks,
+)
 from server.services.reference_video_tasks import (
     apply_unit_video_assets,
     default_unit_duration,
@@ -187,6 +191,12 @@ class GenerateUnitsBatchRequest(BaseModel):
         return ReferenceRequestOptions(
             narration_delivery=narration_delivery_for_video_workflow(content_mode, self.narration_delivery)
         )
+
+
+class CancelVideoTasksRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    unit_id: str | None = Field(default=None, min_length=1)
 
 
 class H3PromptOperationRequest(BaseModel):
@@ -1011,6 +1021,36 @@ async def confirm_unit_video(
         )
     except ReferenceVideoReviewUnavailable as exc:
         missing = {"project_not_found", "ref_episode_not_found", "script_not_found", "ref_unit_not_found"}
+        raise HTTPException(
+            status_code=404 if exc.code in missing else 409,
+            detail=_t(exc.code, **exc.params),
+        ) from exc
+
+
+@router.post("/episodes/{episode}/video-tasks/cancel")
+async def cancel_video_tasks(
+    project_name: str,
+    episode: int,
+    body: CancelVideoTasksRequest,
+    user: CurrentUser,
+    _t: Translator,
+) -> dict[str, Any]:
+    """Cancel one unit or all active reference-video tasks in the current episode."""
+    try:
+        return await cancel_reference_video_tasks(
+            get_project_manager(),
+            project_name,
+            episode,
+            unit_id=body.unit_id,
+            user_id=user.id,
+        )
+    except ReferenceVideoTaskCancellationUnavailable as exc:
+        missing = {
+            "project_not_found",
+            "ref_episode_not_found",
+            "script_not_found",
+            "ref_unit_not_found",
+        }
         raise HTTPException(
             status_code=404 if exc.code in missing else 409,
             detail=_t(exc.code, **exc.params),

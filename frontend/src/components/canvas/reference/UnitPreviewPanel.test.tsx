@@ -109,8 +109,37 @@ describe("UnitPreviewPanel", () => {
     );
 
     expect(screen.getByText(/前面 3 个|3 ahead/)).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: /取消 H3 生成|Cancel H3 generation/ }));
+    fireEvent.click(screen.getByRole("button", { name: /取消任务|Cancel task/ }));
     expect(onCancelTask).toHaveBeenCalledWith("h3-task");
+  });
+
+  it("allows cancelling during prompt optimization before provider cancellation is available", () => {
+    const onCancelTask = vi.fn();
+    render(
+      <UnitPreviewPanel
+        unit={mkUnit()}
+        status="running"
+        onCancelTask={onCancelTask}
+        task={makeTask({
+          task_id: "prompt-task",
+          status: "running",
+          execution_progress: {
+            kind: "minimax_h3",
+            phase: "prompt_optimizing",
+            provider_status: null,
+            stage: null,
+            progress: null,
+            can_cancel: false,
+            queue_position: null,
+            queue_length: null,
+            queue_ahead: null,
+          },
+        })}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: /取消任务|Cancel task/ }));
+    expect(onCancelTask).toHaveBeenCalledWith("prompt-task");
   });
 
   it("keeps the existing generic in-flight display for non-H3 models", () => {
@@ -247,7 +276,7 @@ describe("UnitPreviewPanel", () => {
     );
 
     expect(screen.getByRole("progressbar")).toHaveAttribute("aria-valuenow", "63");
-    fireEvent.click(screen.getByRole("button", { name: /Cancel HD processing|取消高清处理/ }));
+    fireEvent.click(screen.getByRole("button", { name: /取消任务|Cancel task/ }));
     expect(onCancelTask).toHaveBeenCalledWith("hd-task");
   });
 

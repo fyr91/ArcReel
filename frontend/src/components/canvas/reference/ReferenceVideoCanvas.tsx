@@ -4,6 +4,7 @@ import { useLocation } from "wouter";
 import {
   ChevronLeft,
   ChevronRight,
+  CircleStop,
   Clock,
   Loader2,
   Save,
@@ -21,6 +22,7 @@ import { deriveUnitStatus } from "./unit-status";
 import { EpisodeHeader } from "./EpisodeHeader";
 import { ReferenceDurationConfirmDialog } from "./ReferenceDurationConfirmDialog";
 import { ReferenceBatchAdmissionDialog } from "./ReferenceBatchAdmissionDialog";
+import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { H3PromptPanel } from "./H3PromptPanel";
 import { KeyframePreviewPanel } from "./KeyframePreviewPanel";
 import { StoryboardSheetPanel } from "./StoryboardSheetPanel";
@@ -93,6 +95,12 @@ export interface ReferenceVideoCanvasProps {
 }
 
 const EMPTY_UNITS: readonly ReferenceVideoUnit[] = Object.freeze([]);
+
+const ACTIVE_VIDEO_TASK_STATUSES = new Set(["queued", "running", "cancelling"]);
+
+function normalizeScriptFile(value: string | null | undefined): string | null {
+  return value ? value.replace(/^scripts\//, "") : null;
+}
 
 /**
  * 画布层自记的按 unit 占用位（不产生任务行、进不了 tasks-store 占用集的那些写入路径）。
@@ -225,6 +233,7 @@ export function ReferenceVideoCanvas({
   // store 不保证 tasks 顺序（SSE 原位 upsert），重试的新行不被旧失败行盖住。
   const tasksByUnit = useLatestTasksByResource(projectName, "reference_video");
   const hdTasksByUnit = useLatestTasksByResource(projectName, "reference_video_refine");
+  const allTasks = useTasksStore((state) => state.tasks);
   const [hdStates, setHdStates] = useState<
     Record<string, "available" | "processing" | "completed" | "failed" | "unavailable">
   >({});
@@ -341,16 +350,71 @@ export function ReferenceVideoCanvas({
   // 任务行落库之间的窗口内漏禁用生成按钮。
   const selectedBusy = !!(selected && busyUnitIds.has(selected.unit_id));
   const selectedTask = selected ? (tasksByUnit.get(selected.unit_id) ?? null) : null;
-  const selectedCancelling = selectedTask?.status === "cancelling";
+  const selectedCancelling =
+    selectedTask?.status === "cancelling" || selectedHdTask?.status === "cancelling";
 
-  const handleCancelTask = useCallback(async (taskId: string) => {
+  const activeEpisodeVideoTasks = useMemo(() => {
+    const unitIds = new Set(units.map((unit) => unit.unit_id));
+    const episodeScript = normalizeScriptFile(scriptFile);
+    return allTasks.filter((task) => {
+      if (task.project_name !== projectName) return false;
+      if (task.task_type !== "reference_video" && task.task_type !== "reference_video_refine") {
+        return false;
+      }
+      if (!ACTIVE_VIDEO_TASK_STATUSES.has(task.status)) return false;
+      const taskScript = normalizeScriptFile(task.script_file);
+      return episodeScript ? taskScript === episodeScript : unitIds.has(task.resource_id);
+    });
+  }, [allTasks, projectName, scriptFile, units]);
+  const cancellableEpisodeVideoTasks = useMemo(
+    () => activeEpisodeVideoTasks.filter((task) => task.status !== "cancelling"),
+    [activeEpisodeVideoTasks],
+  );
+  const [cancelTarget, setCancelTarget] = useState<{
+    unitId?: string;
+    taskCount: number;
+  } | null>(null);
+  const [cancellingVideoTasks, setCancellingVideoTasks] = useState(false);
+
+  const handleCancelTask = useCallback(
+    (taskId: string) => {
+      const freshTask = useTasksStore.getState().tasks.find((task) => task.task_id === taskId);
+      const unitId = freshTask?.resource_id ?? selected?.unit_id;
+      if (!unitId) return;
+      const taskCount = Math.max(
+        1,
+        activeEpisodeVideoTasks.filter(
+          (task) => task.resource_id === unitId && task.status !== "cancelling",
+        ).length,
+      );
+      setCancelTarget({ unitId, taskCount });
+    },
+    [activeEpisodeVideoTasks, selected?.unit_id],
+  );
+
+  const handleConfirmCancelTasks = useCallback(async () => {
+    if (!cancelTarget) return;
+    setCancellingVideoTasks(true);
     try {
-      await API.cancelTask(taskId);
+      const result = await API.cancelReferenceVideoTasks(
+        projectName,
+        episode,
+        cancelTarget.unitId,
+      );
+      useAppStore.getState().pushToast(
+        result.affected_count > 0
+          ? t("reference_cancel_success", { count: result.affected_count })
+          : t("reference_cancel_nothing"),
+        result.affected_count > 0 ? "success" : "info",
+      );
+      setCancelTarget(null);
       await useTasksStore.getState().refreshTasks();
     } catch (error) {
-      toastError(error);
+      toastError(error, (message) => t("reference_cancel_failed", { error: message }));
+    } finally {
+      setCancellingVideoTasks(false);
     }
-  }, []);
+  }, [cancelTarget, episode, projectName, t]);
 
   const failureMessage = useMemo(() => {
     if (!selected) return null;
@@ -1189,6 +1253,17 @@ export function ReferenceVideoCanvas({
               <Sparkles className="h-3.5 w-3.5" aria-hidden="true" />
               <span>{t("reference_batch_generate")}</span>
             </button>
+            <button
+              type="button"
+              onClick={() =>
+                setCancelTarget({ taskCount: cancellableEpisodeVideoTasks.length })
+              }
+              disabled={cancellableEpisodeVideoTasks.length === 0}
+              className="focus-ring inline-flex items-center gap-1.5 rounded-md border border-red-400/30 bg-red-500/10 px-2.5 py-1 text-[11.5px] text-red-200 transition-colors hover:border-red-400/50 hover:bg-red-500/15 disabled:cursor-not-allowed disabled:opacity-45"
+            >
+              <CircleStop className="h-3.5 w-3.5" aria-hidden="true" />
+              <span>{t("reference_cancel_all_video_tasks")}</span>
+            </button>
           </>
         )}
       </div>
@@ -1722,6 +1797,25 @@ export function ReferenceVideoCanvas({
       )}
 
       <ReferenceDurationConfirmDialog {...durationGate.dialogProps} />
+      <ConfirmDialog
+        open={cancelTarget !== null}
+        title={
+          cancelTarget?.unitId
+            ? t("reference_cancel_single_title")
+            : t("reference_cancel_all_title")
+        }
+        description={
+          cancelTarget?.unitId
+            ? t("reference_cancel_single_description")
+            : t("reference_cancel_all_description", { count: cancelTarget?.taskCount ?? 0 })
+        }
+        confirmLabel={t("reference_cancel_confirm")}
+        loadingLabel={t("reference_cancel_loading")}
+        tone="danger"
+        loading={cancellingVideoTasks}
+        onConfirm={handleConfirmCancelTasks}
+        onCancel={() => setCancelTarget(null)}
+      />
       <ReferenceBatchAdmissionDialog
         admission={batchAdmission}
         onConfirm={handleBatchConfirm}

@@ -86,6 +86,7 @@ from server.agent_runtime.sdk_tools.reference_storyboard_sheets import (
     generate_reference_storyboard_sheets_tool,
 )
 from server.agent_runtime.sdk_tools.reference_video_review import confirm_reference_video_tool
+from server.agent_runtime.sdk_tools.reference_video_task_cancellation import cancel_reference_video_tasks_tool
 from server.agent_runtime.sdk_tools.rename_asset import rename_asset_tool
 from server.agent_runtime.sdk_tools.retry_project_migration import retry_project_migration_tool
 from server.agent_runtime.sdk_tools.text_generation import (
@@ -137,6 +138,7 @@ ARCREEL_MCP_TOOL_IDS: tuple[str, ...] = (
     "generate_video_all",
     "generate_video_selected",
     "generate_narration_audio",
+    "cancel_reference_video_tasks",
     "confirm_reference_video",
     "confirm_h3_video_prompts",
     "optimize_h3_video_prompts",
@@ -278,6 +280,7 @@ def build_arcreel_mcp_server(
         generate_video_all_tool(ctx),
         generate_video_selected_tool(ctx),
         generate_narration_audio_tool(ctx),
+        cancel_reference_video_tasks_tool(ctx),
         confirm_reference_video_tool(ctx),
         confirm_h3_video_prompts_tool(ctx),
         optimize_h3_video_prompts_tool(ctx),

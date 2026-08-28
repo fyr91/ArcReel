@@ -232,6 +232,13 @@ def test_generate_video_skill_names_agent_confirmation_before_hd() -> None:
     assert "mcp__arcreel__make_reference_video_hd" in content
 
 
+def test_generate_video_skill_names_agent_video_task_cancellation() -> None:
+    content = _reference(VIDEO_SKILL)
+
+    assert "cancel_reference_video_tasks" in ARCREEL_MCP_TOOL_IDS
+    assert "mcp__arcreel__cancel_reference_video_tasks" in content
+
+
 def test_asset_analysis_subagent_names_its_registered_tool() -> None:
     content = (PROFILE / ".claude" / "agents" / "analyze-assets.md").read_text(encoding="utf-8")
 

@@ -3475,6 +3475,31 @@ class API {
     );
   }
 
+  static async cancelReferenceVideoTasks(
+    projectName: string,
+    episode: number,
+    unitId?: string,
+  ): Promise<{
+    success: boolean;
+    episode: number;
+    unit_id: string | null;
+    scope: "unit" | "episode";
+    matched_task_ids: string[];
+    cancelled: Array<Record<string, unknown>>;
+    cancelling: string[];
+    already_cancelling: string[];
+    skipped_terminal: Array<Record<string, unknown>>;
+    affected_count: number;
+  }> {
+    return this.request(
+      `/projects/${encodeURIComponent(projectName)}/reference-videos/episodes/${episode}/video-tasks/cancel`,
+      {
+        method: "POST",
+        body: JSON.stringify(unitId ? { unit_id: unitId } : {}),
+      },
+    );
+  }
+
   static async getReferenceVideoHdStatus(
     projectName: string,
     episode: number,

@@ -1004,6 +1004,48 @@ describe("ReferenceVideoCanvas", () => {
     });
   });
 
+  it("批量取消会确认后中断本集的视频生成与高清任务", async () => {
+    vi.spyOn(API, "listReferenceVideoUnits").mockResolvedValue({
+      units: [mkUnit("E1U1"), mkUnit("E1U2")],
+    });
+    useTasksStore.setState({
+      tasks: [
+        runningTask("E1U1"),
+        { ...runningTask("E1U2"), task_id: "hd-E1U2", task_type: "reference_video_refine" },
+      ] as never,
+    });
+    const cancelSpy = vi.spyOn(API, "cancelReferenceVideoTasks").mockResolvedValue({
+      success: true,
+      episode: 1,
+      unit_id: null,
+      scope: "episode",
+      matched_task_ids: ["task-E1U1", "hd-E1U2"],
+      cancelled: [],
+      cancelling: ["task-E1U1", "hd-E1U2"],
+      already_cancelling: [],
+      skipped_terminal: [],
+      affected_count: 2,
+    });
+
+    render(<ReferenceVideoCanvas projectName="proj" episode={1} />);
+    const cancelAll = await screen.findByRole("button", {
+      name: /Cancel all video tasks|取消全部视频任务/,
+    });
+    await waitFor(() => expect(cancelAll).not.toBeDisabled());
+    fireEvent.click(cancelAll);
+
+    expect(
+      await screen.findByRole("heading", {
+        name: /Cancel all video tasks in this episode|取消本集全部视频任务/,
+      }),
+    ).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: /Cancel tasks|确认取消/ }));
+
+    await waitFor(() => expect(cancelSpy).toHaveBeenCalledWith("proj", 1, undefined));
+    await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
+    expect(useAppStore.getState().toast?.text).toMatch(/影响 2 个任务|2 tasks/);
+  });
+
   it("批量入口一次请求走服务端准入，admitted 时提示已入队", async () => {
     vi.spyOn(API, "listReferenceVideoUnits").mockResolvedValue({
       units: [mkUnit("E1U1"), mkUnit("E1U2")],
@@ -1180,7 +1222,7 @@ describe("ReferenceVideoCanvas", () => {
       fireEvent.click(await screen.findByRole("button", { name: UNIT_GENERATE_CTA }));
       await screen.findByRole("button", { name: CONFIRM_CTA });
 
-      fireEvent.click(screen.getByRole("button", { name: /Cancel|取消/ }));
+      fireEvent.click(screen.getByRole("button", { name: /^(Cancel|取消)$/ }));
 
       await waitFor(() =>
         expect(screen.queryByRole("button", { name: CONFIRM_CTA })).not.toBeInTheDocument(),

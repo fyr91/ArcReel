@@ -1,5 +1,13 @@
 import { useTranslation } from "react-i18next";
-import { Film, Loader2, Sparkles, RotateCcw, AlertTriangle, CheckCircle2 } from "lucide-react";
+import {
+  AlertTriangle,
+  CheckCircle2,
+  CircleStop,
+  Film,
+  Loader2,
+  RotateCcw,
+  Sparkles,
+} from "lucide-react";
 import { API } from "@/api";
 import { useProjectsStore } from "@/stores/projects-store";
 import { VersionTimeMachine } from "@/components/canvas/timeline/VersionTimeMachine";
@@ -125,9 +133,14 @@ export function UnitPreviewPanel({
     effectiveStatus === "running" ||
     (effectiveStatus === "ready" && !videoUrl);
   const h3Progress = task?.execution_progress?.kind === "minimax_h3" ? task.execution_progress : null;
-  const h3TaskId = h3Progress ? task?.task_id : undefined;
   const hdProgress = hdTask?.execution_progress?.kind === "minimax_h3" ? hdTask.execution_progress : null;
-  const hdTaskId = hdProgress ? hdTask?.task_id : undefined;
+  const activeTask = [hdTask, task].find(
+    (candidate) =>
+      candidate?.status === "queued" ||
+      candidate?.status === "running" ||
+      candidate?.status === "cancelling",
+  );
+  const cancellationPending = activeTask?.status === "cancelling";
 
   const ctaLabel = ready
     ? t("reference_preview_regenerate")
@@ -143,6 +156,25 @@ export function UnitPreviewPanel({
           {t("reference_preview_label")}
         </span>
         <span className="flex-1" />
+        {activeTask && onCancelTask && (
+          <button
+            type="button"
+            onClick={() => onCancelTask(activeTask.task_id)}
+            disabled={cancellationPending}
+            className="focus-ring inline-flex items-center gap-1 rounded-md border border-red-400/30 bg-red-500/10 px-2 py-1 text-[11px] font-medium text-red-200 transition-colors hover:border-red-400/50 hover:bg-red-500/15 disabled:cursor-wait disabled:opacity-60"
+          >
+            {cancellationPending ? (
+              <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden="true" />
+            ) : (
+              <CircleStop className="h-3.5 w-3.5" aria-hidden="true" />
+            )}
+            <span>
+              {cancellationPending
+                ? t("reference_cancelling_task")
+                : t("reference_cancel_task")}
+            </span>
+          </button>
+        )}
         {/* 上传是同一 unit 上的兄弟控件，与主 CTA 同步接线禁用：cancelling 期间
             inFlight 为假但占用仍在，上传会与在跑的生成回写同一个成片文件 */}
         {onUploadVideo && (
@@ -202,10 +234,7 @@ export function UnitPreviewPanel({
         {inFlight && !ready && (
           <div className="absolute inset-0 grid place-items-center">
             {h3Progress ? (
-              <H3GenerationProgress
-                progress={h3Progress}
-                onCancel={onCancelTask && h3TaskId ? () => onCancelTask(h3TaskId) : undefined}
-              />
+              <H3GenerationProgress progress={h3Progress} />
             ) : (
               <div className="text-center">
                 <div className="mx-auto mb-2.5 h-9 w-9 animate-spin rounded-full border-2 border-[var(--color-accent-soft)] border-t-[var(--color-accent)]" />
@@ -365,7 +394,6 @@ export function UnitPreviewPanel({
                   <H3GenerationProgress
                     progress={hdProgress}
                     variant="hd"
-                    onCancel={onCancelTask && hdTaskId ? () => onCancelTask(hdTaskId) : undefined}
                   />
                 ) : (
                   <div className="text-center">

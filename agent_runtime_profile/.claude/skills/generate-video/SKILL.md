@@ -124,6 +124,9 @@ stale 产物照常可预览、可导出、可参与成片，服务端会复用�
 5. 对 `reference_video` 成片，只有用户明确认可某个 unit 后才调用
    `mcp__arcreel__confirm_reference_video({"episode": N, "unit_id": "..."})`；不得把确认与生成合并，
    也不得要求用户改去 Web 点击按钮。确认后若用户要求高清，再调用 `mcp__arcreel__make_reference_video_hd`。
+8. 用户要求停止当前单元的视频生成、提示词优化或高清任务时，调用
+   `mcp__arcreel__cancel_reference_video_tasks({"episode": N, "unit_id": "..."})`；用户明确要求停止
+   当前整集所有视频任务时，省略 `unit_id`。不得用整集取消响应单元级请求，也不得跨集取消。
 6. 以工具写回的 `generated_assets.video_clip` 作为下游成片归属；高清完成后原首采仍保留独立预览。
 
 ## Prompt 构建
