@@ -89,7 +89,7 @@ uv run python scripts/export_release_config.py --output .env.release
 
 The exported file is created with `0600` permissions and is ignored by Git. Transfer it through a secure channel and never commit it to the repository.
 
-Projects created with release configuration default to MiniMax H3 at 480p for video and Qwen Image 3.0 at 1K for images, Storyboards, and keyframes. DeepSeek V4 Pro is used for the default and complex text tiers, while DeepSeek V4 Flash Vision handles simple tasks. Projects inherit the imported system defaults and can still override them later in Project Settings.
+Projects created with release configuration default to MiniMax H3 at 480p for video and GPT Image 2 (Image 02) at 1K for images, Storyboards, and keyframes. DeepSeek V4 Pro is used for the default and complex text tiers, while DeepSeek V4 Flash Vision handles simple tasks. Projects inherit the imported system defaults and can still override them later in Project Settings.
 
 For the complete first-run workflow, see [Getting Started](https://docs.arc-reel.com/en/guide/getting-started).
 

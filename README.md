@@ -89,7 +89,7 @@ uv run python scripts/export_release_config.py --output .env.release
 
 导出的文件权限为 `0600` 且已被 Git ignore；请通过安全渠道交给使用者，不要提交到仓库。
 
-release 配置新建项目默认使用 MiniMax H3（480p）生成视频，使用 Qwen Image 3.0（1K）生成图片、Storyboard 与关键分镜；默认文本模型和复杂任务使用 DeepSeek V4 Pro，简单任务使用 DeepSeek V4 Flash Vision。项目会继承导入后的系统默认，之后仍可在项目设置中覆盖。
+release 配置新建项目默认使用 MiniMax H3（480p）生成视频，使用 GPT Image 2（Image 02，1K）生成图片、Storyboard 与关键分镜；默认文本模型和复杂任务使用 DeepSeek V4 Pro，简单任务使用 DeepSeek V4 Flash Vision。项目会继承导入后的系统默认，之后仍可在项目设置中覆盖。
 
 完整的首次使用流程见 [完整入门教程](https://docs.arc-reel.com/guide/getting-started)。
 

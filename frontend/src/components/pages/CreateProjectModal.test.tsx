@@ -171,14 +171,14 @@ describe("CreateProjectModal", () => {
         grid_storyboard: false,
         style_template_id: "live_premium_drama",
         video_backend: "croco/minimax-h3",
-        default_image_backend: "dashscope/qwen-image-3.0",
-        image_provider_storyboard: "dashscope/qwen-image-3.0",
+        default_image_backend: "runware/openai:gpt-image@2",
+        image_provider_storyboard: "runware/openai:gpt-image@2",
         default_text_backend: null,
         text_backend_simple: null,
         text_backend_complex: null,
         model_settings: {
           "croco/minimax-h3": { resolution: "480p" },
-          "dashscope/qwen-image-3.0": { resolution: "1K" },
+          "runware/openai:gpt-image@2": { resolution: "1K" },
         },
         default_duration: null,
       })

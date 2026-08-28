@@ -65,8 +65,8 @@ const STEP_CONNECTOR_INACTIVE_STYLE: CSSProperties = {
 };
 
 const RELEASE_VIDEO_BACKEND = "croco/minimax-h3";
-const RELEASE_IMAGE_BACKEND = "dashscope/qwen-image-3.0";
-const RELEASE_STORYBOARD_IMAGE_BACKEND = "dashscope/qwen-image-3.0";
+const RELEASE_IMAGE_BACKEND = "runware/openai:gpt-image@2";
+const RELEASE_STORYBOARD_IMAGE_BACKEND = "runware/openai:gpt-image@2";
 const RELEASE_TEXT_BACKEND = "";
 const RELEASE_SIMPLE_TEXT_BACKEND = "";
 const RELEASE_COMPLEX_TEXT_BACKEND = "";
