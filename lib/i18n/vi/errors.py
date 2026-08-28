@@ -496,6 +496,7 @@ MESSAGES = {
     "config_bundle_provider_field_unknown": "Cấu hình chứa trường không được kênh hiện tại hỗ trợ",
     "config_bundle_provider_credential_incomplete": "Thông tin xác thực kênh trong cấu hình chưa đầy đủ",
     "config_bundle_system_setting_unknown": "Cấu hình chứa thiết lập hệ thống không được phiên bản này hỗ trợ",
+    "config_bundle_system_setting_invalid": "Cấu hình chứa giá trị thiết lập hệ thống không hợp lệ",
     "background_job_unsupported": "Loại tác vụ nền này không được hỗ trợ",
     "asset_primary_resource_invalid_type": "Tài nguyên chính của nhân vật phải là hình ảnh hoặc âm thanh",
     "asset_primary_resource_invalid": "Tài nguyên đã chọn không thuộc nhân vật này hoặc sai loại phương tiện",

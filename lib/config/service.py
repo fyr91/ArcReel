@@ -17,7 +17,9 @@ _DEFAULT_VIDEO_BACKEND = "croco/minimax-h3"
 _DEFAULT_IMAGE_BACKEND = "dashscope/qwen-image-3.0"
 _DEFAULT_TEXT_BACKEND = "deepseek/deepseek-v4-flash-vision-exp"
 _DEFAULT_AUDIO_BACKEND = "dashscope/qwen3-tts-flash"
+MIN_AGENT_MAX_CONCURRENT_SESSIONS = 1
 DEFAULT_AGENT_MAX_CONCURRENT_SESSIONS = 20
+MAX_AGENT_MAX_CONCURRENT_SESSIONS = 20
 # 旁白默认音色（DashScope 预设）；可被 project.json 顶层 narration_voice 或全局 setting 覆盖
 # （与 video_backend 等同走顶层 key，非 settings 子字典）。
 _DEFAULT_NARRATION_VOICE = "Cherry"

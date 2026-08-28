@@ -127,6 +127,18 @@ class TestConfigReading:
                 result = await mgr._get_max_concurrent()
         assert result == 20
 
+    @pytest.mark.parametrize(("stored", "expected"), [("0", 1), ("5", 5), ("999", 20)])
+    async def test_get_max_concurrent_clamps_to_supported_range(self, tmp_path, stored, expected):
+        mgr = _make_manager(tmp_path)
+        with patch("server.agent_runtime.session_manager.async_session_factory") as mock_factory:
+            mock_session = AsyncMock()
+            mock_factory.return_value.__aenter__ = AsyncMock(return_value=mock_session)
+            mock_factory.return_value.__aexit__ = AsyncMock(return_value=False)
+            with patch("server.agent_runtime.session_manager.ConfigService") as MockSvc:
+                MockSvc.return_value.get_setting = AsyncMock(return_value=stored)
+                result = await mgr._get_max_concurrent()
+        assert result == expected
+
 
 class TestCleanup:
     async def test_cleanup_disconnects_after_delay(self, tmp_path):

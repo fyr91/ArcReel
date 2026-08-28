@@ -32,7 +32,12 @@ from lib.config.model_settings import parse_model_settings, serialize_model_sett
 from lib.config.registry import PROVIDER_REGISTRY
 from lib.config.repository import mask_secret
 from lib.config.resolver import ConfigResolver
-from lib.config.service import DEFAULT_AGENT_MAX_CONCURRENT_SESSIONS, ConfigService
+from lib.config.service import (
+    DEFAULT_AGENT_MAX_CONCURRENT_SESSIONS,
+    MAX_AGENT_MAX_CONCURRENT_SESSIONS,
+    MIN_AGENT_MAX_CONCURRENT_SESSIONS,
+    ConfigService,
+)
 from lib.db import get_async_session
 from lib.httpx_shared import get_http_client
 from lib.i18n import Translator
@@ -500,7 +505,10 @@ async def patch_system_config(
     # Integer settings with range validation
     _INT_SETTINGS_RANGES = {
         "agent_session_cleanup_delay_seconds": (10, 3600),
-        "agent_max_concurrent_sessions": (1, 20),
+        "agent_max_concurrent_sessions": (
+            MIN_AGENT_MAX_CONCURRENT_SESSIONS,
+            MAX_AGENT_MAX_CONCURRENT_SESSIONS,
+        ),
     }
     for key, (min_val, max_val) in _INT_SETTINGS_RANGES.items():
         if key in patch and patch[key] is not None:

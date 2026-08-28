@@ -68,6 +68,16 @@ def test_env_round_trip_keeps_secrets_out_of_plaintext() -> None:
     assert parsed == _bundle()
 
 
+def test_env_round_trip_preserves_agent_concurrency_default() -> None:
+    bundle = _bundle().model_copy(
+        update={"system_settings": {**_bundle().system_settings, "agent_max_concurrent_sessions": "20"}}
+    )
+
+    parsed = parse_config_bundle_env(render_config_bundle_env(bundle))
+
+    assert parsed.system_settings["agent_max_concurrent_sessions"] == "20"
+
+
 def test_env_requires_bundle_variable() -> None:
     with pytest.raises(ConfigBundleError, match="config_bundle_missing"):
         parse_config_bundle_env("AUTH_ENABLED=false\n")
@@ -114,6 +124,32 @@ async def test_export_omits_user_progress_settings(db_factory) -> None:
     assert exported.agent.api_key == "agent-secret"
     assert {provider.provider for provider in exported.providers} == {"ark-agent-plan"}
     assert "onboarding_seen" not in exported.system_settings
+
+
+@pytest.mark.asyncio
+async def test_export_includes_effective_agent_concurrency_when_setting_is_absent(db_factory) -> None:
+    async with db_factory() as session:
+        await import_release_config_bundle(session, _bundle())
+        await session.commit()
+
+        exported = await export_release_config_bundle(session)
+
+    assert exported.system_settings["agent_max_concurrent_sessions"] == "20"
+
+
+@pytest.mark.asyncio
+async def test_import_updates_agent_concurrency(db_factory) -> None:
+    bundle = _bundle().model_copy(
+        update={"system_settings": {**_bundle().system_settings, "agent_max_concurrent_sessions": "20"}}
+    )
+    async with db_factory() as session:
+        svc = ConfigService(session)
+        await svc.set_setting("agent_max_concurrent_sessions", "5")
+
+        await import_release_config_bundle(session, bundle)
+        await session.commit()
+
+        assert await svc.get_setting("agent_max_concurrent_sessions") == "20"
 
 
 @pytest.mark.asyncio
@@ -272,6 +308,16 @@ def test_preview_validation_rejects_duplicate_custom_provider_ids() -> None:
     bundle = _bundle().model_copy(update={"version": 2, "custom_providers": [custom, custom.model_copy()]})
 
     with pytest.raises(ConfigBundleError, match="config_bundle_custom_model_invalid"):
+        validate_release_config_bundle(bundle)
+
+
+@pytest.mark.parametrize("value", ["0", "21", "abc", "", "1.5", "+5", " 5 "])
+def test_validation_rejects_invalid_agent_concurrency(value: str) -> None:
+    bundle = _bundle().model_copy(
+        update={"system_settings": {**_bundle().system_settings, "agent_max_concurrent_sessions": value}}
+    )
+
+    with pytest.raises(ConfigBundleError, match="config_bundle_system_setting_invalid"):
         validate_release_config_bundle(bundle)
 
 

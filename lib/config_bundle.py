@@ -16,7 +16,12 @@ from sqlalchemy import update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from lib.config.registry import PROVIDER_REGISTRY
-from lib.config.service import ConfigService
+from lib.config.service import (
+    DEFAULT_AGENT_MAX_CONCURRENT_SESSIONS,
+    MAX_AGENT_MAX_CONCURRENT_SESSIONS,
+    MIN_AGENT_MAX_CONCURRENT_SESSIONS,
+    ConfigService,
+)
 from lib.db.models.credential import ProviderCredential
 from lib.db.repositories.agent_credential_repo import AgentCredentialRepository
 from lib.db.repositories.credential_repository import CredentialRepository
@@ -285,6 +290,17 @@ def _validate_custom_provider_bundle(provider: CustomProviderBundle) -> None:
         seen.add(normalized)
 
 
+def _validate_system_settings(settings: dict[str, str]) -> None:
+    raw_max_concurrent = settings.get("agent_max_concurrent_sessions")
+    if raw_max_concurrent is None:
+        return
+    if not re.fullmatch(r"(?:0|[1-9]\d*)", raw_max_concurrent):
+        raise ConfigBundleError("config_bundle_system_setting_invalid")
+    max_concurrent = int(raw_max_concurrent)
+    if not MIN_AGENT_MAX_CONCURRENT_SESSIONS <= max_concurrent <= MAX_AGENT_MAX_CONCURRENT_SESSIONS:
+        raise ConfigBundleError("config_bundle_system_setting_invalid")
+
+
 def _custom_model_to_db(model: CustomProviderModelBundle) -> dict:
     return {
         "model_id": model.model_id.strip(),
@@ -322,6 +338,7 @@ def validate_release_config_bundle(bundle: ReleaseConfigBundle) -> None:
         raise ConfigBundleError("config_bundle_version_unsupported")
     if set(bundle.system_settings) - PORTABLE_SYSTEM_SETTING_KEYS:
         raise ConfigBundleError("config_bundle_system_setting_unknown")
+    _validate_system_settings(bundle.system_settings)
 
     builtin_ids = [provider.provider for provider in bundle.providers]
     custom_ids = [provider.source_id for provider in bundle.custom_providers]
@@ -359,6 +376,7 @@ async def export_release_config_bundle(session: AsyncSession) -> ReleaseConfigBu
     ]
     settings = await svc.get_all_settings()
     portable_settings = {key: value for key, value in settings.items() if key in PORTABLE_SYSTEM_SETTING_KEYS}
+    portable_settings.setdefault("agent_max_concurrent_sessions", str(DEFAULT_AGENT_MAX_CONCURRENT_SESSIONS))
     custom_pairs = await CustomProviderRepository(session).list_providers_with_models()
     custom_providers = [
         CustomProviderBundle(

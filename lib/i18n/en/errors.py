@@ -496,6 +496,7 @@ MESSAGES = {
     "config_bundle_provider_field_unknown": "The configuration contains a field unsupported by its channel",
     "config_bundle_provider_credential_incomplete": "A channel credential in the configuration is incomplete",
     "config_bundle_system_setting_unknown": "The configuration contains a system setting unsupported by this version",
+    "config_bundle_system_setting_invalid": "The configuration contains an invalid system setting value",
     "background_job_unsupported": "This background job type is not supported",
     "asset_primary_resource_invalid_type": "A character primary resource must be an image or audio file",
     "asset_primary_resource_invalid": "The selected resource does not belong to this character or has the wrong media type",

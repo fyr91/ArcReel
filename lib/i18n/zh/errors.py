@@ -443,6 +443,7 @@ MESSAGES = {
     "config_bundle_provider_field_unknown": "配置文件包含当前渠道不支持的字段",
     "config_bundle_provider_credential_incomplete": "配置文件中的渠道凭据不完整",
     "config_bundle_system_setting_unknown": "配置文件包含当前版本不支持的系统设置",
+    "config_bundle_system_setting_invalid": "配置文件包含无效的系统设置值",
     "background_job_unsupported": "不支持这种后台任务类型",
     "asset_primary_resource_invalid_type": "人物主资源只能是图片或音频",
     "asset_primary_resource_invalid": "所选资源不属于该人物，或媒体类型不匹配",

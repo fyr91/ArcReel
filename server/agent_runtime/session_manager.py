@@ -67,7 +67,12 @@ from claude_agent_sdk.types import (
     PermissionResultDeny,
 )
 
-from lib.config.service import DEFAULT_AGENT_MAX_CONCURRENT_SESSIONS, ConfigService
+from lib.config.service import (
+    DEFAULT_AGENT_MAX_CONCURRENT_SESSIONS,
+    MAX_AGENT_MAX_CONCURRENT_SESSIONS,
+    MIN_AGENT_MAX_CONCURRENT_SESSIONS,
+    ConfigService,
+)
 from lib.db import async_session_factory
 from lib.ledger import Ledger
 from lib.providers import PROVIDER_ANTHROPIC
@@ -1731,7 +1736,10 @@ class SessionManager:
                     "agent_max_concurrent_sessions",
                     str(DEFAULT_AGENT_MAX_CONCURRENT_SESSIONS),
                 )
-            return max(int(val), 1)
+            return min(
+                max(int(val), MIN_AGENT_MAX_CONCURRENT_SESSIONS),
+                MAX_AGENT_MAX_CONCURRENT_SESSIONS,
+            )
         except Exception:
             logger.warning("读取 max_concurrent 配置失败，使用默认值", exc_info=True)
             return DEFAULT_AGENT_MAX_CONCURRENT_SESSIONS
