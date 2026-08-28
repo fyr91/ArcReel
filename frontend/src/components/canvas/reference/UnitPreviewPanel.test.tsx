@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from "vitest";
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, within } from "@testing-library/react";
 import { UnitPreviewPanel } from "./UnitPreviewPanel";
 import type { ReferenceVideoUnit } from "@/types";
 import { makeTask } from "@/test/factories";
@@ -234,7 +234,8 @@ describe("UnitPreviewPanel", () => {
     expect(
       screen.queryByRole("button", { name: /Confirm current video|确认当前视频/ }),
     ).not.toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /^HD$|^高清$/ })).toBeInTheDocument();
+    const hdPreview = screen.getByRole("region", { name: /HD video|高清视频/ });
+    expect(within(hdPreview).getByRole("button", { name: /^HD$|^高清$/ })).toBeInTheDocument();
   });
 
   it("shows provider progress and cancellation in the separate HD preview", () => {
