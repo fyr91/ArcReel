@@ -186,6 +186,42 @@ describe("CreateProjectModal", () => {
     expect(navigateMock).toHaveBeenCalledWith("/app/projects/demo-proj");
   });
 
+  it("persists imported global text tiers into a newly created project", async () => {
+    vi.spyOn(API, "getSystemConfig").mockResolvedValueOnce({
+      ...mockSysConfig,
+      settings: {
+        ...mockSysConfig.settings,
+        default_text_backend: "custom-1/deepseek-v4-pro",
+        text_backend_simple: "custom-1/deepseek-v4-flash-vision-exp",
+        text_backend_complex: "custom-1/deepseek-v4-pro",
+      },
+      options: {
+        ...mockSysConfig.options,
+        text_backends: [
+          "custom-1/deepseek-v4-flash-vision-exp",
+          "custom-1/deepseek-v4-pro",
+        ],
+      },
+    } as never);
+
+    render(<CreateProjectModal />);
+    fireEvent.change(screen.getByRole("textbox"), { target: { value: "deepseek defaults" } });
+    fireEvent.click(screen.getByRole("button", { name: /下一步/ }));
+    await waitFor(() => expect(screen.getByRole("button", { name: /下一步/ })).toBeEnabled());
+    fireEvent.click(screen.getByRole("button", { name: /下一步/ }));
+    await waitFor(() => expect(screen.getByRole("button", { name: /创建项目/ })).toBeInTheDocument());
+    fireEvent.click(screen.getByRole("button", { name: /创建项目/ }));
+
+    await waitFor(() => expect(API.createProject).toHaveBeenCalled());
+    expect(API.createProject).toHaveBeenCalledWith(
+      expect.objectContaining({
+        default_text_backend: "custom-1/deepseek-v4-pro",
+        text_backend_simple: "custom-1/deepseek-v4-flash-vision-exp",
+        text_backend_complex: "custom-1/deepseek-v4-pro",
+      }),
+    );
+  });
+
   it("shows R2V first and selected while I2V remains available for drama", () => {
     render(<CreateProjectModal />);
     const group = screen.getByRole("radiogroup", { name: /生成方式|Generation method/ });

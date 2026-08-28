@@ -117,6 +117,23 @@ async def test_export_omits_user_progress_settings(db_factory) -> None:
 
 
 @pytest.mark.asyncio
+async def test_export_preserves_all_three_text_model_defaults(db_factory) -> None:
+    async with db_factory() as session:
+        await import_release_config_bundle(session, _bundle())
+        svc = ConfigService(session)
+        await svc.set_setting("default_text_backend", "custom-1/deepseek-v4-pro")
+        await svc.set_setting("text_backend_simple", "custom-1/deepseek-v4-flash-vision-exp")
+        await svc.set_setting("text_backend_complex", "custom-1/deepseek-v4-pro")
+        await session.commit()
+
+        exported = await export_release_config_bundle(session)
+
+    assert exported.system_settings["default_text_backend"] == "custom-1/deepseek-v4-pro"
+    assert exported.system_settings["text_backend_simple"] == "custom-1/deepseek-v4-flash-vision-exp"
+    assert exported.system_settings["text_backend_complex"] == "custom-1/deepseek-v4-pro"
+
+
+@pytest.mark.asyncio
 async def test_upload_endpoint_imports_without_persisting_the_file(db_factory, monkeypatch) -> None:
     monkeypatch.setenv("CONFIG_IMPORT_ENABLED", "true")
     async with db_factory() as session:

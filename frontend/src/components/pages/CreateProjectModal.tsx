@@ -210,6 +210,17 @@ export function CreateProjectModal() {
           API.listCustomStyles().catch(() => ({ items: [] as CustomStyle[] })),
         ]);
         if (cancelled) return;
+        const globalDefaults = {
+          video: sysConfig.settings.default_video_backend ?? "",
+          videoI2V: sysConfig.settings.default_video_backend_i2v ?? "",
+          videoR2V: sysConfig.settings.default_video_backend_r2v ?? "",
+          image: sysConfig.settings.default_image_backend ?? "",
+          imageT2I: sysConfig.settings.default_image_backend_t2i ?? "",
+          imageI2I: sysConfig.settings.default_image_backend_i2i ?? "",
+          textDefault: sysConfig.settings.default_text_backend ?? "",
+          textSimple: sysConfig.settings.text_backend_simple ?? "",
+          textComplex: sysConfig.settings.text_backend_complex ?? "",
+        };
         setStep2Data({
           options: {
             video: sysConfig.options.video_backends,
@@ -219,18 +230,16 @@ export function CreateProjectModal() {
           },
           providers: providersRes.providers,
           customProviders: customRes.providers,
-          globalDefaults: {
-            video: sysConfig.settings.default_video_backend ?? "",
-            videoI2V: sysConfig.settings.default_video_backend_i2v ?? "",
-            videoR2V: sysConfig.settings.default_video_backend_r2v ?? "",
-            image: sysConfig.settings.default_image_backend ?? "",
-            imageT2I: sysConfig.settings.default_image_backend_t2i ?? "",
-            imageI2I: sysConfig.settings.default_image_backend_i2i ?? "",
-            textDefault: sysConfig.settings.default_text_backend ?? "",
-            textSimple: sysConfig.settings.text_backend_simple ?? "",
-            textComplex: sysConfig.settings.text_backend_complex ?? "",
-          },
+          globalDefaults,
         });
+        // 新项目把导入环境的三档文本路由显式写入 project.json。这样项目默认模型
+        // 不会先于全局简单/复杂档回退，导致三个档位都显示或执行成同一个模型。
+        setModels((current) => ({
+          ...current,
+          textBackendDefault: current.textBackendDefault || globalDefaults.textDefault,
+          textBackendSimple: current.textBackendSimple || globalDefaults.textSimple || globalDefaults.textDefault,
+          textBackendComplex: current.textBackendComplex || globalDefaults.textComplex || globalDefaults.textDefault,
+        }));
         setCustomStyles(stylesRes.items);
         setCustomStylesLoading(false);
       } catch (err) {
