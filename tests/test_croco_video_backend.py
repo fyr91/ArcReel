@@ -304,3 +304,24 @@ async def test_local_cancellation_requests_remote_h3_cancellation(tmp_path: Path
 
     backend._client.cancel_job.assert_awaited_once_with("job-1")
     assert persist.await_args.args[1]["phase"] == "cancelling"
+
+
+async def test_refine_resume_persists_existing_paid_child_without_resubmitting(tmp_path: Path):
+    backend = CrocoVideoBackend(api_key="test-token")
+    backend._client.refine_job = AsyncMock()
+    backend._poll_and_download = AsyncMock()
+
+    with patch.object(backend, "_persist_provider_job_id", new=AsyncMock()) as persist:
+        await backend.refine_preview(
+            "source-job",
+            output_path=tmp_path / "hd.mp4",
+            task_id="retry-task",
+            provider_job_id="paid-child",
+            duration_seconds=6,
+        )
+
+    backend._client.refine_job.assert_not_awaited()
+    persist.assert_awaited_once()
+    assert persist.await_args.args[1] == "paid-child"
+    backend._poll_and_download.assert_awaited_once()
+    assert backend._poll_and_download.await_args.args[0] == "paid-child"

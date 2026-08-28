@@ -5,6 +5,7 @@ import type { H3ExecutionProgress } from "@/types";
 interface H3GenerationProgressProps {
   progress: H3ExecutionProgress;
   onCancel?: () => void;
+  variant?: "generation" | "hd";
 }
 
 const PHASE_INDEX: Record<H3ExecutionProgress["phase"], number> = {
@@ -20,34 +21,71 @@ const PHASE_INDEX: Record<H3ExecutionProgress["phase"], number> = {
   cancelled: 5,
 };
 
-export function H3GenerationProgress({ progress, onCancel }: H3GenerationProgressProps) {
+export function H3GenerationProgress({
+  progress,
+  onCancel,
+  variant = "generation",
+}: H3GenerationProgressProps) {
   const { t } = useTranslation("dashboard");
-  const activeIndex = PHASE_INDEX[progress.phase];
-  const labels = [
-    t("h3_progress_style"),
-    t("h3_progress_optimize"),
-    t("h3_progress_submitted"),
-    t("h3_progress_queued"),
-    t("h3_progress_generating"),
-  ];
+  const hdPhaseIndex: Record<H3ExecutionProgress["phase"], number> = {
+    style_analyzing: 0,
+    prompt_optimizing: 0,
+    submitted: 0,
+    queued: 1,
+    preparing: 2,
+    running: 3,
+    cancelling: 3,
+    completed: 4,
+    failed: 4,
+    cancelled: 4,
+  };
+  const activeIndex = variant === "hd" ? hdPhaseIndex[progress.phase] : PHASE_INDEX[progress.phase];
+  const labels =
+    variant === "hd"
+      ? [
+          t("h3_hd_progress_submitted"),
+          t("h3_hd_progress_queued"),
+          t("h3_hd_progress_preparing"),
+          t("h3_hd_progress_processing"),
+        ]
+      : [
+          t("h3_progress_style"),
+          t("h3_progress_optimize"),
+          t("h3_progress_submitted"),
+          t("h3_progress_queued"),
+          t("h3_progress_generating"),
+        ];
   const percent = Math.max(0, Math.min(100, progress.progress ?? 0));
 
-  let detail = progress.phase === "style_analyzing"
-    ? t("h3_progress_style_detail")
-    : t("h3_progress_optimize_detail");
-  if (progress.phase === "submitted") detail = t("h3_progress_submitted_detail");
+  let detail =
+    variant === "hd"
+      ? t("h3_hd_progress_submitted_detail")
+      : progress.phase === "style_analyzing"
+        ? t("h3_progress_style_detail")
+        : t("h3_progress_optimize_detail");
+  if (progress.phase === "submitted") {
+    detail = t(variant === "hd" ? "h3_hd_progress_submitted_detail" : "h3_progress_submitted_detail");
+  }
   if (progress.phase === "queued") {
     detail =
       progress.queue_ahead == null
-        ? t("h3_progress_queued_waiting")
-        : t("h3_progress_queued_detail", {
+        ? t(variant === "hd" ? "h3_hd_progress_queued_waiting" : "h3_progress_queued_waiting")
+        : t(variant === "hd" ? "h3_hd_progress_queued_detail" : "h3_progress_queued_detail", {
             ahead: progress.queue_ahead,
             total: progress.queue_length ?? progress.queue_position ?? "—",
           });
   }
-  if (progress.phase === "preparing") detail = t("h3_progress_preparing_detail");
-  if (progress.phase === "running") detail = t("h3_progress_running_detail", { progress: percent });
-  if (progress.phase === "cancelling") detail = t("h3_progress_cancelling_detail");
+  if (progress.phase === "preparing") {
+    detail = t(variant === "hd" ? "h3_hd_progress_preparing_detail" : "h3_progress_preparing_detail");
+  }
+  if (progress.phase === "running") {
+    detail = t(variant === "hd" ? "h3_hd_progress_running_detail" : "h3_progress_running_detail", {
+      progress: percent,
+    });
+  }
+  if (progress.phase === "cancelling") {
+    detail = t(variant === "hd" ? "h3_hd_progress_cancelling_detail" : "h3_progress_cancelling_detail");
+  }
 
   return (
     <div className="w-[min(92%,420px)] rounded-xl border border-white/10 bg-black/70 p-4 text-left shadow-xl backdrop-blur">
@@ -56,7 +94,10 @@ export function H3GenerationProgress({ progress, onCancel }: H3GenerationProgres
         <span className="text-xs font-semibold text-white">{detail}</span>
       </div>
 
-      <ol className="grid grid-cols-5 gap-1" aria-label={t("h3_progress_aria")}>
+      <ol
+        className={`grid gap-1 ${variant === "hd" ? "grid-cols-4" : "grid-cols-5"}`}
+        aria-label={t(variant === "hd" ? "h3_hd_progress_aria" : "h3_progress_aria")}
+      >
         {labels.map((label, index) => {
           const completed = index < activeIndex;
           const active = index === activeIndex || (activeIndex === 5 && index === 4);
@@ -115,7 +156,7 @@ export function H3GenerationProgress({ progress, onCancel }: H3GenerationProgres
           className="focus-ring mt-3 inline-flex w-full items-center justify-center gap-1.5 rounded-md border border-white/15 bg-white/5 px-3 py-1.5 text-[11px] font-medium text-white/75 hover:bg-white/10"
         >
           <X className="h-3.5 w-3.5" aria-hidden="true" />
-          {t("h3_progress_cancel")}
+          {t(variant === "hd" ? "h3_hd_progress_cancel" : "h3_progress_cancel")}
         </button>
       )}
     </div>

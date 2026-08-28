@@ -409,6 +409,8 @@ MESSAGES = {
     "video_h3_refine_mode_unsupported": "Model {model} can enable HD processing only in reference-to-video mode; provide reference images for the current storyboard",
     "video_hd_project_unsupported": "HD processing is available only for drama and course reference-video projects",
     "video_hd_confirm_first": "Confirm the current video before making it HD",
+    "video_confirm_not_generated": "The video has not been generated and cannot be confirmed",
+    "video_confirm_version_missing": "The current video version does not exist and cannot be confirmed",
     "video_hd_already_completed": "The current video is already HD",
     "video_hd_checkpoint_unavailable": "This video has no usable HD checkpoint; generate a new first-pass video",
     "video_hd_source_changed": "The source video changed; refresh and try again",

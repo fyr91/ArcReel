@@ -50,6 +50,7 @@ class H3RefineCandidate:
     source_job_id: str
     duration_seconds: int
     prompt: str
+    source_video_clip: str
     version_metadata: dict[str, Any]
 
 
@@ -132,6 +133,11 @@ async def resolve_h3_refine_candidate(
     if type(duration) is not int or duration <= 0:
         raise H3RefineUnavailable("video_hd_checkpoint_unavailable")
     prompt = record.get("prompt")
+    source_video_clip = record.get("file")
+    if not isinstance(source_video_clip, str) or not VersionManager.is_managed_snapshot_path(
+        "reference_videos", source_video_clip
+    ):
+        raise H3RefineUnavailable("video_hd_checkpoint_unavailable")
     return H3RefineCandidate(
         project_name=project_name,
         episode=episode,
@@ -142,6 +148,7 @@ async def resolve_h3_refine_candidate(
         source_job_id=source_job_id,
         duration_seconds=duration,
         prompt=prompt if isinstance(prompt, str) else "",
+        source_video_clip=source_video_clip,
         version_metadata=dict(record),
     )
 
@@ -215,19 +222,51 @@ async def enqueue_h3_refine_task(
         unit_id,
         queue=queue,
     )
+    latest = await queue.get_latest_task_for_resource(
+        project_name=project_name,
+        task_type=H3_REFINE_TASK_TYPE,
+        resource_id=unit_id,
+        user_id=user_id,
+    )
+    resume_provider_job_id = None
+    if latest and latest.get("status") == "failed":
+        latest_payload = latest.get("payload")
+        progress = latest.get("execution_progress")
+        if (
+            isinstance(latest_payload, Mapping)
+            and all(
+                latest_payload.get(key) == value
+                for key, value in {
+                    "source_version": candidate.source_version,
+                    "source_task_id": candidate.source_task_id,
+                    "source_job_id": candidate.source_job_id,
+                }.items()
+            )
+            and isinstance(progress, Mapping)
+            and progress.get("phase") == "completed"
+            and progress.get("provider_status") == "succeeded"
+            and isinstance(latest.get("provider_job_id"), str)
+            and latest.get("provider_job_id")
+        ):
+            resume_provider_job_id = latest["provider_job_id"]
+
+    payload = {
+        "episode": episode,
+        "source_version": candidate.source_version,
+        "source_task_id": candidate.source_task_id,
+        "source_job_id": candidate.source_job_id,
+        "duration_seconds": candidate.duration_seconds,
+    }
+    if resume_provider_job_id is not None:
+        payload["resume_provider_job_id"] = resume_provider_job_id
+
     task = await queue.enqueue_task(
         project_name=project_name,
         task_type=H3_REFINE_TASK_TYPE,
         media_type="video",
         resource_id=unit_id,
         script_file=candidate.script_file,
-        payload={
-            "episode": episode,
-            "source_version": candidate.source_version,
-            "source_task_id": candidate.source_task_id,
-            "source_job_id": candidate.source_job_id,
-            "duration_seconds": candidate.duration_seconds,
-        },
+        payload=payload,
         source=source,
         user_id=user_id,
         provider_id=PROVIDER_CROCO,
@@ -236,7 +275,24 @@ async def enqueue_h3_refine_task(
 
 
 def _version_metadata(candidate: H3RefineCandidate, task_id: str, child_job_id: str) -> dict[str, Any]:
-    ignored = {"version", "file", "file_url", "is_current", "created_at", "_previous_current_version"}
+    ignored = {
+        "version",
+        "file",
+        "file_url",
+        "is_current",
+        "created_at",
+        "_previous_current_version",
+        # Passed explicitly by VideoArtifactCommitter/commit_paid_video_artifact.
+        "resource_type",
+        "resource_id",
+        "prompt",
+        "staged_file",
+        "current_file",
+        "select_current",
+        "expected_current_version",
+        "on_select",
+        "duration_seconds",
+    }
     metadata = {key: value for key, value in candidate.version_metadata.items() if key not in ignored}
     currency = VideoArtifactCurrencyFacts.from_dict(metadata.get("artifact_video_currency"))
     backend_model_id = str(candidate.version_metadata["execution_backend_model_id"])
@@ -261,6 +317,37 @@ def _version_metadata(candidate: H3RefineCandidate, task_id: str, child_job_id: 
         }
     )
     return metadata
+
+
+def _apply_refined_assets(
+    unit: dict[str, Any],
+    candidate: H3RefineCandidate,
+    *,
+    selected_version: int,
+    generated_at: str,
+    video_uri: str | None,
+    thumbnail_available: bool,
+) -> None:
+    """Project the selected HD version while retaining the confirmed preview."""
+    assets = unit.setdefault("generated_assets", {})
+    canonical_clip = resource_relative_path("reference_videos", candidate.unit_id)
+    assets["video_clip"] = canonical_clip
+    assets["original_video_clip"] = candidate.source_video_clip
+    assets["hd_video_clip"] = canonical_clip
+    assets["video_generated_at"] = generated_at
+    assets["status"] = "completed"
+    if video_uri:
+        assets["video_uri"] = video_uri
+        assets["hd_video_uri"] = video_uri
+    else:
+        assets.pop("video_uri", None)
+        assets.pop("hd_video_uri", None)
+    if thumbnail_available:
+        assets["video_thumbnail"] = f"reference_videos/thumbnails/{candidate.unit_id}.jpg"
+    else:
+        assets.pop("video_thumbnail", None)
+    unit["video_review_status"] = "confirmed"
+    unit["confirmed_video_version"] = selected_version
 
 
 async def execute_h3_refine_task(
@@ -310,14 +397,22 @@ async def execute_h3_refine_task(
         prompt=candidate.prompt,
     )
     try:
+        resume_provider_job_id = payload.get("resume_provider_job_id")
+        effective_provider_job_id = (
+            provider_job_id
+            if isinstance(provider_job_id, str) and provider_job_id
+            else resume_provider_job_id
+            if isinstance(resume_provider_job_id, str) and resume_provider_job_id
+            else None
+        )
         result = await backend.refine_preview(
             candidate.source_job_id,
             output_path=staged_file,
             task_id=task_id,
-            provider_job_id=provider_job_id,
+            provider_job_id=effective_provider_job_id,
             duration_seconds=candidate.duration_seconds,
         )
-        child_job_id = provider_job_id
+        child_job_id = effective_provider_job_id
         if child_job_id is None:
             current_task = await get_generation_queue().get_task(task_id)
             child_job_id = current_task.get("provider_job_id") if current_task else None
@@ -343,20 +438,14 @@ async def execute_h3_refine_task(
             generated_at = datetime.now(UTC).isoformat()
             with pm.locked_script(project_name, candidate.script_file, validate=False) as script:
                 unit = _find_unit(script, resource_id)
-                assets = unit.setdefault("generated_assets", {})
-                assets["video_clip"] = resource_relative_path("reference_videos", resource_id)
-                assets["video_generated_at"] = generated_at
-                assets["status"] = "completed"
-                if result.video_uri:
-                    assets["video_uri"] = result.video_uri
-                else:
-                    assets.pop("video_uri", None)
-                if thumb_path.is_file():
-                    assets["video_thumbnail"] = f"reference_videos/thumbnails/{resource_id}.jpg"
-                else:
-                    assets.pop("video_thumbnail", None)
-                unit["video_review_status"] = "confirmed"
-                unit["confirmed_video_version"] = outcome.version
+                _apply_refined_assets(
+                    unit,
+                    candidate,
+                    selected_version=outcome.version,
+                    generated_at=generated_at,
+                    video_uri=result.video_uri,
+                    thumbnail_available=thumb_path.is_file(),
+                )
             return {
                 "resource_type": "reference_videos",
                 "resource_id": resource_id,

@@ -100,6 +100,20 @@ def test_list_units_404_for_unknown_project(client: TestClient):
 
 
 @pytest.mark.unit
+def test_confirm_video_uses_shared_operation(client: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:
+    from server.routers import reference_videos as router_mod
+
+    operation = AsyncMock(return_value={"success": True, "unit_id": "E1U01", "confirmed_video_version": 2})
+    monkeypatch.setattr(router_mod, "confirm_reference_video", operation)
+
+    response = client.post("/api/v1/projects/demo/reference-videos/episodes/1/units/E1U01/confirm-video")
+
+    assert response.status_code == 200
+    assert response.json()["confirmed_video_version"] == 2
+    assert operation.await_args.args[1:] == ("demo", 1, "E1U01")
+
+
+@pytest.mark.unit
 def test_hd_status_uses_shared_operation(client: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:
     from server.routers import reference_videos as router_mod
 

@@ -1074,6 +1074,24 @@ describe("refreshTasks（多入口共享刷新的在途合并）", () => {
     expect(useAppStore.getState().referenceVideoUnitsRevision).toBe(1);
   });
 
+  it("轮询看到高清任务转成功时失效单元缓存", async () => {
+    useAppStore.setState({ referenceVideoUnitsRevision: 0 });
+    useTasksStore.getState().setRefreshScope({ projectName: "proj" });
+
+    mockFetch([
+      task({ task_id: "hd1", task_type: "reference_video_refine", status: "running" }),
+    ]);
+    await useTasksStore.getState().refreshTasks();
+
+    vi.restoreAllMocks();
+    mockFetch([
+      task({ task_id: "hd1", task_type: "reference_video_refine", status: "succeeded" }),
+    ]);
+    await useTasksStore.getState().refreshTasks();
+
+    expect(useAppStore.getState().referenceVideoUnitsRevision).toBe(1);
+  });
+
   it("轮询看到参考单元旁白任务转成功时失效单元缓存", async () => {
     // SSE 是完成事件主通道；它静默失速时，任务轮询也必须让新写入剧本的旁白路径出现在
     // reference-video-store，否则播放器会一直持有生成前的旧 unit 快照。

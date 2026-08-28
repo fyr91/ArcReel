@@ -49,7 +49,12 @@ export interface UnitGeneratedAssets {
   grid_id: string | null;
   grid_cell_index: number | null;
   video_clip: string | null;
+  /** Confirmed first-pass video retained when an HD rendition is produced. */
+  original_video_clip?: string | null;
+  /** HD rendition; the canonical video_clip remains the downstream selection. */
+  hd_video_clip?: string | null;
   video_uri: string | null;
+  hd_video_uri?: string | null;
   video_thumbnail?: string | null;
   narration_audio?: string | null;
   /** Raw backend status — use `UnitStatus` for UI display. */

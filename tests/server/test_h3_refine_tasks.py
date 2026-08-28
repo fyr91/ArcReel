@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
@@ -112,6 +113,106 @@ async def test_enqueue_freezes_confirmed_preview_and_uses_shared_queue_contract(
         "source_job_id": "first-pass-job",
         "duration_seconds": 6,
     }
+
+
+async def test_enqueue_reuses_successful_provider_child_after_local_commit_failure(tmp_path: Path) -> None:
+    pm, _path = _project(tmp_path)
+    queue = _Queue()
+    queue.latest = {
+        "task_id": "failed-local-task",
+        "status": "failed",
+        "provider_job_id": "successful-paid-child",
+        "payload": {
+            "episode": 1,
+            "source_version": 1,
+            "source_task_id": "first-pass-task",
+            "source_job_id": "first-pass-job",
+            "duration_seconds": 6,
+        },
+        "execution_progress": {
+            "kind": "minimax_h3",
+            "phase": "completed",
+            "provider_status": "succeeded",
+            "progress": 100,
+        },
+    }
+
+    await service.enqueue_h3_refine_task(
+        pm,
+        "demo",
+        1,
+        "E1U01",
+        source="webui",
+        queue=queue,  # type: ignore[arg-type]
+    )
+
+    assert queue.enqueued is not None
+    assert queue.enqueued["payload"]["resume_provider_job_id"] == "successful-paid-child"
+
+
+async def test_refined_version_metadata_does_not_duplicate_committer_arguments(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    pm, _path = _project(tmp_path)
+    candidate = await service.resolve_h3_refine_candidate(
+        pm,
+        "demo",
+        1,
+        "E1U01",
+        queue=_Queue(),  # type: ignore[arg-type]
+    )
+
+    @dataclass(frozen=True)
+    class _Currency:
+        parent_version: int = 0
+
+        def to_dict(self) -> dict[str, int]:
+            return {"parent_version": self.parent_version}
+
+    monkeypatch.setattr(service.VideoArtifactCurrencyFacts, "from_dict", lambda _value: _Currency())
+
+    metadata = service._version_metadata(candidate, "hd-task", "hd-child")
+
+    assert "prompt" not in metadata
+    assert "duration_seconds" not in metadata
+    assert "file" not in metadata
+    assert metadata["h3_refined"] is True
+    assert metadata["h3_refine_job_id"] == "hd-child"
+
+
+async def test_refined_asset_projection_retains_original_and_selects_hd(tmp_path: Path) -> None:
+    pm, _path = _project(tmp_path)
+    candidate = await service.resolve_h3_refine_candidate(
+        pm,
+        "demo",
+        1,
+        "E1U01",
+        queue=_Queue(),  # type: ignore[arg-type]
+    )
+    unit = {
+        "generated_assets": {
+            "video_clip": "reference_videos/E1U01.mp4",
+            "video_uri": "https://old.example/preview.mp4",
+        }
+    }
+
+    service._apply_refined_assets(
+        unit,
+        candidate,
+        selected_version=2,
+        generated_at="2026-08-28T00:00:00+00:00",
+        video_uri="https://example.test/hd.mp4",
+        thumbnail_available=True,
+    )
+
+    assets = unit["generated_assets"]
+    assert assets["original_video_clip"] == candidate.source_video_clip
+    assert assets["video_clip"] == "reference_videos/E1U01.mp4"
+    assert assets["hd_video_clip"] == "reference_videos/E1U01.mp4"
+    assert assets["hd_video_uri"] == "https://example.test/hd.mp4"
+    assert unit["confirmed_video_version"] == 2
+    assert unit["video_review_status"] == "confirmed"
 
 
 async def test_enqueue_requires_confirmation_before_hd(tmp_path: Path) -> None:

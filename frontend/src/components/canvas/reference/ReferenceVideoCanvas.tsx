@@ -243,7 +243,8 @@ export function ReferenceVideoCanvas({
     () => units.find((u) => u.unit_id === selectedUnitId) ?? null,
     [units, selectedUnitId],
   );
-  const selectedHdTaskStatus = selected ? hdTasksByUnit.get(selected.unit_id)?.status : undefined;
+  const selectedHdTask = selected ? (hdTasksByUnit.get(selected.unit_id) ?? null) : null;
+  const selectedHdTaskStatus = selectedHdTask?.status;
 
   useEffect(() => {
     if (!selected || selected.video_review_status !== "confirmed") return;
@@ -1641,6 +1642,8 @@ export function ReferenceVideoCanvas({
                           onConfirmVideo={canConfirmVideo ? handleConfirmVideo : undefined}
                           videoConfirmed={selected.video_review_status === "confirmed"}
                           hdState={hdStates[selected.unit_id] ?? "unavailable"}
+                          hdTask={selectedHdTask}
+                          hdErrorMessage={selectedHdTask?.error_message ?? null}
                           onMakeHd={handleMakeHd}
                         />
                       </div>
@@ -1679,6 +1682,8 @@ export function ReferenceVideoCanvas({
                   onConfirmVideo={canConfirmVideo ? handleConfirmVideo : undefined}
                   videoConfirmed={selected?.video_review_status === "confirmed"}
                   hdState={selected ? (hdStates[selected.unit_id] ?? "unavailable") : "unavailable"}
+                  hdTask={selectedHdTask}
+                  hdErrorMessage={selectedHdTask?.error_message ?? null}
                   onMakeHd={handleMakeHd}
                 />
               </div>

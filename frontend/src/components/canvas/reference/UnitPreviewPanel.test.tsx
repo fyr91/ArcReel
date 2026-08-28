@@ -167,6 +167,118 @@ describe("UnitPreviewPanel", () => {
     expect(onMakeHd).toHaveBeenCalledWith("E1U1");
   });
 
+  it("turns the confirm action into the HD action after confirmation", () => {
+    const onConfirmVideo = vi.fn();
+    const onMakeHd = vi.fn();
+    const unit = mkUnit({
+      generated_assets: {
+        ...mkUnit().generated_assets,
+        status: "completed",
+        video_clip: "reference_videos/E1U1.mp4",
+      },
+    });
+    const { rerender } = render(
+      <UnitPreviewPanel
+        unit={unit}
+        projectName="proj"
+        status="ready"
+        onConfirmVideo={onConfirmVideo}
+        onMakeHd={onMakeHd}
+        hdState="available"
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: /Confirm current video|确认当前视频/ }));
+    expect(onConfirmVideo).toHaveBeenCalledWith("E1U1");
+
+    rerender(
+      <UnitPreviewPanel
+        unit={unit}
+        projectName="proj"
+        status="ready"
+        videoConfirmed
+        onConfirmVideo={onConfirmVideo}
+        onMakeHd={onMakeHd}
+        hdState="available"
+      />,
+    );
+    expect(
+      screen.queryByRole("button", { name: /Confirm current video|确认当前视频/ }),
+    ).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /^HD$|^高清$/ })).toBeInTheDocument();
+  });
+
+  it("shows provider progress and cancellation in the separate HD preview", () => {
+    const onCancelTask = vi.fn();
+    const unit = mkUnit({
+      generated_assets: {
+        ...mkUnit().generated_assets,
+        status: "completed",
+        video_clip: "reference_videos/E1U1.mp4",
+      },
+    });
+
+    render(
+      <UnitPreviewPanel
+        unit={unit}
+        projectName="proj"
+        status="ready"
+        videoConfirmed
+        onMakeHd={vi.fn()}
+        onCancelTask={onCancelTask}
+        hdState="processing"
+        hdTask={makeTask({
+          task_id: "hd-task",
+          task_type: "reference_video_refine",
+          status: "running",
+          execution_progress: {
+            kind: "minimax_h3",
+            phase: "running",
+            provider_status: "running",
+            stage: "latent_upscale",
+            progress: 63,
+            can_cancel: true,
+            queue_position: null,
+            queue_length: null,
+            queue_ahead: null,
+          },
+        })}
+      />,
+    );
+
+    expect(screen.getByRole("progressbar")).toHaveAttribute("aria-valuenow", "63");
+    fireEvent.click(screen.getByRole("button", { name: /Cancel HD processing|取消高清处理/ }));
+    expect(onCancelTask).toHaveBeenCalledWith("hd-task");
+  });
+
+  it("keeps the original preview and adds a distinct HD preview below it", () => {
+    const unit = mkUnit({
+      generated_assets: {
+        ...mkUnit().generated_assets,
+        status: "completed",
+        video_clip: "reference_videos/E1U1.mp4",
+        original_video_clip: "versions/reference_videos/E1U1/v1.mp4",
+        hd_video_clip: "reference_videos/E1U1.mp4",
+      },
+    });
+
+    const { container } = render(
+      <UnitPreviewPanel
+        unit={unit}
+        projectName="proj"
+        status="ready"
+        videoConfirmed
+        onMakeHd={vi.fn()}
+        hdState="completed"
+      />,
+    );
+
+    const videos = [...container.querySelectorAll("video")];
+    expect(videos).toHaveLength(2);
+    expect(videos[0].getAttribute("src")).toContain("versions/reference_videos/E1U1/v1.mp4");
+    expect(videos[1].getAttribute("src")).toContain("reference_videos/E1U1.mp4");
+  });
+
   it("renders HD processing and completion without exposing refine terminology", () => {
     const unit = mkUnit({
       generated_assets: {
@@ -185,7 +297,7 @@ describe("UnitPreviewPanel", () => {
         hdState="processing"
       />,
     );
-    expect(screen.getByText(/Making HD|高清处理中/)).toBeInTheDocument();
+    expect(screen.getAllByText(/Making HD|高清处理中/).length).toBeGreaterThan(0);
     expect(screen.queryByText(/refine|latent|二采/i)).not.toBeInTheDocument();
 
     rerender(

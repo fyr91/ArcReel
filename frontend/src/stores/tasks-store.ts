@@ -238,6 +238,7 @@ export const useTasksStore = create<TasksState>((set, get) => {
       (t) =>
         (
           t.task_type === "reference_video" ||
+          t.task_type === "reference_video_refine" ||
           t.task_type === "reference_keyframe" ||
           t.task_type === "reference_storyboard_sheet" ||
           t.task_type === "tts" ||

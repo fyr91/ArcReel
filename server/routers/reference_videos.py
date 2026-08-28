@@ -96,6 +96,10 @@ from server.services.reference_storyboard_sheet_tasks import (
 from server.services.reference_storyboard_sheet_tasks import (
     confirm_storyboard_sheet as confirm_storyboard_sheet_service,
 )
+from server.services.reference_video_review import (
+    ReferenceVideoReviewUnavailable,
+    confirm_reference_video,
+)
 from server.services.reference_video_tasks import (
     apply_unit_video_assets,
     default_unit_duration,
@@ -998,25 +1002,19 @@ async def confirm_unit_video(
     unit_id: str,
     _t: Translator,
 ) -> dict[str, Any]:
-    project, script, script_file = _load_episode_script(project_name, episode, _t)
-    unit = _find_unit(script, unit_id, _t)
-    assets = unit.get("generated_assets")
-    if not isinstance(assets, dict) or not assets.get("video_clip"):
-        raise HTTPException(status_code=409, detail="视频尚未生成，无法确认")
-    project_path = get_project_manager().get_project_path(project_name)
-    version = await asyncio.to_thread(VersionManager(project_path).get_current_version, "reference_videos", unit_id)
-    if version <= 0:
-        raise HTTPException(status_code=409, detail="当前视频版本不存在，无法确认")
-    with get_project_manager().locked_script(project_name, script_file, validate=True) as current:
-        target = _find_unit(current, unit_id, _t)
-        target["video_review_status"] = "confirmed"
-        target["confirmed_video_version"] = version
-    return {
-        "success": True,
-        "unit_id": unit_id,
-        "confirmed_video_version": version,
-        "content_mode": project.get("content_mode"),
-    }
+    try:
+        return await confirm_reference_video(
+            get_project_manager(),
+            project_name,
+            episode,
+            unit_id,
+        )
+    except ReferenceVideoReviewUnavailable as exc:
+        missing = {"project_not_found", "ref_episode_not_found", "script_not_found", "ref_unit_not_found"}
+        raise HTTPException(
+            status_code=404 if exc.code in missing else 409,
+            detail=_t(exc.code, **exc.params),
+        ) from exc
 
 
 @router.get("/episodes/{episode}/units/{unit_id}/hd")

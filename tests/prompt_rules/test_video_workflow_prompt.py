@@ -223,6 +223,15 @@ def test_generate_video_skill_names_the_shared_h3_prompt_review_tools() -> None:
     assert "mcp__arcreel__confirm_h3_video_prompts" in content
 
 
+def test_generate_video_skill_names_agent_confirmation_before_hd() -> None:
+    content = _reference(VIDEO_SKILL)
+
+    assert "confirm_reference_video" in ARCREEL_MCP_TOOL_IDS
+    assert "mcp__arcreel__confirm_reference_video" in content
+    assert "make_reference_video_hd" in ARCREEL_MCP_TOOL_IDS
+    assert "mcp__arcreel__make_reference_video_hd" in content
+
+
 def test_asset_analysis_subagent_names_its_registered_tool() -> None:
     content = (PROFILE / ".claude" / "agents" / "analyze-assets.md").read_text(encoding="utf-8")
 

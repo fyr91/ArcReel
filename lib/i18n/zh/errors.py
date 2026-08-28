@@ -356,6 +356,8 @@ MESSAGES = {
     "video_h3_refine_mode_unsupported": "模型 {model} 仅支持在参考生视频模式下启用高清处理；请为当前分镜提供参考图",
     "video_hd_project_unsupported": "高清仅适用于剧情和课程的参考视频项目",
     "video_hd_confirm_first": "请先确认当前视频，再进行高清处理",
+    "video_confirm_not_generated": "视频尚未生成，无法确认",
+    "video_confirm_version_missing": "当前视频版本不存在，无法确认",
     "video_hd_already_completed": "当前视频已经是高清版",
     "video_hd_checkpoint_unavailable": "当前视频没有可用的高清断点，请重新生成首采视频",
     "video_hd_source_changed": "当前视频来源已变更，请刷新后重试",

@@ -409,6 +409,8 @@ MESSAGES = {
     "video_h3_refine_mode_unsupported": "Mô hình {model} chỉ có thể bật xử lý HD ở chế độ tạo video từ ảnh tham chiếu; hãy cung cấp ảnh tham chiếu cho storyboard hiện tại",
     "video_hd_project_unsupported": "Xử lý HD chỉ áp dụng cho dự án video tham chiếu dạng phim truyện và khóa học",
     "video_hd_confirm_first": "Hãy xác nhận video hiện tại trước khi xử lý HD",
+    "video_confirm_not_generated": "Video chưa được tạo nên không thể xác nhận",
+    "video_confirm_version_missing": "Phiên bản video hiện tại không tồn tại nên không thể xác nhận",
     "video_hd_already_completed": "Video hiện tại đã ở chế độ HD",
     "video_hd_checkpoint_unavailable": "Video này không có điểm kiểm tra HD khả dụng; hãy tạo lại video lần đầu",
     "video_hd_source_changed": "Video nguồn đã thay đổi; hãy làm mới rồi thử lại",

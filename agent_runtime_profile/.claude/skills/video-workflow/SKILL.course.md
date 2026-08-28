@@ -19,7 +19,8 @@ description: 编排课程视频项目的单文档单集工作流；用户说继�
    `@[名称]` mention 实时派生为只读预览。用户通过修改文稿引用改变相关素材，确认后继续。
 7. `generate_script`：沿用现有 ReferenceVideoScript 生成。
 8. 沿用 Storyboard Sheet 与 Keyframes 的生成、编辑和确认。
-9. 先并行生成 `opening`、全部 `story`、`closing`，逐条确认视频。
+9. 先并行生成 `opening`、全部 `story`、`closing`；逐条展示，得到用户明确认可后调用
+   `mcp__arcreel__confirm_reference_video` 确认对应 unit，不得只提示用户去 Web 点击确认。
 10. 基础视频全部确认后生成 `explanation`。第一条 explanation 使用前一 story 尾帧，连续 explanation 使用前一 explanation 尾帧；程序在右下角合成讲师方形框作为实际首帧。
 11. 全部视频生成并确认后，沿用现有 HyperFrames 自动剪辑入口，按 unit 顺序拼接和导出。
 

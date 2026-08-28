@@ -57,6 +57,8 @@ export interface UnitPreviewPanelProps {
   onConfirmVideo?: (unitId: string) => void | Promise<void>;
   videoConfirmed?: boolean;
   hdState?: "available" | "processing" | "completed" | "failed" | "unavailable";
+  hdTask?: TaskItem | null;
+  hdErrorMessage?: string | null;
   onMakeHd?: (unitId: string) => void | Promise<void>;
 }
 
@@ -88,12 +90,17 @@ export function UnitPreviewPanel({
   onConfirmVideo,
   videoConfirmed = false,
   hdState = "unavailable",
+  hdTask,
+  hdErrorMessage,
   onMakeHd,
 }: UnitPreviewPanelProps) {
   const { t } = useTranslation("dashboard");
   const clip = unit?.generated_assets.video_clip ?? null;
+  const originalClip = unit?.generated_assets.original_video_clip ?? clip;
+  const hdClip = unit?.generated_assets.hd_video_clip ?? null;
   // 上传/还原后路径不变，靠 fingerprint cache-bust 让 <video> 重新拉取
-  const clipFp = useProjectsStore((s) => (clip ? s.getAssetFingerprint(clip) : null));
+  const clipFp = useProjectsStore((s) => (originalClip ? s.getAssetFingerprint(originalClip) : null));
+  const hdClipFp = useProjectsStore((s) => (hdClip ? s.getAssetFingerprint(hdClip) : null));
 
   if (!unit) {
     return (
@@ -104,7 +111,8 @@ export function UnitPreviewPanel({
   }
 
   const effectiveStatus = status ?? resolveUnitStatus(unit);
-  const videoUrl = clip && projectName ? API.getFileUrl(projectName, clip, clipFp) : null;
+  const videoUrl = originalClip && projectName ? API.getFileUrl(projectName, originalClip, clipFp) : null;
+  const hdVideoUrl = hdClip && projectName ? API.getFileUrl(projectName, hdClip, hdClipFp) : null;
 
   // 状态先于 video_clip 落库的窗口里，effectiveStatus==="ready" 但 videoUrl
   // 还为 null —— 这种情况下走 inFlight 占位避免空白面板。
@@ -118,6 +126,8 @@ export function UnitPreviewPanel({
     (effectiveStatus === "ready" && !videoUrl);
   const h3Progress = task?.execution_progress?.kind === "minimax_h3" ? task.execution_progress : null;
   const h3TaskId = h3Progress ? task?.task_id : undefined;
+  const hdProgress = hdTask?.execution_progress?.kind === "minimax_h3" ? hdTask.execution_progress : null;
+  const hdTaskId = hdProgress ? hdTask?.task_id : undefined;
 
   const ctaLabel = ready
     ? t("reference_preview_regenerate")
@@ -172,7 +182,7 @@ export function UnitPreviewPanel({
           <>
             {/* eslint-disable-next-line jsx-a11y/media-has-caption -- provider-generated video is directly previewable; subtitle materialization is not a playback prerequisite */}
             <video
-              key={`${clip}:${clipFp ?? "current"}`}
+              key={`${originalClip}:${clipFp ?? "current"}`}
               src={videoUrl}
               aria-label={`${unit.unit_id} ${t("reference_preview_label")}`}
               controls
@@ -184,7 +194,7 @@ export function UnitPreviewPanel({
               className="pointer-events-none absolute left-2 top-2 inline-flex items-center gap-1 rounded border border-white/10 bg-black/55 px-2 py-0.5 font-mono text-[10px] text-white/85 backdrop-blur"
               translate="no"
             >
-              {clip}
+              {originalClip}
             </div>
           </>
         )}
@@ -281,42 +291,117 @@ export function UnitPreviewPanel({
         </button>
       )}
 
-      {ready && onConfirmVideo && (
+      {ready &&
+        ((!videoConfirmed && onConfirmVideo) ||
+          (videoConfirmed && onMakeHd && hdState !== "unavailable")) && (
         <button
           type="button"
-          disabled={videoConfirmed || busy || restoring}
-          onClick={() => void onConfirmVideo(unit.unit_id)}
-          className="focus-ring inline-flex items-center justify-center gap-2 rounded-lg border border-emerald-500/40 bg-emerald-500/10 px-3.5 py-2 text-sm font-medium text-emerald-200 disabled:cursor-default disabled:opacity-60"
+          disabled={
+            busy ||
+            restoring ||
+            (videoConfirmed && (hdState === "processing" || hdState === "completed"))
+          }
+          onClick={() =>
+            void (videoConfirmed
+              ? onMakeHd?.(unit.unit_id)
+              : onConfirmVideo?.(unit.unit_id))
+          }
+          className={`focus-ring inline-flex items-center justify-center gap-2 rounded-lg border px-3.5 py-2 text-sm font-medium disabled:cursor-default disabled:opacity-60 ${
+            videoConfirmed
+              ? "border-sky-400/40 bg-sky-400/10 text-sky-100"
+              : "border-emerald-500/40 bg-emerald-500/10 text-emerald-200"
+          }`}
         >
-          <CheckCircle2 className="h-4 w-4" aria-hidden="true" />
-          {videoConfirmed ? t("course_video_confirmed") : t("course_video_confirm")}
-        </button>
-      )}
-
-      {ready && videoConfirmed && onMakeHd && hdState !== "unavailable" && (
-        <button
-          type="button"
-          disabled={hdState === "processing" || hdState === "completed" || busy || restoring}
-          onClick={() => void onMakeHd(unit.unit_id)}
-          className="focus-ring inline-flex items-center justify-center gap-2 rounded-lg border border-sky-400/40 bg-sky-400/10 px-3.5 py-2 text-sm font-medium text-sky-100 disabled:cursor-default disabled:opacity-60"
-        >
-          {hdState === "processing" ? (
+          {videoConfirmed && hdState === "processing" ? (
             <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
-          ) : hdState === "failed" ? (
+          ) : videoConfirmed && hdState === "failed" ? (
             <RotateCcw className="h-4 w-4" aria-hidden="true" />
-          ) : hdState === "completed" ? (
+          ) : videoConfirmed && hdState === "completed" ? (
             <CheckCircle2 className="h-4 w-4" aria-hidden="true" />
-          ) : (
+          ) : videoConfirmed ? (
             <Sparkles className="h-4 w-4" aria-hidden="true" />
+          ) : (
+            <CheckCircle2 className="h-4 w-4" aria-hidden="true" />
           )}
-          {hdState === "processing"
-            ? t("reference_video_hd_processing")
-            : hdState === "completed"
-              ? t("reference_video_hd_completed")
-              : hdState === "failed"
-                ? t("reference_video_hd_retry")
-                : t("reference_video_hd")}
+          {!videoConfirmed
+            ? t("course_video_confirm")
+            : hdState === "processing"
+              ? t("reference_video_hd_processing")
+              : hdState === "completed"
+                ? t("reference_video_hd_completed")
+                : hdState === "failed"
+                  ? t("reference_video_hd_retry")
+                  : t("reference_video_hd")}
         </button>
+        )}
+
+      {ready && videoConfirmed && hdState !== "unavailable" && (
+        <section className="space-y-2" aria-label={t("reference_video_hd_preview_label")}>
+          <div className="flex items-center gap-1.5 text-xs font-semibold text-[var(--color-text-2)]">
+            <Sparkles className="h-4 w-4 text-sky-300" aria-hidden="true" />
+            {t("reference_video_hd_preview_label")}
+          </div>
+          <div className="relative aspect-video w-full overflow-hidden rounded-lg border border-sky-400/25 bg-[oklch(0.18_0.010_265_/_0.5)]">
+            {hdState === "completed" && hdVideoUrl && (
+              <>
+                {/* eslint-disable-next-line jsx-a11y/media-has-caption -- provider-generated video is directly previewable */}
+                <video
+                  key={`${hdClip}:${hdClipFp ?? "current"}`}
+                  src={hdVideoUrl}
+                  aria-label={`${unit.unit_id} ${t("reference_video_hd_preview_label")}`}
+                  controls
+                  playsInline
+                  preload="metadata"
+                  className="h-full w-full object-contain"
+                />
+                <div className="pointer-events-none absolute left-2 top-2 rounded border border-white/10 bg-black/55 px-2 py-0.5 font-mono text-[10px] text-white/85 backdrop-blur">
+                  {hdClip}
+                </div>
+              </>
+            )}
+            {hdState === "processing" && (
+              <div className="absolute inset-0 grid place-items-center">
+                {hdProgress ? (
+                  <H3GenerationProgress
+                    progress={hdProgress}
+                    variant="hd"
+                    onCancel={onCancelTask && hdTaskId ? () => onCancelTask(hdTaskId) : undefined}
+                  />
+                ) : (
+                  <div className="text-center">
+                    <Loader2 className="mx-auto mb-2 h-8 w-8 animate-spin text-sky-300" aria-hidden="true" />
+                    <div className="text-[11.5px] text-[var(--color-text-2)]">
+                      {t("reference_video_hd_processing")}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+            {hdState === "failed" && (
+              <div className="absolute inset-0 grid place-items-center p-5 text-center">
+                <div>
+                  <AlertTriangle className="mx-auto mb-2 h-5 w-5 text-red-300" aria-hidden="true" />
+                  <div className="text-xs font-semibold text-red-300">
+                    {t("reference_video_hd_failed")}
+                  </div>
+                  {hdErrorMessage && (
+                    <div className="mt-1 text-[11px] text-[var(--color-text-3)]">{hdErrorMessage}</div>
+                  )}
+                </div>
+              </div>
+            )}
+            {hdState === "available" && (
+              <div className="absolute inset-0 grid place-items-center text-[11.5px] text-[var(--color-text-4)]">
+                {t("reference_video_hd_preview_empty")}
+              </div>
+            )}
+            {hdState === "completed" && !hdVideoUrl && (
+              <div className="absolute inset-0 grid place-items-center text-[11.5px] text-[var(--color-text-4)]">
+                {t("reference_video_hd_preview_loading")}
+              </div>
+            )}
+          </div>
+        </section>
       )}
 
       {generationBlocked && (

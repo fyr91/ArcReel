@@ -236,6 +236,11 @@ class CrocoVideoBackend(ProviderJobIdPersistenceMixin):
             job_id = raw_job_id
             await self._persist_provider_job_id(request, job_id, provider=PROVIDER_CROCO)
             await persist_h3_execution_progress(task_id, h3_progress_from_provider(child))
+        else:
+            # A failed local post-processing task can recover the already-paid
+            # successful child under a new ArcReel task row. Persist that child
+            # identity before polling so a process restart resumes the same job.
+            await self._persist_provider_job_id(request, job_id, provider=PROVIDER_CROCO)
         return await self._poll_and_download(job_id, request)
 
     async def _poll_and_download(self, job_id: str, request: VideoGenerationRequest) -> VideoGenerationResult:

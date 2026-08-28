@@ -1020,6 +1020,11 @@ def apply_unit_video_assets(
         if not isinstance(ga, dict):
             raise ScriptEditError("generated_assets 必须是 dict", key="script_edit_generated_assets_invalid")
         ga["video_clip"] = f"reference_videos/{resource_id}.mp4"
+        # A new generation/upload/restore establishes a new base selection.
+        # Any prior HD projection belongs to the superseded version pair.
+        ga.pop("original_video_clip", None)
+        ga.pop("hd_video_clip", None)
+        ga.pop("hd_video_uri", None)
         ga["video_generated_at"] = generated_at or datetime.now(UTC).isoformat()
         if video_uri:
             ga["video_uri"] = video_uri

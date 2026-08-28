@@ -181,11 +181,14 @@ class GeneratedAssets(BaseModel):
     grid_id: str | None = Field(default=None, description="关联的网格图生成 ID")
     grid_cell_index: int | None = Field(default=None, description="在网格图中的单元格索引")
     video_clip: str | None = Field(default=None, description="视频片段路径")
+    original_video_clip: str | None = Field(default=None, description="高清处理前的已确认视频版本路径")
+    hd_video_clip: str | None = Field(default=None, description="高清处理完成的视频路径")
     # video_thumbnail 由 reference_video_tasks / generation_tasks 在视频生成后通过
     # lib.thumbnail.extract_video_thumbnail 抽帧落盘,写到 ga["video_thumbnail"];
     # 漏声明的话 extra="forbid" 会让「不更坏」检测到 extra_forbidden 差集,拒整集写盘。
     video_thumbnail: str | None = Field(default=None, description="视频缩略图路径")
     video_uri: str | None = Field(default=None, description="视频 URI")
+    hd_video_uri: str | None = Field(default=None, description="高清处理完成的视频 URI")
     course_composite_keyframe: str | None = Field(
         default=None,
         description="课程解说单元由前置视频尾帧与讲师方图程序合成的首帧",
