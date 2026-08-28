@@ -30,8 +30,10 @@ async def test_get_all_providers_status_empty(config_service: ConfigService):
     from lib.config.registry import PROVIDER_REGISTRY
 
     statuses = await config_service.get_all_providers_status()
-    assert len(statuses) == len(PROVIDER_REGISTRY)
-    assert {s.name for s in statuses} == set(PROVIDER_REGISTRY.keys())
+    visible = {name for name, meta in PROVIDER_REGISTRY.items() if meta.visible}
+    assert len(statuses) == len(visible)
+    assert {s.name for s in statuses} == visible
+    assert "deepseek" not in visible
     for s in statuses:
         assert s.status == "unconfigured"
 

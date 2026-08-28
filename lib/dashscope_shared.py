@@ -26,6 +26,10 @@ logger = logging.getLogger(__name__)
 # host 段（scheme://host），不含 /api/v1 或 /compatible-mode/v1 后缀；两 base 由此派生。
 DASHSCOPE_BASE_URL = "https://dashscope.aliyuncs.com"
 
+# qwen-image-3.0 北京专属 MaaS 接入点。该模型在内置百炼渠道未单独要求用户填写 URL；
+# backend 只在 base_url 为空或仍为标准 DashScope host 时采用此地址，自定义中转地址继续优先。
+QWEN_IMAGE_3_BASE_URL = "https://llm-ctqcwidshtueryd6.cn-beijing.maas.aliyuncs.com/api/v1"
+
 # 重试判定不再用「瞬态错误类型元组 + 字符串兜底」：HTTPStatusError 的 str() 携带 URL/task_id，
 # 其中的 "503"/"timeout" 子串会让 4xx 业务错误被误判为可重试。各 DashScope 后端改用
 # lib.video_backends.base 的状态码谓词——创建/提交（非幂等 POST）走 should_retry_submit（4xx

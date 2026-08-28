@@ -486,6 +486,8 @@ MESSAGES = {
     "config_bundle_too_large": "Tệp cấu hình không được lớn hơn 1 MB",
     "config_bundle_invalid_encoding": "Tệp cấu hình phải dùng mã hóa UTF-8",
     "config_bundle_missing": "Tệp cấu hình thiếu ARCREEL_CONFIG_BUNDLE",
+    "config_bundle_custom_endpoint_unknown": "Cấu hình chứa endpoint nhà cung cấp tùy chỉnh không được hỗ trợ",
+    "config_bundle_custom_model_invalid": "Cấu hình chứa mô hình tùy chỉnh không hợp lệ hoặc trùng lặp",
     "config_bundle_invalid": "Tệp cấu hình bị hỏng hoặc sai định dạng",
     "config_bundle_version_unsupported": "Phiên bản cấu hình không được hỗ trợ; hãy xuất lại",
     "config_bundle_agent_missing": "Phiên bản này không có cấu hình Agent đang hoạt động để xuất",

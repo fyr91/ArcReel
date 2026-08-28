@@ -14,7 +14,7 @@ from lib.db.base import DEFAULT_USER_ID
 from lib.db.repositories.credential_repository import CredentialRepository
 
 _DEFAULT_VIDEO_BACKEND = "croco/minimax-h3"
-_DEFAULT_IMAGE_BACKEND = "runware/google:nano-banana@2-lite"
+_DEFAULT_IMAGE_BACKEND = "dashscope/qwen-image-3.0"
 _DEFAULT_TEXT_BACKEND = "deepseek/deepseek-v4-flash-vision-exp"
 _DEFAULT_AUDIO_BACKEND = "dashscope/qwen3-tts-flash"
 # 旁白默认音色（DashScope 预设）；可被 project.json 顶层 narration_voice 或全局 setting 覆盖
@@ -169,6 +169,8 @@ class ConfigService:
         active_creds = await cred_repo.get_active_credentials_bulk()
         statuses = []
         for name, meta in PROVIDER_REGISTRY.items():
+            if not meta.visible:
+                continue
             has_active = name in active_creds
             configured = all_configured.get(name, [])
             if has_active:
@@ -225,6 +227,9 @@ class ConfigService:
 
     async def set_setting(self, key: str, value: str) -> None:
         await self._setting_repo.set(key, value)
+
+    async def delete_setting(self, key: str) -> None:
+        await self._setting_repo.delete(key)
 
     async def get_default_video_backend(self) -> tuple[str, str]:
         raw = await self._setting_repo.get("default_video_backend", _DEFAULT_VIDEO_BACKEND)

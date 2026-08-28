@@ -26,14 +26,17 @@ pytestmark = pytest.mark.unit
         (RELEASE_VIDEO_BACKEND, "video"),
         (RELEASE_IMAGE_BACKEND, "image"),
         (RELEASE_STORYBOARD_IMAGE_BACKEND, "image"),
-        (RELEASE_TEXT_BACKEND, "text"),
-        (RELEASE_SIMPLE_TEXT_BACKEND, "text"),
-        (RELEASE_COMPLEX_TEXT_BACKEND, "text"),
     ],
 )
 def test_release_backend_exists_with_expected_media_type(backend: str, media_type: str) -> None:
     provider_id, model_id = backend.split("/", 1)
     assert PROVIDER_REGISTRY[provider_id].models[model_id].media_type == media_type
+
+
+def test_release_text_defaults_inherit_system_configuration() -> None:
+    assert RELEASE_TEXT_BACKEND == "deepseek/deepseek-v4-flash-vision-exp"
+    assert RELEASE_SIMPLE_TEXT_BACKEND == "deepseek/deepseek-v4-flash-vision-exp"
+    assert RELEASE_COMPLEX_TEXT_BACKEND == "deepseek/deepseek-v4-pro"
 
 
 def test_release_resolutions_are_supported_and_mapping_is_fresh() -> None:

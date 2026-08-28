@@ -23,9 +23,10 @@ def _schema() -> dict:
 
 def test_every_builtin_provider_and_field_is_exposed_to_data_center() -> None:
     providers = {item["id"]: item for item in _schema()["providers"]}
-    assert set(providers) == set(PROVIDER_REGISTRY)
+    visible_registry = {provider_id: meta for provider_id, meta in PROVIDER_REGISTRY.items() if meta.visible}
+    assert set(providers) == set(visible_registry)
 
-    for provider_id, meta in PROVIDER_REGISTRY.items():
+    for provider_id, meta in visible_registry.items():
         exposed = providers[provider_id]
         expected_secrets = [
             key for key in meta.required_keys if key in meta.secret_keys and key in _SUPPORTED_SECRET_KEYS

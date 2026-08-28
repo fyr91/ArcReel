@@ -280,6 +280,28 @@ class TestImageToImage:
         images = [c for c in content if "image" in c]
         assert len(images) == 3  # qwen 上限裁剪
 
+    async def test_qwen_image_30_ref_limit_3(self, tmp_path: Path):
+        client = _mock_client(_img_response())
+        download = AsyncMock()
+        refs = [_make_ref(tmp_path, f"q3-{i}.png") for i in range(5)]
+        p1, p2 = _patches(client, download)
+        with p1, p2:
+            from lib.image_backends.dashscope import DashScopeImageBackend
+
+            backend = DashScopeImageBackend(api_key="sk", model="qwen-image-3.0")
+            await backend.generate(
+                ImageGenerationRequest(prompt="p", output_path=tmp_path / "o.png", reference_images=refs)
+            )
+
+        call = client.post.call_args
+        assert call.args[0].startswith("https://llm-ctqcwidshtueryd6.cn-beijing.maas.aliyuncs.com/api/v1/")
+        content = call.kwargs["json"]["input"]["messages"][0]["content"]
+        assert len([item for item in content if "image" in item]) == 3
+        # image_size=None 时固定 1K 短边；默认 aspect_ratio=9:16。
+        assert call.kwargs["json"]["parameters"]["size"] == "1008*1792"
+        assert call.kwargs["json"]["parameters"]["n"] == 1
+        assert call.kwargs["json"]["parameters"]["prompt_extend"] is True
+
     async def test_wan_ref_limit_9(self, tmp_path: Path):
         client = _mock_client(_img_response())
         download = AsyncMock()

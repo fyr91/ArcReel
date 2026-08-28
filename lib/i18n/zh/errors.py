@@ -433,6 +433,8 @@ MESSAGES = {
     "config_bundle_too_large": "配置文件不能超过 1 MB",
     "config_bundle_invalid_encoding": "配置文件必须使用 UTF-8 编码",
     "config_bundle_missing": "配置文件中缺少 ARCREEL_CONFIG_BUNDLE",
+    "config_bundle_custom_endpoint_unknown": "配置文件包含不支持的自定义供应商端点",
+    "config_bundle_custom_model_invalid": "配置文件包含无效或重复的自定义模型",
     "config_bundle_invalid": "配置文件内容损坏或格式不正确",
     "config_bundle_version_unsupported": "配置文件版本不受支持，请重新导出",
     "config_bundle_agent_missing": "当前实例没有可导出的有效 Agent 配置",

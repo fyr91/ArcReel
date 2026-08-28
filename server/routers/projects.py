@@ -46,11 +46,8 @@ from lib.profile_manifest import ContentMode
 from lib.project_change_hints import project_change_source
 from lib.project_manager import EmptySourceError, EpisodeScriptReboundError, get_project_manager
 from lib.release_defaults import (
-    RELEASE_COMPLEX_TEXT_BACKEND,
     RELEASE_IMAGE_BACKEND,
-    RELEASE_SIMPLE_TEXT_BACKEND,
     RELEASE_STORYBOARD_IMAGE_BACKEND,
-    RELEASE_TEXT_BACKEND,
     RELEASE_VIDEO_BACKEND,
     release_project_model_settings,
 )
@@ -253,9 +250,11 @@ class CreateProjectRequest(BaseModel):
     image_provider_keyframe: str | None = None
     default_image_backend: str | None = RELEASE_IMAGE_BACKEND
     # 文本任务档位（docs/adr/0051）项目级覆盖 + 项目默认模型；空值 = 继承全局
-    text_backend_simple: str | None = RELEASE_SIMPLE_TEXT_BACKEND
-    text_backend_complex: str | None = RELEASE_COMPLEX_TEXT_BACKEND
-    default_text_backend: str | None = RELEASE_TEXT_BACKEND
+    # New projects inherit global text-model buckets. This avoids pinning the
+    # hidden legacy DeepSeek preset when users have configured a custom one.
+    text_backend_simple: str | None = None
+    text_backend_complex: str | None = None
+    default_text_backend: str | None = None
     model_settings: dict[str, dict[str, str | None]] | None = None
 
 

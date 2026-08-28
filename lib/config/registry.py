@@ -131,6 +131,9 @@ class ProviderMeta:
     default_concurrency: dict[str, int] = field(default_factory=dict)
     # 前端 sidebar 分组：builtin = 平台预置供应商，own = 用户自有渠道（如 Runware / Croco GPU / 火山 TTS）。
     group: str = "builtin"
+    # False = 仅保留历史项目的解析/执行兼容，不再暴露到供应商设置页或新模型候选。
+    # 供应商级隐藏与 ModelInfo.hidden 对称：后者隐藏单个型号，本字段隐藏整条供应商目录。
+    visible: bool = True
 
     def __post_init__(self) -> None:
         # default_concurrency 是注册表静态声明：拼错的 lane key 会被静默忽略、该 lane 漂回
@@ -868,7 +871,7 @@ PROVIDER_REGISTRY: dict[str, ProviderMeta] = {
             ),
         },
         default_base_url="https://api.deepseek.com",
-        group="own",
+        visible=False,
     ),
     "grok": ProviderMeta(
         display_name="Grok",
@@ -1143,12 +1146,22 @@ PROVIDER_REGISTRY: dict[str, ProviderMeta] = {
                 pricing=_dashscope_text_pricing("qwen-long", 0.5, 2.0),
             ),
             # --- image ---
+            # qwen-image-3.0 融合系列：T2I + I2I，同步接口，参考图 1~3 张。
+            # 项目默认分辨率固定 1K；backend 在 image_size=None 时也按 1K 短边兜底，
+            # 避免未落 model_settings 的调用漂回旧 2.0 系列的 2K 默认。
+            "qwen-image-3.0": ModelInfo(
+                display_name="Qwen Image 3.0",
+                media_type="image",
+                capabilities=["text_to_image", "image_to_image"],
+                default=True,
+                resolutions=["1K", "2K"],
+                pricing=_dashscope_image_pricing("qwen-image-3.0", 0.18),
+            ),
             # qwen-image-2.0 融合系列：T2I + I2I 同模型，size 用像素值 宽*高。
             "qwen-image-2.0": ModelInfo(
                 display_name="Qwen Image 2.0",
                 media_type="image",
                 capabilities=["text_to_image", "image_to_image"],
-                default=True,
                 resolutions=["2048*2048", "2688*1536", "1536*2688", "2368*1728", "1728*2368"],
                 pricing=_dashscope_image_pricing("qwen-image-2.0", 0.2),
             ),

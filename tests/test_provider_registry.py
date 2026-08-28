@@ -33,9 +33,9 @@ def test_ark_agent_plan_registered() -> None:
             assert m.resolutions, f"{mid} missing resolutions"
 
 
-def test_deepseek_registered_as_own_text_provider() -> None:
+def test_deepseek_kept_as_hidden_legacy_text_provider() -> None:
     p = PROVIDER_REGISTRY["deepseek"]
-    assert p.group == "own"
+    assert p.visible is False
     assert p.default_base_url == "https://api.deepseek.com"
     assert p.optional_keys == ["base_url"]
     assert {mid for mid, info in p.models.items() if info.media_type == "text"} == {
@@ -44,6 +44,16 @@ def test_deepseek_registered_as_own_text_provider() -> None:
     }
     assert p.models["deepseek-v4-flash-vision-exp"].default is True
     assert "vision" in p.models["deepseek-v4-flash-vision-exp"].capabilities
+
+
+def test_dashscope_qwen_image_30_is_default_image_model() -> None:
+    p = PROVIDER_REGISTRY["dashscope"]
+    model = p.models["qwen-image-3.0"]
+    assert model.media_type == "image"
+    assert model.capabilities == ["text_to_image", "image_to_image"]
+    assert model.resolutions == ["1K", "2K"]
+    assert model.default is True
+    assert p.models["qwen-image-2.0"].default is False
 
 
 def test_ark_agent_plan_current_text_catalog_and_legacy_visibility() -> None:

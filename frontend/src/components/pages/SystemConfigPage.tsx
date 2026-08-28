@@ -11,6 +11,7 @@ import {
   KeyRound,
   Languages,
   Plug,
+  Upload,
 } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { useConfigStatusStore } from "@/stores/config-status-store";
@@ -21,6 +22,7 @@ import { AboutSection } from "./settings/AboutSection";
 import { MediaModelSection } from "./settings/MediaModelSection";
 import { ProviderSection } from "./ProviderSection";
 import { UsageStatsSection } from "./settings/UsageStatsSection";
+import { EnvironmentImportSection } from "./settings/EnvironmentImportSection";
 import {
   SUPPORTED_LANGUAGES,
   LANGUAGE_DISPLAY_LABELS,
@@ -34,7 +36,7 @@ import {
 // Types
 // ---------------------------------------------------------------------------
 
-type SettingsSection = "agent" | "providers" | "media" | "usage" | "api-keys" | "about";
+type SettingsSection = "agent" | "providers" | "media" | "usage" | "api-keys" | "environment" | "about";
 
 /** 引导第 5/6 步指向的侧栏入口——只有这两项挂锚点，其余小节不在当前引导覆盖范围内。 */
 const SECTION_ONBOARDING_ANCHORS: Partial<Record<SettingsSection, string>> = {
@@ -75,7 +77,10 @@ const SECTION_GROUPS: SectionGroup[] = [
   },
   {
     kicker: "System",
-    items: [{ id: "about", labelKey: "dashboard:about", Icon: Info }],
+    items: [
+      { id: "environment", labelKey: "dashboard:environment_import_nav", Icon: Upload },
+      { id: "about", labelKey: "dashboard:about", Icon: Info },
+    ],
   },
 ];
 
@@ -94,6 +99,7 @@ export function SystemConfigPage() {
     if (section === "media") return "media";
     if (section === "usage") return "usage";
     if (section === "api-keys") return "api-keys";
+    if (section === "environment") return "environment";
     if (section === "about") return "about";
     return "providers";
   }, [search]);
@@ -313,6 +319,7 @@ export function SystemConfigPage() {
                   <ApiKeysTab />
                 </div>
               )}
+              {activeSection === "environment" && <EnvironmentImportSection />}
               {activeSection === "about" && <AboutSection />}
             </div>
           )}
