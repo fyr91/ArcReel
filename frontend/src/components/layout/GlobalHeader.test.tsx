@@ -497,11 +497,12 @@ describe("GlobalHeader", () => {
         projectName: "ad-demo",
         episode: 1,
       });
-      expect(useAppStore.getState().hyperframesAutoEditRequest).toMatchObject({
+      expect(useAppStore.getState().assistantPromptRequest).toMatchObject({
         projectName: "ad-demo",
+        episode: 1,
         prompt: expect.stringContaining("前三秒更有冲击力"),
       });
-      expect(useAppStore.getState().hyperframesAutoEditRequest?.prompt).toContain("纯器乐 BGM");
+      expect(useAppStore.getState().assistantPromptRequest?.prompt).toContain("纯器乐 BGM");
       expect(useAppStore.getState().assistantPanelOpen).toBe(true);
       expect(screen.queryByTestId("export-scope-dialog")).not.toBeInTheDocument();
     });

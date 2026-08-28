@@ -218,13 +218,14 @@ export function GlobalHeader({ onNavigateBack }: GlobalHeaderProps) {
       const musicInstruction = options.backgroundMusic
         ? "允许并自动判断背景音乐；需要时必须调用 ArcReel GPU 生成一条贯穿全片的纯器乐 BGM，音量固定为 15%。"
         : "明确禁止生成或嵌入背景音乐。";
-      useAppStore.getState().requestHyperframesAutoEdit(
+      useAppStore.getState().requestAssistantPrompt(
         currentProjectName,
         `请使用 hyperframes-auto-edit Skill 对第 ${episode} 集执行完整自动剪辑。\n` +
           `声音版本：${options.narrationDelivery}\n` +
           `背景音乐：${musicInstruction}\n` +
           `<user_instruction>\n${userInstruction}\n</user_instruction>\n` +
           "请读取正式剧本和工作区事实，先生成 EDITING_PLAN.md，再在同一轮完成 index.html 剪辑并校验。",
+        episode,
       );
       useAppStore.getState().setAssistantPanelOpen(true);
       setLocation(`/episodes/${episode}`);

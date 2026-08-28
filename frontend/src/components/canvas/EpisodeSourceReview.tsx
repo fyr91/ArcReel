@@ -3,7 +3,6 @@ import { useTranslation } from "react-i18next";
 import { Anchor, ChevronDown, Sparkles } from "lucide-react";
 import { API } from "@/api";
 import { useAppStore } from "@/stores/app-store";
-import { useAssistantStore } from "@/stores/assistant-store";
 import type { EpisodeMeta } from "@/types";
 
 /**
@@ -219,11 +218,14 @@ export function EpisodeSourceReview({
   const text = loading ? null : fetched.text;
 
   const handleStart = useCallback(() => {
-    // 经 store.input 投递一次性预填文本，AgentCopilot 消费后写入输入框；
-    // 只填不发送，已有会话时不切换、不新建
-    useAssistantStore.getState().setInput(t("episode_workspace_prefill_script", { episode }));
-    useAppStore.getState().setAssistantPanelOpen(true);
-  }, [episode, t]);
+    const appStore = useAppStore.getState();
+    appStore.requestAssistantPrompt(
+      projectName,
+      t("episode_workspace_prefill_script", { episode }),
+      episode,
+    );
+    appStore.setAssistantPanelOpen(true);
+  }, [episode, projectName, t]);
 
   return (
     <div className="flex h-full flex-col p-6">

@@ -2,7 +2,6 @@ import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { API } from "@/api";
 import { useAppStore } from "@/stores/app-store";
-import { useAssistantStore } from "@/stores/assistant-store";
 import { EpisodeSourceReview } from "./EpisodeSourceReview";
 import type { EpisodeMeta } from "@/types";
 
@@ -21,7 +20,6 @@ function makeEpisode(overrides: Partial<EpisodeMeta> = {}): EpisodeMeta {
 describe("EpisodeSourceReview", () => {
   beforeEach(() => {
     useAppStore.setState(useAppStore.getInitialState(), true);
-    useAssistantStore.setState(useAssistantStore.getInitialState(), true);
     vi.restoreAllMocks();
   });
 
@@ -110,7 +108,7 @@ describe("EpisodeSourceReview", () => {
     expect(screen.getByText("新的一集")).toBeInTheDocument();
   });
 
-  it("prefills the assistant input and opens the panel on CTA click", async () => {
+  it("queues the episode script prompt for immediate Agent sending and opens the panel", async () => {
     vi.spyOn(API, "getSourceContent").mockResolvedValue("text");
     useAppStore.setState({ assistantPanelOpen: false });
 
@@ -118,7 +116,11 @@ describe("EpisodeSourceReview", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "开始创作 E1" }));
 
-    expect(useAssistantStore.getState().input).toBe("为第 1 集生成脚本");
+    expect(useAppStore.getState().assistantPromptRequest).toMatchObject({
+      projectName: "demo",
+      episode: 1,
+      prompt: "为第 1 集生成脚本",
+    });
     expect(useAppStore.getState().assistantPanelOpen).toBe(true);
 
     await waitFor(() => {

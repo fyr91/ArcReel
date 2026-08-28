@@ -218,7 +218,7 @@ export function AgentCopilot() {
     ? `${currentProjectName}::${currentEpisode ?? "project"}`
     : null;
   const toggleAssistantPanel = useAppStore((s) => s.toggleAssistantPanel);
-  const hyperframesAutoEditRequest = useAppStore((s) => s.hyperframesAutoEditRequest);
+  const assistantPromptRequest = useAppStore((s) => s.assistantPromptRequest);
   const workflowPlan = useWorkflowStore((s) => s.plan);
   const workflowPlanKey = useWorkflowStore((s) => s.planKey);
   const workflowPlanLoading = useWorkflowStore((s) => s.loading);
@@ -243,7 +243,7 @@ export function AgentCopilot() {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const nextStepCaptionId = useId();
   const isComposingRef = useRef(false);
-  const autoEditDispatchRef = useRef<string | null>(null);
+  const promptDispatchRef = useRef<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const slashMenuRef = useRef<SlashCommandMenuHandle>(null);
   const [localInput, setLocalInput] = useState("");
@@ -330,25 +330,27 @@ export function AgentCopilot() {
     : "";
 
   useEffect(() => {
-    const request = hyperframesAutoEditRequest;
+    const request = assistantPromptRequest;
     if (!request || !currentProjectName) return;
     if (request.projectName !== currentProjectName) {
-      useAppStore.getState().clearHyperframesAutoEditRequest(request.requestId);
+      useAppStore.getState().clearAssistantPromptRequest(request.requestId);
       return;
     }
-    if (sending || isRunning || pendingQuestion || autoEditDispatchRef.current === request.requestId) {
+    if (request.episode !== undefined && request.episode !== currentEpisode) return;
+    if (sending || isRunning || pendingQuestion || promptDispatchRef.current === request.requestId) {
       return;
     }
-    autoEditDispatchRef.current = request.requestId;
+    promptDispatchRef.current = request.requestId;
     void sendMessage(request.prompt).finally(() => {
-      useAppStore.getState().clearHyperframesAutoEditRequest(request.requestId);
-      if (autoEditDispatchRef.current === request.requestId) {
-        autoEditDispatchRef.current = null;
+      useAppStore.getState().clearAssistantPromptRequest(request.requestId);
+      if (promptDispatchRef.current === request.requestId) {
+        promptDispatchRef.current = null;
       }
     });
   }, [
+    assistantPromptRequest,
     currentProjectName,
-    hyperframesAutoEditRequest,
+    currentEpisode,
     isRunning,
     pendingQuestion,
     sendMessage,

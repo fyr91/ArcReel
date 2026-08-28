@@ -24,9 +24,10 @@ export interface HyperframesOpenRequest {
   episode: number;
 }
 
-export interface HyperframesAutoEditRequest {
+export interface AssistantPromptRequest {
   requestId: string;
   projectName: string;
+  episode?: number;
   prompt: string;
 }
 
@@ -70,9 +71,9 @@ interface AppState {
   hyperframesOpenRequest: HyperframesOpenRequest | null;
   openHyperframesStudio: (projectName: string, episode: number) => void;
   clearHyperframesOpenRequest: (requestId?: string) => void;
-  hyperframesAutoEditRequest: HyperframesAutoEditRequest | null;
-  requestHyperframesAutoEdit: (projectName: string, prompt: string) => void;
-  clearHyperframesAutoEditRequest: (requestId?: string) => void;
+  assistantPromptRequest: AssistantPromptRequest | null;
+  requestAssistantPrompt: (projectName: string, prompt: string, episode?: number) => void;
+  clearAssistantPromptRequest: (requestId?: string) => void;
   assistantToolActivitySuppressed: boolean;
   setAssistantToolActivitySuppressed: (suppressed: boolean) => void;
 
@@ -204,19 +205,20 @@ export const useAppStore = create<AppState>((set, get) => ({
       }
       return state;
     }),
-  hyperframesAutoEditRequest: null,
-  requestHyperframesAutoEdit: (projectName, prompt) =>
+  assistantPromptRequest: null,
+  requestAssistantPrompt: (projectName, prompt, episode) =>
     set({
-      hyperframesAutoEditRequest: {
+      assistantPromptRequest: {
         requestId: `${Date.now()}-${Math.random()}`,
         projectName,
+        episode,
         prompt,
       },
     }),
-  clearHyperframesAutoEditRequest: (requestId) =>
+  clearAssistantPromptRequest: (requestId) =>
     set((state) => {
-      if (!requestId || state.hyperframesAutoEditRequest?.requestId === requestId) {
-        return { hyperframesAutoEditRequest: null };
+      if (!requestId || state.assistantPromptRequest?.requestId === requestId) {
+        return { assistantPromptRequest: null };
       }
       return state;
     }),

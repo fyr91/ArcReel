@@ -253,9 +253,11 @@ describe("AgentCopilot", () => {
   });
 
   it("sends a queued HyperFrames auto-edit through the same Agent session path", async () => {
-    useAppStore.getState().requestHyperframesAutoEdit(
+    mockedUseCurrentEpisode.mockReturnValue(1);
+    useAppStore.getState().requestAssistantPrompt(
       "demo",
       "请使用 hyperframes-auto-edit Skill 对第 1 集执行完整自动剪辑。",
+      1,
     );
 
     render(<AgentCopilot />);
@@ -264,7 +266,19 @@ describe("AgentCopilot", () => {
       expect(sendMessage).toHaveBeenCalledWith(
         "请使用 hyperframes-auto-edit Skill 对第 1 集执行完整自动剪辑。",
       );
-      expect(useAppStore.getState().hyperframesAutoEditRequest).toBeNull();
+      expect(useAppStore.getState().assistantPromptRequest).toBeNull();
+    });
+  });
+
+  it("sends a queued episode prompt as soon as the matching Agent scope is active", async () => {
+    mockedUseCurrentEpisode.mockReturnValue(1);
+    useAppStore.getState().requestAssistantPrompt("demo", "为第 1 集生成脚本", 1);
+
+    render(<AgentCopilot />);
+
+    await waitFor(() => {
+      expect(sendMessage).toHaveBeenCalledWith("为第 1 集生成脚本");
+      expect(useAppStore.getState().assistantPromptRequest).toBeNull();
     });
   });
 
