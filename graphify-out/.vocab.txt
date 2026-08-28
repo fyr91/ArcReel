@@ -32,6 +32,7 @@ accessing
 accessor
 account
 accounting
+accounts
 acct
 accumulate
 accumulated
@@ -313,6 +314,7 @@ attachments
 attack
 attacker
 attempt
+attempting
 attempts
 attr
 attribute
@@ -331,12 +333,15 @@ authed
 authenticated
 authenticating
 authentication
+authlib
 author
 authored
 authoring
 authoritative
 authority
 authorization
+authorize
+authorized
 auto
 autofills
 automatic
@@ -415,6 +420,7 @@ become
 becomes
 becoming
 bed
+been
 before
 begin
 behavior
@@ -467,6 +473,8 @@ bolder
 bom
 bomb
 book
+bookend
+bookends
 bool
 boolean
 boot
@@ -541,6 +549,7 @@ bump
 bumping
 bumps
 bundle
+bundled
 bundles
 burning
 bus
@@ -573,6 +582,7 @@ callbacks
 called
 caller
 callers
+calling
 calls
 came
 camel
@@ -640,7 +650,9 @@ ceiling
 cell
 cells
 center
+central
 centralizes
+centrally
 ceremony
 cfg
 cgroup
@@ -694,6 +706,7 @@ chosen
 chroma
 chromatic
 chrome
+chronological
 chunk
 chunked
 chunks
@@ -963,8 +976,10 @@ contextual
 contextvar
 contiguous
 continuation
+continue
 continued
 continues
+continuing
 continuity
 continuous
 contract
@@ -1025,6 +1040,8 @@ counter
 counterpart
 counts
 coupled
+coupling
+course
 courtyard
 cover
 coverage
@@ -1034,6 +1051,7 @@ covers
 cpu
 craft
 crash
+crashed
 crashing
 crc
 cream
@@ -1044,6 +1062,7 @@ creating
 creation
 creations
 creative
+creators
 cred
 credential
 credentials
@@ -1076,6 +1095,7 @@ currently
 currentness
 cursor
 custom
+customization
 customizations
 customized
 cut
@@ -1120,6 +1140,7 @@ debug
 decaying
 decide
 decision
+decisions
 decl
 declaration
 declarations
@@ -1141,6 +1162,7 @@ decoration
 decorative
 decoupled
 decoupling
+decrypt
 dedicated
 dedup
 dedupe
@@ -1199,6 +1221,7 @@ demonstrate
 denial
 denied
 denies
+deno
 denotes
 density
 deny
@@ -1229,12 +1252,14 @@ described
 describes
 describing
 description
+descriptions
 descriptive
 descriptor
 descriptors
 desert
 design
 designation
+desired
 desktop
 despite
 dest
@@ -1342,6 +1367,7 @@ distinguishing
 distracted
 distribute
 disturb
+disturbing
 div
 diverged
 divergence
@@ -1374,6 +1400,7 @@ donts
 dos
 dot
 dotdot
+dotenv
 dots
 doubao
 double
@@ -1383,6 +1410,8 @@ downgrade
 downgraded
 downgrades
 download
+downloaded
+downloading
 downloads
 downscale
 downstream
@@ -1394,6 +1423,7 @@ dram
 drama
 drawable
 drawer
+drawing
 drawn
 dream
 dreamina
@@ -1463,6 +1493,7 @@ element
 elements
 elevation
 eligibility
+eligible
 else
 email
 emails
@@ -1490,6 +1521,7 @@ encode
 encoded
 encodes
 encoding
+encrypt
 end
 ending
 endings
@@ -1553,7 +1585,6 @@ err
 error
 errorname
 errors
-esbuild
 esc
 escalates
 escape
@@ -1600,6 +1631,7 @@ exception
 exceptions
 excerpt
 excessive
+exchange
 exclude
 excluded
 excludes
@@ -1648,6 +1680,8 @@ expired
 expires
 expiry
 explain
+explanation
+explanations
 explicit
 explicitly
 exploding
@@ -1713,6 +1747,7 @@ falsy
 families
 family
 fanout
+fans
 fantasy
 faq
 far
@@ -1734,6 +1769,7 @@ felt
 fence
 fenced
 fences
+fernet
 fetch
 fetched
 fetcher
@@ -1756,6 +1792,7 @@ filesystem
 filesystems
 fill
 filled
+fills
 filter
 filtered
 filtering
@@ -1880,6 +1917,7 @@ freedom
 freeform
 frees
 freeze
+freezes
 frequent
 frequently
 fresh
@@ -1907,6 +1945,7 @@ fuzzy
 gains
 gallery
 gap
+gaps
 garbage
 gate
 gated
@@ -1970,6 +2009,7 @@ grains
 grammar
 grandfather
 grandfathered
+grant
 graph
 graphify
 gray
@@ -1985,7 +2025,6 @@ group
 grouped
 groups
 grow
-grown
 growth
 grpc
 guard
@@ -2107,6 +2146,7 @@ hosted
 hour
 hover
 how
+href
 hsl
 html
 htmlparser
@@ -2135,6 +2175,7 @@ icon
 icons
 idempotency
 idempotent
+idempotently
 ident
 identical
 identically
@@ -2173,6 +2214,7 @@ implemented
 implementer
 implements
 implicit
+implicitly
 implies
 import
 importance
@@ -2249,9 +2291,11 @@ insensitive
 insensitively
 insert
 inserted
+inserts
 inset
 inside
 inspect
+inspection
 inspired
 install
 installation
@@ -2295,6 +2339,7 @@ internationalization
 internet
 interop
 interpolated
+interpolation
 interpretation
 interrupt
 interrupted
@@ -2339,6 +2384,7 @@ isolates
 isolation
 iss
 issue
+issued
 issues
 italic
 item
@@ -2434,10 +2480,12 @@ larger
 largest
 last
 late
+latent
 later
 latest
 lattice
 launch
+launcher
 layer
 layered
 layers
@@ -2461,6 +2509,7 @@ least
 leave
 leaves
 leaving
+lecturer
 ledger
 ledgered
 left
@@ -2482,6 +2531,7 @@ levels
 leverage
 lexical
 lib
+libraries
 library
 license
 lifecycle
@@ -2561,7 +2611,6 @@ lock
 locked
 locking
 locks
-lodash
 log
 logged
 logger
@@ -2569,6 +2618,7 @@ logging
 logic
 logical
 login
+logo
 logomark
 logs
 long
@@ -2629,6 +2679,7 @@ manifests
 manual
 manually
 manuscript
+manuscripts
 many
 map
 mapped
@@ -2756,6 +2807,7 @@ misc
 misconfig
 misconfigured
 misdetected
+mislabel
 mislabeled
 mismatch
 mismatched
@@ -2820,6 +2872,7 @@ mouse
 move
 moved
 moves
+moving
 msg
 mtime
 multi
@@ -2911,6 +2964,7 @@ non
 nonbinding
 nonblank
 noncanonical
+nonce
 none
 nonempty
 nonexistent
@@ -2919,6 +2973,7 @@ noninterruptible
 nonsecret
 nonselected
 nonstandard
+nonuniform
 nonzero
 noop
 nor
@@ -2969,6 +3024,7 @@ observations
 observe
 observed
 observer
+observers
 occ
 occlusion
 occupancy
@@ -2980,6 +3036,7 @@ occurrence
 occurrences
 off
 offending
+offer
 official
 officially
 offline
@@ -2988,6 +3045,7 @@ offratio
 offscreen
 offset
 often
+oidc
 oklab
 oklch
 old
@@ -3029,6 +3087,7 @@ optimization
 optimize
 optimized
 optimizer
+optimizes
 optimizing
 opting
 option
@@ -3128,6 +3187,7 @@ pairing
 pairs
 palette
 panel
+panels
 paper
 papercut
 paragraph
@@ -3143,6 +3203,7 @@ params
 paren
 parent
 parents
+parity
 parsable
 parse
 parseable
@@ -3218,6 +3279,7 @@ phone
 photographic
 phrase
 phrasing
+physical
 pick
 pickable
 picked
@@ -3242,6 +3304,7 @@ pitfalls
 pix
 pixel
 pixels
+pkce
 place
 placeholder
 placeholders
@@ -3258,7 +3321,6 @@ platform
 platforms
 play
 played
-player
 please
 plugin
 plus
@@ -3280,11 +3342,13 @@ polluted
 polluter
 pool
 pop
+popen
 popover
 pops
 populated
 port
 portable
+portal
 portalocker
 porting
 portion
@@ -3302,13 +3366,17 @@ post
 poster
 postgre
 postgresql
+postprocess
+posts
 power
+powers
 practices
 pragma
 prd
 pre
 precedence
 precedes
+preceding
 precheck
 prechecks
 precise
@@ -3372,6 +3440,7 @@ preview
 previewable
 previews
 previous
+previously
 price
 priced
 prices
@@ -3425,6 +3494,7 @@ projections
 projector
 projects
 promise
+promotable
 promote
 promotes
 promotion
@@ -3448,12 +3518,14 @@ protect
 protected
 protection
 protective
+protects
 protocol
 protocols
 prototype
 provable
 provably
 prove
+proven
 provenance
 proves
 provided
@@ -3534,6 +3606,7 @@ random
 range
 ranges
 rank
+raster
 rate
 rates
 rather
@@ -3553,6 +3626,7 @@ readable
 readably
 readd
 reader
+readiness
 reading
 readline
 readme
@@ -3564,6 +3638,7 @@ realistic
 realpath
 realtime
 reapplies
+reask
 reason
 reasons
 reassessment
@@ -3574,6 +3649,7 @@ rebinding
 rebinds
 rebound
 rebuild
+rebuilding
 rebuilds
 rebuilt
 recall
@@ -3657,6 +3733,7 @@ reference
 referenced
 references
 refine
+refined
 refinement
 reflect
 reflects
@@ -3673,6 +3750,7 @@ reg
 regardless
 regen
 regenerate
+regenerated
 regenerates
 regenerating
 regeneration
@@ -3705,6 +3783,7 @@ related
 relations
 relative
 relativize
+relaxing
 relay
 release
 releases
@@ -3858,18 +3937,21 @@ restricted
 resubmit
 resubmits
 resubmitted
+resubmitting
 result
 resulting
 results
 resumable
 resume
 resumed
+resumes
 resurrected
 resync
 retain
 retained
 retaining
 retains
+retimed
 retire
 retired
 retried
@@ -4041,6 +4123,7 @@ scrub
 sdk
 sdks
 seam
+seams
 search
 searches
 seccomp
@@ -4228,6 +4311,7 @@ slight
 slop
 slot
 slots
+slow
 slug
 slugify
 small
@@ -4238,7 +4322,6 @@ smoke
 snapshot
 snapshots
 snapshotting
-snippet
 socat
 soft
 software
@@ -4253,6 +4336,7 @@ sorted
 sota
 sound
 source
+sourced
 sources
 sovereign
 spa
@@ -4312,6 +4396,7 @@ srgb
 sse
 sseof
 ssh
+sso
 ssrf
 stability
 stable
@@ -4340,7 +4425,9 @@ started
 starting
 starts
 startswith
+starttag
 startup
+starve
 stat
 state
 stateless
@@ -4479,6 +4566,7 @@ summarize
 summarized
 summary
 sums
+supabase
 superseded
 supersedes
 supplied
@@ -4500,6 +4588,7 @@ survey
 survive
 survives
 surviving
+suspends
 suspense
 svc
 svelte
@@ -4568,6 +4657,7 @@ tampering
 tan
 tanstack
 target
+targeted
 targets
 task
 tasknotfound
@@ -4724,12 +4814,14 @@ transactions
 transcribes
 transcript
 transcripts
+transfer
 transformation
 transforming
 transient
 transition
 transitions
 transitive
+translatable
 translate
 translated
 translates
@@ -4771,6 +4863,7 @@ truncation
 trunk
 trust
 trusted
+trusting
 trusts
 trustworthy
 truth
@@ -4810,6 +4903,7 @@ umd
 unaffected
 unallowlisted
 unambiguous
+unambiguously
 unanchored
 unapplied
 unassigned
@@ -4854,7 +4948,6 @@ uneven
 unexpected
 unfiltered
 ungated
-unhashable
 unicode
 unified
 unify
@@ -4893,6 +4986,7 @@ unplanned
 unpredictable
 unprivileged
 unprocessable
+unprocessed
 unprovable
 unquote
 unquoted
@@ -4917,6 +5011,7 @@ unscripted
 unserializable
 unset
 unsets
+unshared
 unsorted
 unsplit
 unstaged
@@ -5020,6 +5115,7 @@ verse
 version
 versioned
 versions
+versus
 vertex
 vertical
 vfoo
@@ -5232,6 +5328,7 @@ zustand
 一份词表
 一份读回内存的隔离草稿
 一变即清掉在场的
+一句话故事
 一处手写声明
 一处覆盖全路径
 一并持久化
@@ -5411,6 +5508,7 @@ zustand
 上游若漏校验
 上游连
 上生效
+上的主结构化调用模式
 上的原生
 上的取值
 上的取值逐条与上表相等
@@ -5541,7 +5639,6 @@ zustand
 不传资产参数时
 不依赖
 不依赖任何特定供应商
-不依赖固定标记
 不依赖用量账本或数据库
 不依赖账本条目
 不依赖错误文案
@@ -5572,7 +5669,6 @@ zustand
 不允许静默覆盖
 不入日志
 不入队
-不入队任何任务
 不兼容导致的错误
 不兼容时返回
 不再二次解析
@@ -5651,13 +5747,13 @@ zustand
 不取剧本锁
 不取草稿里的值
 不取锁
+不受外部视频后端的保守全局值限制
 不受守卫影响
 不受影响
 不受该约束影响
 不受限
 不变式推导改名后的
 不叠加
-不只对标了
 不只断言声明位为真
 不只是当前请求的那一集
 不只返回人读文本
@@ -5731,7 +5827,6 @@ zustand
 不塌成字面
 不填不代表不校验
 不声明
-不声明旁白交付方式的批量请求直接拒收
 不声称产物已就位
 不复制进视觉字段
 不复用
@@ -5880,6 +5975,7 @@ zustand
 不挂掉主循环
 不按磁盘产物换路径
 不据此判定音轨
+不接受交付参数
 不接受任何图片输入
 不接受任意
 不接受目录
@@ -6019,7 +6115,6 @@ zustand
 不编造
 不缩放
 不缩放不校验
-不翻面
 不聚焦跳转
 不能依赖
 不能保留指向过期
@@ -6027,6 +6122,7 @@ zustand
 不能借费用预估侧的
 不能像纯结构收编那样平移确认
 不能先触发项目能力解析再让
+不能再从源文件入口删除
 不能再新增
 不能再读一次磁盘
 不能出现
@@ -6048,7 +6144,6 @@ zustand
 不能平移确认
 不能把变更后的内容直接登记为可信基线
 不能把孤儿文件报告为成功
-不能把整段动作结果当首帧
 不能抛校验错
 不能按
 不能有
@@ -6197,6 +6292,7 @@ zustand
 不返回未校验内容
 不进入
 不进入下载
+不进入独立旁白链
 不进入确认清单
 不进参考图
 不进渲染
@@ -6301,7 +6397,6 @@ zustand
 与不传逐字一致
 与主入口对称
 与之相对的是持久化数据损坏
-与产品默认一致
 与今日纯剧情弧行为逐字一致
 与付费调用之间正式文件被并发改写
 与付费调用之间清单条目被撤销
@@ -6532,6 +6627,7 @@ zustand
 且降级
 且顺序与请求字段一致
 且骨架闸门放行本组合应有的骨架
+世界观
 业务异常即使消息含
 业务错误
 业务错误以
@@ -6862,6 +6958,7 @@ zustand
 乐观并发比对
 也下传
 也不依赖
+也不保证产生
 也不可经此端点写入
 也不回落成
 也不应被
@@ -6912,7 +7009,6 @@ zustand
 也缺失
 也能从
 也能正常写
-也能读到
 也要给得出
 也要能算出非零视频预估
 也让最终
@@ -6964,15 +7060,14 @@ zustand
 二轮建议的
 二选一
 二选一分组
+云端账号接入
+云端部署
 互不覆盖
 互异但改写
 互斥切
 互斥切换
 互相引用
 五象限
-交付方式决定整批走哪一套准入判据与哪一份时长基准
-交付方式由请求显式选择
-交付方式缺省或非法一律拒绝
 交付空
 交回对应常量
 交换窗口内被硬杀
@@ -6989,7 +7084,6 @@ zustand
 产出单元
 产出后中间态在
 产出后必须被真实
-产出形状
 产出日志条目写入与
 产出最终
 产出点不做语言渲染
@@ -7059,6 +7153,7 @@ zustand
 仅保留白名单字段
 仅保留首尾各
 仅做两端
+仅做底层能力回退
 仅做格式归一化
 仅全局层解析图片默认
 仅全局层解析视频默认
@@ -7090,7 +7185,6 @@ zustand
 仅当待写数据引入新结构错误时拒绝
 仅当超单图预算才
 仅当通过
-仅拦非法值
 仅换编码形式
 仅提供
 仅提供尾帧
@@ -7169,6 +7263,7 @@ zustand
 仍被每轮检查
 仍要正确命中并折算成
 仍要正确命中并排除出原生路由
+仍要求显式选择
 仍要求确认
 仍要确认
 仍走全局默认
@@ -7264,7 +7359,6 @@ zustand
 以便测试
 以保留生成层硬约束
 以免依赖真实
-以剧本
 以及参考生视频正式
 以及同一个
 以及回退默认时分组
@@ -7303,6 +7397,7 @@ zustand
 任一缺失即
 任一缺席
 任何守卫都读不到它
+任何残留值都拒绝
 任务不卡
 任务与取消
 任务与视频任务共用项目路线
@@ -7353,7 +7448,6 @@ zustand
 优先用此变体
 优先级
 优先级最高
-优先解析图片
 优先解析视频
 优化分集完成后源文切片仍显示未找到的问题
 会与第
@@ -7470,7 +7564,6 @@ zustand
 但使用独立
 但使用调用方已加载的
 但兜底要稳
-但内容存在
 但内容非
 但内部
 但分集未登记
@@ -7499,7 +7592,6 @@ zustand
 但探测失败
 但接收调用方已加载的
 但支持
-但数据落在
 但数据还在
 但旧键仍被清除
 但显式
@@ -7512,7 +7604,6 @@ zustand
 但混入非
 但状态码为
 但留告警可观测
-但磁盘上只有
 但磁盘上那个位置被替换成指向别处
 但空响应体
 但第一段仍带
@@ -7559,8 +7650,8 @@ zustand
 作用域消费方使用
 作用户输入
 作用范围
-作者写下的创作方案前言优先照用
 作者写的是
+作者若写下创作方案前言
 作路径分量并校验
 作锚点没有意义
 你先查看一下具体拉取的数据
@@ -7572,7 +7663,6 @@ zustand
 使新旧默认路径分别落在
 使未提交任务按当前配置投影
 使用哈希比对
-使用带参考图档位
 使用带图档位
 使用当前
 使用最后一个值
@@ -7995,6 +8085,7 @@ zustand
 共用的
 共用的口径出口
 共用的批量准入适配层
+共用的批量操作同步正式文稿及项目导览镜像
 共用的模型发现逻辑
 共用的结构化错误
 关停打断进行中的轮次也是轮次终结点
@@ -8072,6 +8163,7 @@ zustand
 其它路径没有逐
 其它违约
 其它项目正常
+其次项目制作阶段
 其落盘文件须随改名迁移
 具体是什么问题
 具体的完整的风格提示词是什么样的
@@ -8092,7 +8184,6 @@ zustand
 兼容端点保守沿用
 兼容端点的连通性体检
 兼容网关返回非标
-兼容脏数据
 兼容范围
 兼容裸
 兼容诊断载荷
@@ -8191,6 +8282,7 @@ zustand
 内部先查缓存
 内部决定
 内部对接
+内部崩溃
 内部异常细节不泄露给客户端
 内部校验
 内部用
@@ -8222,6 +8314,7 @@ zustand
 再读它的能力
 再调用
 再谈档位
+再走兼容能力桶骨架
 再返回已完成
 再违约则再返回刷新后的报告
 再违约则刷新报告
@@ -8299,7 +8392,6 @@ zustand
 写盘统一入口
 写盘统一入口挡下
 写盘统一入口自行读盘取改前
-写盘自动镜像到
 写盘路径应自动一致
 写盘重算
 写禁只覆盖那两个正式文件
@@ -8410,7 +8502,6 @@ zustand
 分支同样不能吞
 分支同样能命中
 分支命名约定
-分支在
 分支已建好
 分支带合法
 分支把
@@ -8563,6 +8654,7 @@ zustand
 列表查询
 列表查询和删除接口
 列表派发给
+列表端点直接给出项目类型
 列表端点返回图片与文本
 列表等
 列表追加一张原图路径
@@ -8579,6 +8671,7 @@ zustand
 则重新生成对应单元
 刚好写满
 刚生成
+刚进入课程的
 创作侧放行的秒数
 创作流程与模式
 创作类型
@@ -8639,6 +8732,7 @@ zustand
 删除成功
 删除旧模型
 删除时调用
+删除源文件
 删除自定义供应商
 删除角色的参考音频样本
 删除账本之外的残留
@@ -8787,7 +8881,6 @@ zustand
 前置概念
 前者交由下游按模式近似判定
 前者原样留用
-前者用
 前者的
 前被禁用
 前调用
@@ -8813,6 +8906,7 @@ zustand
 剥离版本路径
 剥除已知路径后缀
 剧情演绎
+剧情演绎只接受剧本文档
 剧情演绎合成最终视频
 剧本不可就地换族
 剧本不存在时照旧
@@ -9091,6 +9185,7 @@ zustand
 单镜头时长
 单集摘要
 单集更新请求体
+单集结构
 单集脏脚本
 单集预处理
 单项查询和重新生成请求
@@ -9166,7 +9261,6 @@ zustand
 历史消息规范化单条抛异常时容错跳过
 历史脏数据
 历史遗留错误里点名了该资产时
-历史项目
 历史项目源文件编码迁移
 压低上限
 压成简短的字段定位摘要
@@ -9410,7 +9504,6 @@ zustand
 反推的种类误判成解析失败
 反斜杠
 发出可观测的
-发声准入对全部
 发声模式逐项相同
 发声记号
 发声记号可出现在行内任意位置
@@ -9888,7 +9981,6 @@ zustand
 合成的用户消息
 合成视频
 合成返回新实例
-合法值原样返回
 合法值正常保存
 合法取值列表的稳定文本
 合法可解
@@ -10009,6 +10101,7 @@ zustand
 同模式
 同步主体
 同步主入口
+同步兼容降级入口
 同步分发
 同步删除
 同步包装
@@ -10315,6 +10408,7 @@ zustand
 命名空间
 命名端建出的
 命名规则
+和完整
 和文件系统
 和未知
 和模型
@@ -10334,6 +10428,7 @@ zustand
 响应形态与各拒绝理由的可辨识性
 响应形状回归
 响应手工补
+响应把
 响应提取
 响应模式
 响应的共享映射
@@ -10466,7 +10561,9 @@ zustand
 因此语法规范
 围栏也能解析
 围栏标记不区分大小写
+固定为提取与逐字保留语义
 固定使用的形态
+固定流程
 固定清单
 图像仅计数
 图像供应商配置
@@ -10576,6 +10673,7 @@ zustand
 在脏数据下也是
 在脚本中根本不存在时
 在视频生成后会写
+在解析预览中也必须视为已设置且可用
 在触达供应商之前就拒绝
 在调用
 在调用瞬间的规范请求投影
@@ -10685,6 +10783,7 @@ zustand
 声明的视频能力
 声明驱动
 声称的项目状态落到磁盘上
+声音与后期解耦
 声音与字幕的真相源
 声音声明
 声音声明行
@@ -10802,6 +10901,7 @@ zustand
 失败一律抛错中止提交
 失败不动旧产物
 失败也应包装为
+失败会连带重放已成功的原生调用
 失败信封保留公共投影的稳定
 失败分支记账写入自身抛异常时
 失败则
@@ -11010,7 +11110,6 @@ zustand
 字段时
 字段时下探
 字段时直接下载
-字段时退回
 字段是
 字段是镜头持久属性
 字段有值但文件不在磁盘上
@@ -11167,6 +11266,7 @@ zustand
 安全可读的字符串
 安全地编辑一份剧本
 安全日志视图
+安全边界
 安装依赖并配置环境
 完全不动
 完全为空时整个字段被删除
@@ -11241,6 +11341,7 @@ zustand
 实例数据
 实例缓存
 实参表达式
+实测该端点会静默忽略
 实现刻意使用
 实现前必须核实
 实现同步
@@ -11415,6 +11516,7 @@ zustand
 导线级守护
 导致调用方挂死
 导致项目设置失效
+导览元数据
 封装现有的
 封顶到
 将上传的分镜图归一化为
@@ -11431,7 +11533,6 @@ zustand
 将本地图片转为
 将配置值解析为正整数
 将项目导出为
-尊重作者分集
 小图不超阈值时原样透传
 小版本不落
 小说原文
@@ -11665,7 +11766,6 @@ zustand
 已确认分集
 已确认分集须退回待审
 已确认后
-已确认的
 已确认的内容契约
 已确认的分集不因加载被回退到待审
 已确认的结构
@@ -11699,10 +11799,12 @@ zustand
 已过期或未找到
 已过期通常表现为
 已退出
+已退役
 已退役的参数名传给任何一个视频工具都被拒
 已锚定第
 已非空时
 已验证内容衔接
+已验证支持
 币种不一的报价加不出一个数
 布尔不得被
 布尔不是语速
@@ -11831,6 +11933,7 @@ zustand
 并确认其中确有可解码的音频流
 并立即清除内存缓存
 并组装
+并维护课程项目的单文档单集绑定
 并自动注入
 并落盘
 并行两个
@@ -11928,6 +12031,7 @@ zustand
 应覆盖
 应触发重试并最终成功
 应该怎样填写
+应该跟剧本演绎
 应路由到
 应返回
 应返回级联出来的
@@ -12074,7 +12178,6 @@ zustand
 当作字段缺失走文件名
 当作损坏走
 当前不传分辨率
-当前仅标题
 当前全系模型能力一致
 当前在创建项目的时候
 当前处于活动态
@@ -12453,7 +12556,6 @@ zustand
 执行时才定
 执行时还要找得到资源
 执行期
-执行期会用到的参考图引用
 执行期判据与真实执行路径同源
 执行期发给供应商的是
 执行期只按规范字段定位目标
@@ -12484,7 +12586,6 @@ zustand
 批次数会漂移
 批次没有
 批进同一条消息时
-批量入口不得省略该选项
 批量入队
 批量入队与时长预检共用同一份结构校验
 批量入队场景下
@@ -12501,7 +12602,6 @@ zustand
 批量提交旁白配音任务
 批量改字段落盘
 批量新增
-批量旁白配音
 批量更新多个场景的生成资源路径
 批量添加场景
 批量添加角色
@@ -12509,6 +12609,7 @@ zustand
 批量生产
 批量生成
 批量生成的共享骨架
+批量编辑正式文稿元数据并镜像到
 批量范围
 批量补缺
 批量被拒时交回的逐问题动作
@@ -12586,7 +12687,6 @@ zustand
 把宫格当前联合图切割落格到各分镜
 把容器参数值换成自身的
 把嵌套的级联原因折叠成最内层的根本原因
-把工具入参折成一次请求的投影选项
 把工具回执也写成
 把已成文的字符串包成消息
 把已有
@@ -12791,7 +12891,6 @@ zustand
 拿新协议
 拿最新指纹
 拿正式文件盖过去等于抹掉它手上的工作
-持久化
 持久化到
 持久化失败抛出原异常
 持久化收口点
@@ -12862,6 +12961,7 @@ zustand
 按其文档在这种情况下返回
 按其自身读取口径
 按内容
+按内容模式把工具入参折成一次请求的投影选项
 按写入侧同一判定过滤
 按凭证形态决定
 按凭证形态分派
@@ -13008,6 +13108,7 @@ zustand
 损坏时返回
 损坏状态
 损坏的
+损坏行不猜测
 损坏账本同一集号出现多条条目
 损坏项目的
 换图即原地覆盖同一路径
@@ -13038,6 +13139,7 @@ zustand
 排除只认版本号相邻的
 排除池满
 排除符号链接
+排除路线自动附加的
 探测响应体中形态为
 探测多段参考音频文件的总时长
 探测失败
@@ -13135,7 +13237,6 @@ zustand
 提供自定义供应商
 提供调用记录查询和统计摘要接口
 提及的
-提取优先
 提取优先复用全链路
 提取图片并写入本地路径
 提取数据库
@@ -13191,6 +13292,7 @@ zustand
 操作在同一
 操作步骤
 操作的领域错误
+操作纪律
 支持列表中
 支持哪些供应商和模型
 支持哪些平台
@@ -13337,6 +13439,7 @@ zustand
 数字必然一致
 数字的相似子串不应被误判命中
 数据与导出
+数据中台配置
 数据分层
 数据分层原则
 数据升级失败
@@ -13372,7 +13475,6 @@ zustand
 整体降级为通配
 整批一次探明在途
 整批不落盘
-整批与单条走同一准入
 整批作废
 整批停下
 整批停在建任务之前
@@ -13434,6 +13536,7 @@ zustand
 文件或
 文件损坏
 文件数
+文件时
 文件浮到导入
 文件真在时照旧复用
 文件管理路由
@@ -13463,6 +13566,7 @@ zustand
 文本构造
 文本档位五级解析链
 文本档的
+文本模型
 文本生成
 文本生成后端
 文本能用
@@ -13612,7 +13716,7 @@ zustand
 无关的指纹
 无关的那部分匹配条件
 无分隔符
-无则按剧情弧语义切
+无分集线索时才按剧情弧语义切分
 无前缀
 无副作用
 无半态
@@ -13783,6 +13887,7 @@ zustand
 旧记录不残留在前端列表
 旧调用方仍可调
 旧路径构造
+旧项目缺字段时按
 旧默认路径
 早于映射表的历史
 早已确认过
@@ -13817,6 +13922,7 @@ zustand
 时仍须送达
 时任务在
 时优先回落自家旧
+时会在
 时会走
 时兜底
 时兜底为
@@ -13867,6 +13973,7 @@ zustand
 时按候选模型解析
 时按实际
 时按实际档位收窄
+时按当前产品默认使用
 时按校验侧
 时按目标语言成文
 时按真实
@@ -13906,7 +14013,6 @@ zustand
 时读不出分镜指针
 时调用
 时走原有
-时走四级骨架
 时跳过
 时跳过前端挂载
 时跳过它
@@ -14039,6 +14145,7 @@ zustand
 是否适用于该项目
 是否非空决定写
 是因为它是调用方能改正的坏请求
+是固定占位条目
 是图像变体
 是多图列表型资产
 是失配的
@@ -14158,9 +14265,9 @@ zustand
 更新供应商配置
 更新元数据
 更新凭证字段
-更新分集顶层元数据
 更新场景的生成资源路径
 更新失败时该
+更新正式文稿的分集元数据并原子镜像到
 更新端点的切组判定
 更新角色的参考图路径
 更新角色的参考音频路径
@@ -14953,6 +15060,7 @@ zustand
 模式剧本的分镜列表
 模式匹配
 模式可用
+模式同时带
 模式同样叠加
 模式已生成视频
 模式时
@@ -14965,6 +15073,7 @@ zustand
 模式缺
 模式脏剧本
 模式触发
+模式边界
 模式选择表
 模式随之降到
 模式静态
@@ -15016,6 +15125,7 @@ zustand
 正式文件保持原样
 正式文件换成新产物的同一临界区内
 正式文件落盘
+正式文稿落盘后不偷偷入队任一同级视觉分支
 正式输入认领
 正式选择与元数据原子提交
 正弦波
@@ -15031,9 +15141,7 @@ zustand
 正文写的是
 正文写的是解析器归一后的
 正文列表
-正文即使没有普通
 正文原样落盘
-正文契约与至少一个关键场景首帧规划
 正文已是
 正文引用写作
 正文引用未登记资产名
@@ -15048,8 +15156,8 @@ zustand
 正文是唯一真相
 正文是落盘的唯一内容
 正文机械合成
+正文派生出的命名资产引用
 正文用同序
-正文的唯一派生出口
 正文的语法违约在调用文本模型之前就被拦下
 正文逐字出现
 正文逐字落盘
@@ -15641,6 +15749,7 @@ zustand
 现值的全部预判
 现取生效于
 现在由项目摘要读时计算
+现在课程看着不一样
 现有模型未声明该约束
 现有注册机制现状
 现有设计文档
@@ -15663,6 +15772,7 @@ zustand
 生成一段无音轨的极小
 生成一段有音轨但容器不是
 生成不与
+生成与确认
 生成产物只是待确认的预览件
 生成产物落盘
 生成任务
@@ -15878,7 +15988,6 @@ zustand
 画外说话的角色附参考图会诱导入画
 画外音
 画外音同样要渲染
-画外音语境放开
 画布尺寸
 画布滚动目标
 画面主体本身是人物的图种不排除
@@ -15942,7 +16051,6 @@ zustand
 白名单不含
 白名单与
 白名单与越界校验会被绕过
-白名单兜底
 白名单兜底逻辑
 白名单内的键仍按
 白名单内透传
@@ -16061,6 +16169,7 @@ zustand
 的同款兜底口径
 的同步主体
 的名称引用改写为
+的命名台词与匿名背景声音共用供应商发声通道
 的响应同样带
 的响应形状与覆盖联动
 的唯一凭据
@@ -16115,6 +16224,7 @@ zustand
 的并行声明
 的并集中
 的异常
+的异常形态
 的异步
 的异步函数
 的引用状态判时长是否落在生效档位内
@@ -16131,6 +16241,7 @@ zustand
 的所有协议调用
 的执行期拒绝对齐
 的批次凭空多付一轮
+的批量视频请求不再携带旁白交付契约
 的报告文本
 的拆分表
 的持久化收口点
@@ -16193,6 +16304,7 @@ zustand
 的槽位口径一致
 的模型
 的模型与解析契约
+的模型也可把
 的模型直接判定有音轨
 的模型级事实
 的模式返回空元组
@@ -16285,6 +16397,7 @@ zustand
 的覆盖测试
 的规划输入
 的规范位置随
+的规范骨架
 的视觉层按
 的视频
 的视频能力
@@ -16332,7 +16445,6 @@ zustand
 的逆向
 的通用错误终态
 的道具
-的那些
 的配置
 的重试应经
 的金额对拍
@@ -16457,6 +16569,7 @@ zustand
 直接添加角色到
 直接添加道具到
 直接生效
+直接用
 直接经
 直接落
 直接落全局默认
@@ -16507,6 +16620,7 @@ zustand
 真人口播
 真内存
 真图像变体
+真实中转模型可能把合规
 真实内存
 真实场景
 真实文件系统
@@ -16535,7 +16649,7 @@ zustand
 瞬态错误重试
 瞬态错误重试分别在
 瞬态错误重试在
-瞬态错误重试在单次调用层
+瞬态错误重试在各单次调用层完成
 瞬时不可用
 瞬时代理
 瞬时落库失败
@@ -16735,6 +16849,8 @@ zustand
 符号链接调包不止发生在文件名这一级
 第一次入队命中既有任务
 第一次项目的完成标准
+第一步上传之后解
+第一步上传之后解析
 第一步模型选择
 第一段
 第三个
@@ -17005,6 +17121,7 @@ zustand
 结构化输出
 结构化输出截断升级为硬错误
 结构化输出截断错误的消息里嵌入任意
+结构化输出支持
 结构化输出能力不足
 结构化输出被
 结构化输出被截断时不重试
@@ -17012,6 +17129,7 @@ zustand
 结构化输出被模型输出上限截断
 结构化输出被输出上限截断时
 结构化输出诉求
+结构化输出路径
 结构化输出降级与解析拒绝由
 结构化输出降级链已走完
 结构区间只兜脏数据量级
@@ -17028,6 +17146,7 @@ zustand
 结构校验模型
 结构校验要求
 结构由正文机械派生
+结构约束
 结构脏数据但列表本身完好
 结构转换为
 结构错误
@@ -17093,7 +17212,6 @@ zustand
 统一任务重试判断
 统一入口
 统一包装
-统一回退入口
 统一在此
 统一处理
 统一封装文本生成
@@ -17180,7 +17298,6 @@ zustand
 编码首帧
 编译与应用层
 编辑任务失败时
-编辑剧本顶层
 编辑单元正文
 编辑后回写
 编辑后的结构化中间态
@@ -17196,6 +17313,7 @@ zustand
 编辑期间另一方已保存
 编辑的唯一基底
 编辑第一条消息
+编辑结果不得把故事板资源名回退成英文产品术语
 编辑草稿时会犯的错
 编辑语义
 缝往返测试
@@ -17219,14 +17337,12 @@ zustand
 缺失即生成的语义里它本就不是目标
 缺失即跳过
 缺失参数仍
-缺失回退
 缺失或不可读
 缺失或不可读时按通道
 缺失或不可读返回
 缺失或形状坏时返回空
 缺失或矛盾一律
 缺失或结构不完整
-缺失或非法值回退默认
 缺失放行
 缺失文件跳过
 缺失时
@@ -17264,7 +17380,6 @@ zustand
 缺省时回落读
 缺省时经
 缺省用默认语言
-缺省维持原
 缺省走
 缺能力元数据等环境故障仍走
 缺花括号的台词
@@ -17480,7 +17595,6 @@ zustand
 脏值正文报可入队性问题
 脏剧本把
 脏数据
-脏数据一律回退
 脏数据一律硬失败
 脏数据一律返回
 脏数据容错
@@ -17627,6 +17741,7 @@ zustand
 范围由锚点构造性保证连续不重叠
 草稿一旦创建就把这个坏路径记进
 草稿不晋升
+草稿仍可被读取
 草稿先落盘则重试判
 草稿同样走折叠容错
 草稿同目录并存而不互相覆盖
@@ -17856,6 +17971,7 @@ zustand
 裁剪后
 裁剪是整个
 裁剪点落在多字节字符中间时丢弃残缺字符而非产生非法编码
+裁选发生在视频请求投影阶段
 装好替身运行时的服务
 装载并构造自定义供应商
 装载段
@@ -17935,6 +18051,7 @@ zustand
 规划到全文结尾
 规划到当前源文件结尾但还有后续源文件
 规划器内部抛出的
+规划固定尊重剧本文档自带分集
 规划工具写入
 规划期只读
 规划期间账本被并发修改
@@ -18014,6 +18131,7 @@ zustand
 视频文件
 视频文件路径
 视频时长以
+视频模型图片上限不反向污染正式文稿
 视频模型应回落到
 视频模型按能力桶配置
 视频模型排行榜
@@ -18052,6 +18170,7 @@ zustand
 视频项目管理
 角色一致性
 角色一致性机制
+角色卡与执行层采用的全局参考音频
 角色名称
 角色图
 角色已有
@@ -18096,6 +18215,7 @@ zustand
 解析失败回退默认值并告警
 解析失败抛
 解析失败时仍按
+解析失败时提示音频不可用
 解析失败时退化为
 解析失败时退回空
 解析失败返回
@@ -18111,6 +18231,7 @@ zustand
 解析当前项目应使用的视频
 解析当前项目视频
 解析当前项目视频模型能力
+解析成功时绑定
 解析成约简互质的
 解析推迟到第一个真正要取档的
 解析旁白语速
@@ -18150,7 +18271,6 @@ zustand
 解说模式
 解说片段拆分
 解说的
-解说节奏建议
 触发参考图约束
 触发场景是代理网关静默忽略
 触发时
@@ -18487,6 +18607,7 @@ zustand
 读取失败即
 读取契约做后校验
 读取并解析结构化
+读取必填
 读取或解析失败返回
 读取指定
 读取指定版本记录上的元数据键
@@ -18531,10 +18652,16 @@ zustand
 读进来的就能算出摘要
 读项目当下设置会把横版格中心裁成竖版
 读项目角色资产
+课程欢迎页允许用户在解析前撤回刚上传的文档
+课程源文已产生下游草稿或剧本
+课程视频复用
+课程视频工作流编排
+课程视频生成工作空间
 谁先跑谁定终局
 谁在说话
 谁绑到了第几段参考音频
 调工具处理器
+调度服务一次接收整批任务
 调用供应商
 调用公共
 调用前
@@ -18686,7 +18813,6 @@ zustand
 资产定义与宫格记录投影成一份完整的产物条目集合
 资产已落盘再发本批事件
 资产库
-资产引用
 资产改名的
 资产文件指纹计算
 资产时会在剧本中查找
@@ -18704,6 +18830,7 @@ zustand
 资产表
 资产表以
 资产表的
+资产规则
 资产计数
 资产设计
 资产路由
@@ -18735,7 +18862,6 @@ zustand
 走通用工具错误
 走静态
 起始图为裸
-起始状态
 起新会话
 起的窗口产出剧情弧完整的集并提交账本
 起禁止普通业务写继续操作已损坏的资产名称空间
@@ -18965,6 +19091,7 @@ zustand
 输入不得以另一种编码形式落盘产生视觉同名的重复资产
 输入为项目级已过校验的
 输入可查
+输入固定为成品剧本
 输入字段
 输入归一化为
 输入标签之间不能出现
@@ -19246,6 +19373,7 @@ zustand
 这个是有的吗
 这个是渠道带来的问题
 这个是输出格式的问题吗
+这个配置主要是用在哪里的呢
 这个项目一件产物都没有
 这个项目下一步做什么
 这个风格是怎么嵌套进去的
@@ -19373,6 +19501,7 @@ zustand
 逃逸时应拒绝
 逃逸时拒绝
 选中的产物连同
+选中的全局参考音频不是
 选图与清除通道同样须落
 选型与接入调研报告
 选型对比
@@ -19385,9 +19514,9 @@ zustand
 选择器设计
 选择性降级而非统一入口
 选择项目来源
-选数据结构的守卫回归测试
 选最近档
 选第一个
+选项目制作阶段
 透传为
 透传到
 透传契约
@@ -19407,7 +19536,6 @@ zustand
 逐字一致
 逐字不变
 逐字仅锚可听内容
-逐字保留
 逐字保留台词
 逐字内容里的
 逐字原文
@@ -19479,7 +19607,6 @@ zustand
 通过查询不存在的
 通过查询账户资源包余量验证可灵凭证
 通过隐藏
-通道不可用时的结构化输出降级链
 通道不终止
 通道从注册表移除
 通道优先级
@@ -19629,7 +19756,6 @@ zustand
 都应解析
 都归类为
 都必须在
-都必须把关键帧锁在
 都必须返回
 都拿不到为
 都拿不到抛
@@ -19684,7 +19810,6 @@ zustand
 里按标识符边界查找
 里掉出来
 里放一个指向外部文件的
-里既有人物
 里显式的视频执行身份
 里留着旁白路径但清单没有认领
 里的图片与音频都是
@@ -19774,6 +19899,7 @@ zustand
 重访条件
 重试不再产生
 重试凭此命中既有会话而非重复建会话
+重试叠乘
 重试可重新受理
 重试场景
 重试失败但二次诊断更具体
@@ -19808,14 +19934,12 @@ zustand
 链式短中段
 链查找首个非
 链的优先级与鲁棒性
-链路为
 锁不住
 锁入走新
 锁内复扫发现确认清单之外的新消费集时拒绝提交
 锁内复核
 锁内复核发现不一致
 锁内抛出的
-锁定一个边缘行为
 锁定各组合升级后的生效模型
 锁定的供应商已下线
 锁定的内置
@@ -19825,6 +19949,7 @@ zustand
 锁实现必须能降级到
 锁死这条挂载
 锁的是
+错切回说书变体
 错绑角色音色
 错记计费时长
 错误不至于在
@@ -19881,7 +20006,6 @@ zustand
 键改复合
 键时按字段声明默认值校验
 键的历史剧本按实际骨架做发声准入
-键的畸形脚本
 键集不受
 键集合已由
 镜像入自有
@@ -19999,6 +20123,7 @@ zustand
 降级为不合并
 降级为无价
 降级为无结构化输出的普通调用
+降级也包进重试范围
 降级信号
 降级到
 降级前应被软取消到唯一一条
@@ -20008,10 +20133,10 @@ zustand
 降级可见性
 降级后按
 降级回归测试
+降级尝试的
 降级手段按
 降级把只有域名的行搬回协议标识列
 降级把默认层复制回两桶
-降级支持
 降级时若存在跨
 降级编排在重试范围外
 降级触发点以
@@ -20119,7 +20244,6 @@ zustand
 集的估值
 集的视频估值不应恒为
 集级字段剔除
-集级模式切换
 集级路线覆盖时代的混排集
 集续上
 集续接编号
@@ -20237,7 +20361,6 @@ zustand
 非正的实际计费时长视同未提供
 非法值
 非法值回退
-非法值拒绝
 非法时抛
 非法源
 非法类型被结构校验拦截
@@ -20313,6 +20436,7 @@ zustand
 音频还可能带
 音频闸门与入队入口同一道
 音频闸门或时长预检抛未处理异常
+页面的时候
 页面路径
 顶层不能有
 顶层不走
@@ -20321,7 +20445,6 @@ zustand
 顶层容忍附加字段
 顶层无直接
 顶层是裸
-顶层枚举校验
 顶层非对象
 顶着旧名带失效路径残留
 顶部出现
@@ -20352,14 +20475,15 @@ zustand
 项目内选图通道
 项目切到参考生视频路线
 项目列表
-项目创建写入源文件性质
 项目删除后原通道终止
+项目制作阶段
 项目变更事件的条目标签文案
 项目同时配置了不同
 项目名
 项目名称
 项目和资产模型
 项目和配置存在哪里
+项目图片模型按制作阶段配置
 项目在但
 项目在广度视图上的投影
 项目外
@@ -20407,7 +20531,6 @@ zustand
 项目模式以及分镜和参考生视频路线怎样选择
 项目没迁到
 项目流程与任务
-项目源文件性质
 项目独有
 项目生成路线
 项目生成路线为
@@ -20429,6 +20552,7 @@ zustand
 项目目录路径
 项目目录里每个文件的内容与
 项目目标
+项目磁盘上只有
 项目管理工具集
 项目管理路由
 项目级
@@ -20591,6 +20715,7 @@ zustand
 首次纳入规划时才补记
 首次调用不入队
 首次调用时根据参数或环境变量创建实例
+首次调用直接走
 首次迁移
 首次迁移分支
 首次配置与
@@ -20665,6 +20790,7 @@ zustand
 默认值并告警
 默认值构造
 默认值由
+默认兼容链路为
 默认卷
 默认口径
 默认只认
@@ -20677,13 +20803,12 @@ zustand
 默认并发声明的合成注册表
 默认开启
 默认开启一致
-默认成后期配音等于替调用方做了这个选择
+默认按
 默认按请求原样回声身份
 默认推荐档
 默认摘要不含原始枚举值或
 默认时长按正文派生出的参考图定桶
 默认时长要按参考图约束收窄
-默认槽
 默认模型三字段可设置
 默认模型缺参考图能力也不再拦截
 默认登录账号是什么
