@@ -11,6 +11,7 @@ import uuid
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
+from urllib.parse import urlsplit
 
 import httpx
 from cryptography.fernet import Fernet, InvalidToken
@@ -21,6 +22,7 @@ from lib.app_data_dir import app_data_dir
 from lib.db import async_session_factory
 from lib.db.base import utc_now
 from lib.db.models.user import ArcReelCloudSession, User
+from lib.env_init import PROJECT_ROOT
 from server.services.account_center_sync import _apply_snapshot
 
 logger = logging.getLogger(__name__)
@@ -31,8 +33,10 @@ _access_token_locks: dict[str, asyncio.Lock] = {}
 # in the product lets a distributed ArcReel installation use the managed account
 # service without requiring every user to prepare a local .env file. Deployments
 # can still replace both values together through environment variables.
-DEFAULT_ARCREEL_CLOUD_AUTH_URL = "https://serqlgpuxrznwfapwcya.supabase.co/functions/v1/arcreel-auth"
-DEFAULT_ARCREEL_CLOUD_PUBLISHABLE_KEY = "sb_publishable_ioOR0BOT3Fba366mr0lhbA_mN9-fCes"
+DEFAULT_ARCREEL_CLOUD_ORIGIN = "https://47.108.223.84:50002"
+DEFAULT_ARCREEL_CLOUD_AUTH_URL = f"{DEFAULT_ARCREEL_CLOUD_ORIGIN}/functions/v1/arcreel-auth"
+DEFAULT_ARCREEL_CLOUD_PUBLISHABLE_KEY = "sb_publishable_ZfvSRL5e-PXNaDyAaOoss7_S5_qU0EN"
+DEFAULT_ARCREEL_CLOUD_CA_BUNDLE = PROJECT_ROOT / "server" / "certs" / "arcreel-supabase-ca.crt"
 _DISABLED_VALUES = {"0", "false", "no", "off"}
 
 
@@ -293,7 +297,7 @@ async def _request(
     if access_token:
         headers["Authorization"] = f"Bearer {access_token}"
     try:
-        async with httpx.AsyncClient(timeout=20.0, verify=cloud_tls_verify()) as client:
+        async with httpx.AsyncClient(timeout=20.0, verify=cloud_tls_verify(url)) as client:
             response = await client.request(method, url, headers=headers, json=json)
     except httpx.HTTPError as exc:
         raise ArcReelCloudError("无法连接 ArcReel 云端登录服务") from exc
@@ -308,16 +312,36 @@ async def _request(
     return response
 
 
-def cloud_tls_verify() -> ssl.SSLContext | bool:
-    """Use the private deployment CA when one is configured."""
+def cloud_tls_verify(url: str | None = None) -> ssl.SSLContext | bool:
+    """Return normal public trust plus the CA needed by the bundled deployment."""
 
     configured = os.environ.get("ARCREEL_CLOUD_CA_BUNDLE", "").strip()
-    if not configured:
+    if configured:
+        bundle = Path(configured).expanduser()
+        if not bundle.is_absolute():
+            bundle = PROJECT_ROOT / bundle
+    elif url is not None and _uses_bundled_cloud_origin(url):
+        bundle = DEFAULT_ARCREEL_CLOUD_CA_BUNDLE
+    else:
         return True
-    bundle = Path(configured)
     if not bundle.is_file():
         raise ArcReelCloudError("ArcReel 云端 CA 证书不存在", code="ARCREEL_CLOUD_CONFIG_INVALID")
-    return ssl.create_default_context(cafile=str(bundle))
+    context = ssl.create_default_context()
+    context.load_verify_locations(cafile=str(bundle))
+    return context
+
+
+def _uses_bundled_cloud_origin(url: str) -> bool:
+    try:
+        candidate = urlsplit(url)
+        bundled = urlsplit(DEFAULT_ARCREEL_CLOUD_ORIGIN)
+        return (
+            candidate.scheme == bundled.scheme
+            and candidate.hostname == bundled.hostname
+            and candidate.port == bundled.port
+        )
+    except ValueError:
+        return False
 
 
 def _payload(response: httpx.Response) -> dict[str, object]:

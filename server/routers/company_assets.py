@@ -101,14 +101,18 @@ async def publish_asset(asset_id: str, user: CurrentUser, _t: Translator):
 
 
 @router.get("/source-sync/dashboard")
-async def source_sync_dashboard(user: CurrentUser):
+async def source_sync_dashboard(user: CurrentUser, _t: Translator):
     _require_admin(user)
-    return await get_company_asset_catalog().source_sync_dashboard(user_id=user.id)
+    try:
+        return await get_company_asset_catalog().source_sync_dashboard(user_id=user.id)
+    except CompanyAssetSyncError as exc:
+        raise _catalog_http_error(exc, _t) from exc
 
 
 @router.get("/source-sync/assets")
 async def list_source_assets(
     user: CurrentUser,
+    _t: Translator,
     asset_type: AssetType | None = None,
     origin: Literal["official", "user_shared"] | None = None,
     q: str | None = None,
@@ -127,7 +131,7 @@ async def list_source_assets(
             offset=offset,
         )
     except CompanyAssetSyncError as exc:
-        raise _catalog_http_error(exc) from exc
+        raise _catalog_http_error(exc, _t) from exc
     return {
         "items": [asdict(item) for item in page.items],
         "total": page.total,
@@ -136,7 +140,7 @@ async def list_source_assets(
 
 
 @router.get("/source-sync/assets/{asset_id}/preview")
-async def preview_source_asset(asset_id: str, user: CurrentUser):
+async def preview_source_asset(asset_id: str, user: CurrentUser, _t: Translator):
     _require_admin(user)
     try:
         preview = await download_company_catalog_asset_preview(
@@ -145,7 +149,7 @@ async def preview_source_asset(asset_id: str, user: CurrentUser):
             asset_id=asset_id,
         )
     except CompanyAssetSyncError as exc:
-        raise _catalog_http_error(exc) from exc
+        raise _catalog_http_error(exc, _t) from exc
     return Response(
         content=preview.content,
         media_type=preview.mime_type,
@@ -154,7 +158,7 @@ async def preview_source_asset(asset_id: str, user: CurrentUser):
 
 
 @router.delete("/source-sync/assets/{asset_id}")
-async def delete_source_asset(asset_id: str, user: CurrentUser):
+async def delete_source_asset(asset_id: str, user: CurrentUser, _t: Translator):
     _require_admin(user)
     try:
         result = await delete_company_catalog_asset(
@@ -163,39 +167,51 @@ async def delete_source_asset(asset_id: str, user: CurrentUser):
             asset_id=asset_id,
         )
     except CompanyAssetSyncError as exc:
-        raise _catalog_http_error(exc) from exc
+        raise _catalog_http_error(exc, _t) from exc
     return asdict(result)
 
 
 @router.post("/source-sync/sources/{source_key}/run", status_code=202)
-async def run_source_sync(source_key: str, user: CurrentUser):
+async def run_source_sync(source_key: str, user: CurrentUser, _t: Translator):
     _require_admin(user)
-    return await get_company_asset_catalog().request_source_sync(user_id=user.id, source_key=source_key)
+    try:
+        return await get_company_asset_catalog().request_source_sync(user_id=user.id, source_key=source_key)
+    except CompanyAssetSyncError as exc:
+        raise _catalog_http_error(exc, _t) from exc
 
 
 @router.post("/source-sync/sources/{source_key}/control")
-async def control_source_sync(source_key: str, request: SourceControlRequest, user: CurrentUser):
+async def control_source_sync(source_key: str, request: SourceControlRequest, user: CurrentUser, _t: Translator):
     _require_admin(user)
     if request.action == "set_interval" and request.interval_seconds is None:
         raise HTTPException(status_code=422, detail="interval_seconds is required")
-    return await get_company_asset_catalog().update_source_sync(
-        user_id=user.id,
-        source_key=source_key,
-        action=request.action,
-        interval_seconds=request.interval_seconds,
-    )
+    try:
+        return await get_company_asset_catalog().update_source_sync(
+            user_id=user.id,
+            source_key=source_key,
+            action=request.action,
+            interval_seconds=request.interval_seconds,
+        )
+    except CompanyAssetSyncError as exc:
+        raise _catalog_http_error(exc, _t) from exc
 
 
 @router.post("/source-sync/runs/{run_id}/cancel")
-async def cancel_source_sync(run_id: str, user: CurrentUser):
+async def cancel_source_sync(run_id: str, user: CurrentUser, _t: Translator):
     _require_admin(user)
-    return await get_company_asset_catalog().cancel_source_sync(user_id=user.id, run_id=run_id)
+    try:
+        return await get_company_asset_catalog().cancel_source_sync(user_id=user.id, run_id=run_id)
+    except CompanyAssetSyncError as exc:
+        raise _catalog_http_error(exc, _t) from exc
 
 
 @router.post("/source-sync/runs/{run_id}/retry", status_code=202)
-async def retry_source_sync(run_id: str, user: CurrentUser):
+async def retry_source_sync(run_id: str, user: CurrentUser, _t: Translator):
     _require_admin(user)
-    return await get_company_asset_catalog().retry_source_sync(user_id=user.id, run_id=run_id)
+    try:
+        return await get_company_asset_catalog().retry_source_sync(user_id=user.id, run_id=run_id)
+    except CompanyAssetSyncError as exc:
+        raise _catalog_http_error(exc, _t) from exc
 
 
 def _require_admin(user) -> None:
@@ -203,7 +219,7 @@ def _require_admin(user) -> None:
         raise HTTPException(status_code=403, detail="Admin access required")
 
 
-def _catalog_http_error(exc: CompanyAssetSyncError) -> HTTPException:
+def _catalog_http_error(exc: CompanyAssetSyncError, _t: Translator) -> HTTPException:
     if exc.code in {"company_asset_request_failed", "company_asset_cloud_not_configured"}:
         status_code = 503
     elif exc.code == "company_asset_not_owned":
@@ -212,7 +228,7 @@ def _catalog_http_error(exc: CompanyAssetSyncError) -> HTTPException:
         status_code = 404
     else:
         status_code = 400
-    return HTTPException(status_code=status_code, detail=exc.code)
+    return HTTPException(status_code=status_code, detail=_t(exc.code))
 
 
 def _localized_job(job: dict, _t: Translator) -> dict:

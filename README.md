@@ -67,17 +67,33 @@ flowchart LR
 
 ## 快速开始
 
-准备好 Python 3.12+、Node.js 20+、`uv`、`pnpm` 和 `ffmpeg`，然后运行：
+准备好 Python 3.12+、Node.js 20+、`uv`、`pnpm` 和 `ffmpeg`。
+
+macOS、Linux 或 WSL2：
 
 ```bash
-git clone https://github.com/ArcReel/ArcReel.git
+git clone --branch v3 --single-branch https://github.com/fyr91/ArcReel.git
 cd ArcReel
 uv sync
 cd frontend && pnpm install && cd ..
 ./scripts/dev.sh
 ```
 
-访问 <http://localhost:5173>，直接使用管理员在数据中台分配的 ArcReel 账号和密码登录。正式云端账号服务已内置，无需创建或修改 `.env`。
+Windows PowerShell：
+
+```powershell
+git clone --branch v3 --single-branch https://github.com/fyr91/ArcReel.git
+Set-Location ArcReel
+uv sync
+Set-Location frontend
+pnpm install
+pnpm build
+Set-Location ..
+uv run alembic upgrade head
+uv run uvicorn server.app:app --host 127.0.0.1 --port 1242
+```
+
+开发脚本启动后访问 <http://localhost:5173>；Windows 单服务方式访问 <http://127.0.0.1:1242>。直接使用管理员在数据中台分配的 ArcReel 账号和密码登录。正式云端账号服务、公司资产库地址及所需 CA 公钥均已内置，无需创建或修改 `.env`。
 
 登录后会自动获取管理员为该账号分配的供应商 API Key，然后即可创建项目开始制作。
 

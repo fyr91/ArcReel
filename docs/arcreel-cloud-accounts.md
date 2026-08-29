@@ -53,7 +53,7 @@ supabase functions deploy arcreel-admin --no-verify-jwt
 ARCREEL_CLOUD_AUTH_URL=https://<ARCREEL_PROJECT_REF>.supabase.co/functions/v1/arcreel-auth
 ARCREEL_CLOUD_PUBLISHABLE_KEY=sb_publishable_xxx
 ARCREEL_CLOUD_SYNC_INTERVAL_SECONDS=60
-# 使用私有 CA 的自托管 HTTPS 部署才需要：
+# 默认公司服务器的 CA 公钥已随程序提供；覆盖到另一套私有 CA 部署时才需要：
 ARCREEL_CLOUD_CA_BUNDLE=C:/path/to/arcreel-supabase-ca.crt
 ```
 
@@ -61,7 +61,7 @@ ARCREEL_CLOUD_CA_BUNDLE=C:/path/to/arcreel-supabase-ca.crt
 无论使用内置配置还是环境变量覆盖，云端登录失败时都不会回退到本机
 `AUTH_USERNAME` / `AUTH_PASSWORD`，避免绕过账号停用和角色控制。
 
-开发测试或紧急回滚时可设置 `ARCREEL_CLOUD_ENABLED=false` 恢复本地账号模式；正式分发版本无需设置，
+开发测试或紧急回滚时可设置 `ARCREEL_CLOUD_ENABLED=false` 恢复本地账号模式；正式分发版本已内置公司服务器地址、Publishable Key 和 CA 公钥，无需设置，
 默认启用云端账号。
 
 首次登录时：

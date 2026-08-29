@@ -7,7 +7,8 @@ import httpx
 import pytest
 
 from lib.company_assets import CompanyAssetPublication, CompanyAssetPublicationFile, CompanyAssetSyncError
-from server.services.company_asset_supabase import SupabaseCompanyAssetCatalog
+from server.services.arcreel_cloud import ArcReelCloudError
+from server.services.company_asset_supabase import SupabaseCompanyAssetCatalog, get_company_asset_catalog
 
 
 @pytest.mark.unit
@@ -93,6 +94,63 @@ async def test_supabase_catalog_maps_delta_and_downloads_authenticated_file() ->
     assert requests[1].url.path.endswith(
         "/storage/v1/object/authenticated/arcreel-assets/shared/alice/asset/version/lamp.png"
     )
+
+
+@pytest.mark.unit
+async def test_supabase_catalog_maps_a_missing_cloud_session_to_a_catalog_error() -> None:
+    async def token_provider(_user_id: str) -> str:
+        raise ArcReelCloudError("请重新登录", status_code=401, code="CLOUD_SESSION_MISSING")
+
+    catalog = SupabaseCompanyAssetCatalog(
+        base_url="https://cloud.example",
+        publishable_key="publishable-key",
+        token_provider=token_provider,
+    )
+
+    with pytest.raises(CompanyAssetSyncError) as raised:
+        await catalog.pull_changes(
+            user_id="local-user",
+            asset_types=("character",),
+            after=0,
+        )
+
+    assert raised.value.code == "company_asset_request_failed"
+    assert raised.value.detail == "CLOUD_SESSION_MISSING"
+
+
+@pytest.mark.unit
+def test_supabase_catalog_factory_maps_an_incomplete_cloud_override(monkeypatch) -> None:
+    monkeypatch.setenv("ARCREEL_CLOUD_AUTH_URL", "https://cloud.example/functions/v1/arcreel-auth")
+    monkeypatch.delenv("ARCREEL_CLOUD_PUBLISHABLE_KEY", raising=False)
+
+    with pytest.raises(CompanyAssetSyncError) as raised:
+        get_company_asset_catalog()
+
+    assert raised.value.code == "company_asset_cloud_not_configured"
+    assert raised.value.detail == "ARCREEL_CLOUD_CONFIG_INVALID"
+
+
+@pytest.mark.unit
+async def test_supabase_catalog_maps_a_missing_ca_bundle_to_a_catalog_error(monkeypatch, tmp_path) -> None:
+    async def token_provider(_user_id: str) -> str:
+        return "access-token"
+
+    monkeypatch.setenv("ARCREEL_CLOUD_CA_BUNDLE", str(tmp_path / "missing-ca.crt"))
+    catalog = SupabaseCompanyAssetCatalog(
+        base_url="https://47.108.223.84:50002",
+        publishable_key="publishable-key",
+        token_provider=token_provider,
+    )
+
+    with pytest.raises(CompanyAssetSyncError) as raised:
+        await catalog.pull_changes(
+            user_id="local-user",
+            asset_types=("character",),
+            after=0,
+        )
+
+    assert raised.value.code == "company_asset_request_failed"
+    assert raised.value.detail == "ARCREEL_CLOUD_CONFIG_INVALID"
 
 
 @pytest.mark.unit

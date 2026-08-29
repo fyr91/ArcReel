@@ -67,17 +67,33 @@ Every stage can be orchestrated by the AI assistant, or reviewed, adjusted, and 
 
 ## Quick Start
 
-Install Python 3.12+, Node.js 20+, `uv`, `pnpm`, and `ffmpeg`, then run:
+Install Python 3.12+, Node.js 20+, `uv`, `pnpm`, and `ffmpeg`.
+
+On macOS, Linux, or WSL2:
 
 ```bash
-git clone https://github.com/ArcReel/ArcReel.git
+git clone --branch v3 --single-branch https://github.com/fyr91/ArcReel.git
 cd ArcReel
 uv sync
 cd frontend && pnpm install && cd ..
 ./scripts/dev.sh
 ```
 
-Open <http://localhost:5173> and sign in with the ArcReel username and password assigned by an administrator in the data middle platform. The production cloud account service is bundled, so no `.env` setup is required.
+On Windows PowerShell:
+
+```powershell
+git clone --branch v3 --single-branch https://github.com/fyr91/ArcReel.git
+Set-Location ArcReel
+uv sync
+Set-Location frontend
+pnpm install
+pnpm build
+Set-Location ..
+uv run alembic upgrade head
+uv run uvicorn server.app:app --host 127.0.0.1 --port 1242
+```
+
+Open <http://localhost:5173> when using the development script, or <http://127.0.0.1:1242> when using the Windows single-service commands. Sign in with the ArcReel username and password assigned by an administrator in the data middle platform. The production cloud account service, company asset catalog coordinates, and required public CA certificate are bundled, so no `.env` setup is required.
 
 After signing in, ArcReel automatically retrieves the provider API keys assigned to that account, and the user can start creating projects.
 

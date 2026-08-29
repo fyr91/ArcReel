@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import ssl
 from pathlib import Path
 
 import httpx
@@ -25,9 +26,37 @@ def test_cloud_config_uses_bundled_public_defaults(monkeypatch):
     config = arcreel_cloud.cloud_config()
 
     assert config is not None
-    assert config.auth_url == "https://serqlgpuxrznwfapwcya.supabase.co/functions/v1/arcreel-auth"
+    assert config.auth_url == "https://47.108.223.84:50002/functions/v1/arcreel-auth"
     assert config.publishable_key.startswith("sb_publishable_")
     assert arcreel_cloud.cloud_enabled() is True
+
+
+def test_cloud_tls_verify_uses_the_tracked_public_ca_without_env(monkeypatch):
+    monkeypatch.delenv("ARCREEL_CLOUD_CA_BUNDLE", raising=False)
+
+    bundle = arcreel_cloud.DEFAULT_ARCREEL_CLOUD_CA_BUNDLE
+    pem = bundle.read_text(encoding="ascii")
+    context = arcreel_cloud.cloud_tls_verify(arcreel_cloud.DEFAULT_ARCREEL_CLOUD_AUTH_URL)
+
+    assert bundle.is_file()
+    assert "-----BEGIN CERTIFICATE-----" in pem
+    assert "PRIVATE KEY" not in pem
+    assert isinstance(context, ssl.SSLContext)
+
+
+def test_cloud_tls_verify_keeps_system_trust_for_an_external_override(monkeypatch):
+    monkeypatch.delenv("ARCREEL_CLOUD_CA_BUNDLE", raising=False)
+
+    assert arcreel_cloud.cloud_tls_verify("https://example.supabase.co/auth/v1") is True
+
+
+def test_cloud_tls_verify_rejects_a_missing_explicit_bundle(monkeypatch, tmp_path):
+    monkeypatch.setenv("ARCREEL_CLOUD_CA_BUNDLE", str(tmp_path / "missing-ca.crt"))
+
+    with pytest.raises(arcreel_cloud.ArcReelCloudError) as exc_info:
+        arcreel_cloud.cloud_tls_verify(arcreel_cloud.DEFAULT_ARCREEL_CLOUD_AUTH_URL)
+
+    assert exc_info.value.code == "ARCREEL_CLOUD_CONFIG_INVALID"
 
 
 def test_cloud_config_requires_complete_override(monkeypatch):

@@ -271,13 +271,14 @@ async def test_company_asset_admin_routes_use_the_shared_list_and_delete_operati
 
     page = await company_assets.list_source_assets(
         user,
+        make_translator(),
         asset_type="character",
         origin="official",
         q="测试",
         limit=24,
         offset=0,
     )
-    deleted = await company_assets.delete_source_asset(item.id, user)
+    deleted = await company_assets.delete_source_asset(item.id, user, make_translator())
 
     assert page["items"][0]["name"] == "测试人物"
     assert deleted["queued_file_count"] == 0
@@ -299,3 +300,49 @@ async def test_company_asset_admin_routes_use_the_shared_list_and_delete_operati
             {"administrator": catalog, "user_id": "admin-1", "asset_id": item.id},
         ),
     ]
+
+
+@pytest.mark.unit
+async def test_company_asset_monitor_routes_localize_catalog_connection_errors(monkeypatch) -> None:
+    from fastapi import HTTPException
+
+    from lib.company_assets import CompanyAssetSyncError
+    from server.routers import company_assets
+
+    class _UnavailableCatalog:
+        async def source_sync_dashboard(self, **kwargs):
+            raise CompanyAssetSyncError("company_asset_request_failed")
+
+        async def request_source_sync(self, **kwargs):
+            raise CompanyAssetSyncError("company_asset_request_failed")
+
+        async def update_source_sync(self, **kwargs):
+            raise CompanyAssetSyncError("company_asset_request_failed")
+
+        async def cancel_source_sync(self, **kwargs):
+            raise CompanyAssetSyncError("company_asset_request_failed")
+
+        async def retry_source_sync(self, **kwargs):
+            raise CompanyAssetSyncError("company_asset_request_failed")
+
+    monkeypatch.setattr(company_assets, "get_company_asset_catalog", _UnavailableCatalog)
+    user = CurrentUserInfo(id="admin-1", sub="alice", role="admin")
+    translator = make_translator()
+    operations = (
+        lambda: company_assets.source_sync_dashboard(user, translator),
+        lambda: company_assets.run_source_sync("characters-v1", user, translator),
+        lambda: company_assets.control_source_sync(
+            "characters-v1",
+            company_assets.SourceControlRequest(action="pause"),
+            user,
+            translator,
+        ),
+        lambda: company_assets.cancel_source_sync("run-1", user, translator),
+        lambda: company_assets.retry_source_sync("run-1", user, translator),
+    )
+
+    for operation in operations:
+        with pytest.raises(HTTPException) as raised:
+            await operation()
+        assert raised.value.status_code == 503
+        assert raised.value.detail == "无法访问公司资产库，请稍后重试"

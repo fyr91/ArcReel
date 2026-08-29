@@ -26,7 +26,13 @@ from lib.company_assets import (
     CompanyAssetSnapshotPage,
     CompanyAssetSyncError,
 )
-from server.services.arcreel_cloud import cloud_access_token, cloud_config, cloud_tls_verify, cloud_user_sub
+from server.services.arcreel_cloud import (
+    ArcReelCloudError,
+    cloud_access_token,
+    cloud_config,
+    cloud_tls_verify,
+    cloud_user_sub,
+)
 
 TokenProvider = Callable[[str], Awaitable[str]]
 IdentityProvider = Callable[[str], Awaitable[str]]
@@ -131,7 +137,10 @@ class SupabaseCompanyAssetCatalog:
         user_id: str,
         publication: CompanyAssetPublication,
     ) -> CompanyAssetPublishResult:
-        cloud_sub = await self._identity_provider(user_id)
+        try:
+            cloud_sub = await self._identity_provider(user_id)
+        except ArcReelCloudError as exc:
+            raise CompanyAssetSyncError("company_asset_request_failed", exc.code) from exc
         if publication.owner_id is not None and publication.owner_id != cloud_sub:
             raise CompanyAssetSyncError("company_asset_not_owned")
         uploaded_paths: list[str] = []
@@ -363,7 +372,10 @@ class SupabaseCompanyAssetCatalog:
         content: bytes | None = None,
         extra_headers: dict[str, str] | None = None,
     ) -> httpx.Response:
-        access_token = await self._token_provider(user_id)
+        try:
+            access_token = await self._token_provider(user_id)
+        except ArcReelCloudError as exc:
+            raise CompanyAssetSyncError("company_asset_request_failed", exc.code) from exc
         headers = {
             "apikey": self._publishable_key,
             "Authorization": f"Bearer {access_token}",
@@ -374,7 +386,11 @@ class SupabaseCompanyAssetCatalog:
         client = self._client
         owns_client = client is None
         if client is None:
-            client = httpx.AsyncClient(timeout=60.0, verify=cloud_tls_verify())
+            try:
+                verify = cloud_tls_verify(self._base_url)
+            except ArcReelCloudError as exc:
+                raise CompanyAssetSyncError("company_asset_request_failed", exc.code) from exc
+            client = httpx.AsyncClient(timeout=60.0, verify=verify)
         try:
             response = await client.request(
                 method,
@@ -543,7 +559,10 @@ class SupabaseCompanyAssetCatalog:
 
 
 def get_company_asset_catalog() -> SupabaseCompanyAssetCatalog:
-    config = cloud_config()
+    try:
+        config = cloud_config()
+    except ArcReelCloudError as exc:
+        raise CompanyAssetSyncError("company_asset_cloud_not_configured", exc.code) from exc
     if config is None:
         raise CompanyAssetSyncError("company_asset_cloud_not_configured")
     base_url, separator, _suffix = config.auth_url.partition("/functions/v1/")
