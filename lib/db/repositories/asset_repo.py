@@ -29,6 +29,11 @@ class AssetRepository(BaseRepository):
         source_project: str | None = None,
         external_source: str | None = None,
         external_id: str | None = None,
+        external_origin: str | None = None,
+        external_version: int | None = None,
+        external_status: str | None = None,
+        external_owner_id: str | None = None,
+        external_owner_name: str | None = None,
         voice_id: str | None = None,
     ) -> Asset:
         asset = Asset(
@@ -42,6 +47,11 @@ class AssetRepository(BaseRepository):
             source_project=source_project,
             external_source=external_source,
             external_id=external_id,
+            external_origin=external_origin,
+            external_version=external_version,
+            external_status=external_status,
+            external_owner_id=external_owner_id,
+            external_owner_name=external_owner_name,
             voice_id=voice_id,
         )
         self.session.add(asset)

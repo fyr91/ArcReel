@@ -22,6 +22,11 @@ export interface Asset {
   source_project: string | null;
   external_source?: string | null;
   external_id?: string | null;
+  external_origin?: "official" | "user_shared" | null;
+  external_version?: number | null;
+  external_status?: "published" | "archived" | null;
+  external_owner_id?: string | null;
+  external_owner_name?: string | null;
   voice_id?: string | null;
   aliases?: string[];
   resources?: AssetResource[];

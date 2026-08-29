@@ -64,6 +64,7 @@ from server.routers import (
     assistant,
     character_catalog,
     characters,
+    company_assets,
     cost_estimation,
     custom_providers,
     end_frames,
@@ -728,6 +729,12 @@ app.include_router(
     tags=["参考生视频"],
 )
 app.include_router(assets.router, prefix="/api/v1", dependencies=[Depends(get_current_user)], tags=["全局资产库"])
+app.include_router(
+    company_assets.router,
+    prefix="/api/v1",
+    dependencies=[Depends(get_current_user)],
+    tags=["公司资产库"],
+)
 app.include_router(
     character_catalog.router,
     prefix="/api/v1",

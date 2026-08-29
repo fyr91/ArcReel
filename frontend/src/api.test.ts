@@ -1360,6 +1360,44 @@ describe("API", () => {
     });
   });
 
+  describe("company catalog administration", () => {
+    it("queries, deletes, and previews central Supabase assets through authenticated routes", async () => {
+      const blob = new Blob(["preview"], { type: "image/png" });
+      const fetchMock = vi
+        .fn()
+        .mockResolvedValueOnce(mockResponse({ jsonData: { items: [], total: 0, totals: {} } }))
+        .mockResolvedValueOnce(mockResponse({ jsonData: { asset_id: "asset-1", queued_file_count: 1 } }))
+        .mockResolvedValueOnce(mockResponse({ blobData: blob }));
+      vi.stubGlobal("fetch", fetchMock);
+
+      await API.listCompanyCatalogAssets({
+        assetType: "character",
+        origin: "official",
+        q: "鳄鱼",
+        limit: 24,
+        offset: 0,
+      });
+      await API.deleteCompanyCatalogAsset("asset-1");
+      const preview = await API.getCompanyCatalogAssetPreview("asset-1");
+
+      expect(preview).toBe(blob);
+      expect(fetchMock.mock.calls[0][0]).toContain(
+        "/api/v1/company-assets/source-sync/assets?asset_type=character&origin=official",
+      );
+      expect(fetchMock.mock.calls[0][0]).toContain("q=%E9%B3%84%E9%B1%BC");
+      expect(fetchMock).toHaveBeenNthCalledWith(
+        2,
+        expect.stringContaining("/api/v1/company-assets/source-sync/assets/asset-1"),
+        expect.objectContaining({ method: "DELETE" }),
+      );
+      expect(fetchMock).toHaveBeenNthCalledWith(
+        3,
+        expect.stringContaining("/api/v1/company-assets/source-sync/assets/asset-1/preview"),
+        expect.objectContaining({ method: "GET" }),
+      );
+    });
+  });
+
   describe("createAsset", () => {
     it("POSTs multipart to /api/v1/assets", async () => {
       const fetchMock = vi.fn().mockResolvedValue(

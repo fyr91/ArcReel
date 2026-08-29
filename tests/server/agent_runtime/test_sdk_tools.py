@@ -544,6 +544,16 @@ def test_delete_project_asset_registered_as_controlled_editor() -> None:
 
 
 @pytest.mark.unit
+def test_company_catalog_admin_tools_are_registered_outside_project_migration_guard() -> None:
+    from server.agent_runtime.sdk_tools import ARCREEL_MCP_TOOL_IDS, MIGRATION_BLOCKED_TOOL_IDS
+
+    assert "list_company_catalog_assets" in ARCREEL_MCP_TOOL_IDS
+    assert "delete_company_catalog_asset" in ARCREEL_MCP_TOOL_IDS
+    assert "list_company_catalog_assets" not in MIGRATION_BLOCKED_TOOL_IDS
+    assert "delete_company_catalog_asset" not in MIGRATION_BLOCKED_TOOL_IDS
+
+
+@pytest.mark.unit
 def test_update_h3_video_prompt_is_registered_and_migration_guarded() -> None:
     from server.agent_runtime.sdk_tools import ARCREEL_MCP_TOOL_IDS, MIGRATION_BLOCKED_TOOL_IDS
 
@@ -7374,9 +7384,10 @@ async def test_split_reference_video_units_rejects_over_max_refs(fake_ctx: ToolC
     _rv_source(fake_ctx)
     out = await _run_rv_split(fake_ctx, monkeypatch, [_rv_unit("@[张三] 走向 @[村口]")], max_refs=3)
     assert out.get("is_error") is True
-    assert "普通资产引用（2）加上后续必需的 Video Unit Storyboard Sheet（1）与至少一张 Keyframe" in out[
-        "content"
-    ][0]["text"]
+    assert (
+        "普通资产引用（2）加上后续必需的 Video Unit Storyboard Sheet（1）与至少一张 Keyframe"
+        in out["content"][0]["text"]
+    )
     assert not _rv_step1_path(fake_ctx).exists()
 
 
@@ -7393,7 +7404,10 @@ async def test_split_reference_video_units_reserves_sheet_and_one_future_keyfram
     )
 
     assert out.get("is_error") is True
-    assert "普通资产引用（1）加上后续必需的 Video Unit Storyboard Sheet（1）与至少一张 Keyframe" in out["content"][0]["text"]
+    assert (
+        "普通资产引用（1）加上后续必需的 Video Unit Storyboard Sheet（1）与至少一张 Keyframe"
+        in out["content"][0]["text"]
+    )
     assert [v["code"] for v in _read_rv_quarantine(fake_ctx)["violations"]] == ["reference_limit_with_keyframes"]
 
 

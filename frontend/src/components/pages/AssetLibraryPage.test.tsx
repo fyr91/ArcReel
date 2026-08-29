@@ -4,9 +4,9 @@ import { Router } from "wouter";
 import { memoryLocation } from "wouter/memory-location";
 import { API } from "@/api";
 import { useAssetsStore } from "@/stores/assets-store";
-import { useCharacterCatalogSyncStore } from "@/stores/character-catalog-sync-store";
+import { useCompanyAssetSyncStore } from "@/stores/company-asset-sync-store";
 import type { Asset } from "@/types/asset";
-import type { CharacterCatalogSyncJob } from "@/types";
+import type { CompanyAssetSyncJob } from "@/types";
 import { AssetLibraryPage } from "./AssetLibraryPage";
 
 vi.mock("@/components/assets/AssetFormModal", () => ({
@@ -25,10 +25,12 @@ function renderPage(initialPath = "/app/assets") {
   };
 }
 
-function queuedSyncJob(): CharacterCatalogSyncJob {
+function queuedSyncJob(assetType: "character" | "scene" | "prop" = "character"): CompanyAssetSyncJob {
   return {
     job_id: "job-1",
-    job_type: "character_catalog_sync",
+    job_type: `company_asset_sync:${assetType}`,
+    owner_id: "user-1",
+    payload: { asset_type: assetType, trigger: "manual" },
     status: "queued",
     phase: "queued",
     progress_current: 0,
@@ -161,10 +163,10 @@ describe("AssetLibraryPage tablist (issue #488)", () => {
   });
 });
 
-describe("AssetLibraryPage 人物目录同步", () => {
+describe("AssetLibraryPage 公司资产同步", () => {
   beforeEach(() => {
     useAssetsStore.setState(useAssetsStore.getInitialState(), true);
-    useCharacterCatalogSyncStore.setState(useCharacterCatalogSyncStore.getInitialState(), true);
+    useCompanyAssetSyncStore.setState(useCompanyAssetSyncStore.getInitialState(), true);
     vi.spyOn(API, "listAssets").mockResolvedValue({ items: [] });
   });
 
@@ -172,8 +174,8 @@ describe("AssetLibraryPage 人物目录同步", () => {
     vi.restoreAllMocks();
   });
 
-  it("只在人物资产页显示同步按钮，且页面加载不会自动同步", () => {
-    const sync = vi.spyOn(API, "syncCharacterCatalog").mockResolvedValue({
+  it("人物、场景、道具页都显示同步按钮，页面自身不会自动同步", () => {
+    const sync = vi.spyOn(API, "syncCompanyAssets").mockResolvedValue({
       job: queuedSyncJob(),
       deduped: false,
     });
@@ -183,11 +185,12 @@ describe("AssetLibraryPage 人物目录同步", () => {
 
     unmount();
     renderPage("/app/assets?tab=scene");
-    expect(screen.queryByRole("button", { name: "同步资产库" })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "同步资产库" })).toBeInTheDocument();
+    expect(sync).not.toHaveBeenCalled();
   });
 
   it("用户点击后只入队，页面请求不会等待目录同步完成", async () => {
-    const sync = vi.spyOn(API, "syncCharacterCatalog").mockResolvedValue({
+    const sync = vi.spyOn(API, "syncCompanyAssets").mockResolvedValue({
       job: queuedSyncJob(),
       deduped: false,
     });
@@ -197,6 +200,7 @@ describe("AssetLibraryPage 人物目录同步", () => {
     fireEvent.click(screen.getByRole("button", { name: "同步资产库" }));
 
     await waitFor(() => expect(sync).toHaveBeenCalledTimes(1));
+    expect(sync).toHaveBeenCalledWith("character");
     expect(API.listAssets).toHaveBeenCalledTimes(1);
     expect(screen.getByRole("button", { name: "同步中…" })).toBeDisabled();
   });

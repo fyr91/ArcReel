@@ -137,3 +137,114 @@ export interface CharacterCatalogSyncJob {
   finished_at: string | null;
   updated_at: string;
 }
+
+export interface CompanyAssetSyncResult {
+  added: number;
+  updated: number;
+  archived: number;
+  unchanged: number;
+  assetsDownloaded: number;
+}
+
+export interface CompanyAssetSyncJob {
+  job_id: string;
+  job_type: `company_asset_sync:${"character" | "scene" | "prop"}`;
+  owner_id: string;
+  payload: { asset_type: "character" | "scene" | "prop"; trigger: string } | null;
+  status: "queued" | "running" | "succeeded" | "failed";
+  phase: string;
+  progress_current: number;
+  progress_total: number;
+  result: CompanyAssetSyncResult | null;
+  error_code: string | null;
+  error_detail: string | null;
+  error_message: string | null;
+  queued_at: string;
+  started_at: string | null;
+  finished_at: string | null;
+  updated_at: string;
+}
+
+export interface CompanyAssetSyncSource {
+  id: string;
+  source_key: string;
+  display_name: string;
+  asset_type: "character" | "scene" | "prop";
+  adapter: string;
+  enabled: boolean;
+  paused: boolean;
+  interval_seconds: number;
+  next_run_at: string | null;
+  last_run_at: string | null;
+  last_success_at: string | null;
+  last_status: string | null;
+  last_error: string | null;
+}
+
+export interface CompanyAssetSourceSyncRun {
+  id: string;
+  source_id: string;
+  source_key: string;
+  display_name: string;
+  asset_type: "character" | "scene" | "prop";
+  trigger_kind: "schedule" | "manual" | "retry";
+  status: "queued" | "running" | "cancelling" | "cancelled" | "succeeded" | "failed";
+  imported_count: number;
+  updated_count: number;
+  unchanged_count: number;
+  archived_count: number;
+  error_code: string | null;
+  error_detail: string | null;
+  queued_at: string;
+  started_at: string | null;
+  finished_at: string | null;
+}
+
+export interface CompanyAssetSourceSyncDashboard {
+  sources: CompanyAssetSyncSource[];
+  runs: CompanyAssetSourceSyncRun[];
+}
+
+export interface CompanyCatalogAssetFile {
+  id: string;
+  key: string;
+  role: string;
+  media_type: "image" | "audio";
+  mime_type: string | null;
+  bucket_id: string;
+  object_path: string;
+  byte_size: number | null;
+  sha256: string | null;
+  revision: string | null;
+  sort_order: number;
+  source_fields: string[];
+}
+
+export interface CompanyCatalogAsset {
+  id: string;
+  asset_type: "character" | "scene" | "prop";
+  origin: "official" | "user_shared";
+  status: "published" | "archived";
+  version: number;
+  name: string;
+  description: string;
+  owner_name: string | null;
+  source_name: string | null;
+  files: CompanyCatalogAssetFile[];
+  created_at: string;
+  updated_at: string;
+}
+
+export interface CompanyCatalogAssetPage {
+  items: CompanyCatalogAsset[];
+  total: number;
+  totals: Record<"character" | "scene" | "prop", number>;
+}
+
+export interface CompanyCatalogAssetDeleteResult {
+  asset_id: string;
+  name: string;
+  asset_type: "character" | "scene" | "prop";
+  origin: "official" | "user_shared";
+  queued_file_count: number;
+}

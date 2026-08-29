@@ -1589,6 +1589,8 @@ export default {
   // enforces all locales stay in sync — adding a backend tool without wiring zh/en/vi fails CI)
   'tool_name_list_pending_assets': 'List pending assets',
   'tool_name_list_global_assets': 'Read global asset context',
+  'tool_name_list_company_catalog_assets': 'List company catalog assets',
+  'tool_name_delete_company_catalog_asset': 'Delete company catalog asset',
   'tool_name_complete_asset_inventory': 'Complete asset inventory',
   'tool_name_complete_step1_rebuild': 'Complete step 1 rebuild',
   'tool_name_get_workflow_plan': 'Get complete workflow plan',

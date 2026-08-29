@@ -98,6 +98,7 @@ agent session 的当前工作目录（cwd）已绑定到当前项目根，**所�
 - **卖点**：商品已登记但 `selling_points` 为空时，从 brief、商品描述与原图起草卖点列表，与用户确认后经 `patch_project` 写入 products 表——剧本生成会把卖点注入带货框架的 selling_point/demo 段
 - **资产设计（可选）**：剧本会用到的角色/场景/道具先定义进 `project.json` 再 dispatch `generate-assets` 子任务出资产图；轻量短片可跳过，仅靠商品参考与项目 style
 - **全局资产链接**：用户要求链接、解除链接，或为角色选择参考音频/TTS Voice ID 时，调用 `mcp__arcreel__manage_project_asset_link`；这些系统字段不能用 `patch_project` 修改。
+- **公司资产总库管理**：用户要求查看服务器 Supabase 中的人物、场景、道具时调用 `mcp__arcreel__list_company_catalog_assets`。只有用户明确要求永久删除并已根据查询结果核对资产 ID 时，才调用 `mcp__arcreel__delete_company_catalog_asset`；该操作不删除 ArcReel 本地副本，仍存在于远端监控源的官方资产会在后续同步时重新导入。
 - **角色主图与参考图互转**：调用 `mcp__arcreel__move_character_main_to_reference` 在两个槽位间移动图片；主图转参考图使用 `direction=main_to_reference`（默认），参考图移回主图使用 `direction=reference_to_main`。操作与是否链接全局资产无关；主图转参考图后仍可反向恢复，也可调用 `generate_assets` 生成新的项目主图，新图进入版本链和已链接全局资产的候选，不覆盖全局主图。
 - **自定义风格库**：用户要求修改已保存风格的名称、提示词或参考图时，先用 `mcp__arcreel__list_global_assets` 取得风格 ID，再调用 `mcp__arcreel__update_custom_style`。风格库修改不会反向改变已有项目快照。
 - **剧本**：`mcp__arcreel__generate_episode_script({"episode": 1})` 单阶段产出，八段带货框架按 `target_duration` 选档配比；storyboard 路径向用户呈现镜头列表与口播文案，reference_video 路径呈现 video unit 列表与书写层正文，按需经 `patch_episode_script` 调整（顺序调整引导用户到 WebUI 剧本页）

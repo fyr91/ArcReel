@@ -1,17 +1,18 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
 import { useLocation, useSearch } from "wouter";
 import { useTranslation } from "react-i18next";
-import { ChevronLeft, Landmark, Package as PackageIcon, Plus, RefreshCw, Search, User } from "lucide-react";
+import { Activity, ChevronLeft, Landmark, Package as PackageIcon, Plus, RefreshCw, Search, User } from "lucide-react";
 import { AssetGrid } from "@/components/assets/AssetGrid";
 import { AssetFormModal } from "@/components/assets/AssetFormModal";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { useAssetsStore } from "@/stores/assets-store";
 import {
-  isCharacterCatalogJobActive,
-  useCharacterCatalogSyncStore,
-} from "@/stores/character-catalog-sync-store";
+  isCompanyAssetJobActive,
+  useCompanyAssetSyncStore,
+} from "@/stores/company-asset-sync-store";
 import { API } from "@/api";
 import { useAppStore } from "@/stores/app-store";
+import { useAuthStore } from "@/stores/auth-store";
 import { useDebouncedValue } from "@/hooks/useDebouncedValue";
 import { errMsg } from "@/utils/async";
 import {
@@ -55,6 +56,7 @@ const HEADER_GLOW_STYLE = ambientGlowStyle({ at: "30% 0%", intensity: 0.08 });
 export function AssetLibraryPage() {
   const { t } = useTranslation("assets");
   const [, navigate] = useLocation();
+  const role = useAuthStore((state) => state.role);
   const search = useSearch();
 
   const activeTab = useMemo((): AssetType => {
@@ -130,18 +132,18 @@ export function AssetLibraryPage() {
   const [formModal, setFormModal] = useState<{ mode: "create" | "edit"; asset?: Asset } | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<Asset | null>(null);
   const [deleting, setDeleting] = useState(false);
-  const syncJob = useCharacterCatalogSyncStore((state) => state.job);
-  const syncRequestPending = useCharacterCatalogSyncStore((state) => state.requestPending);
-  const startCatalogSync = useCharacterCatalogSyncStore((state) => state.start);
-  const syncingCatalog = syncRequestPending || isCharacterCatalogJobActive(syncJob);
+  const [sharingIds, setSharingIds] = useState<Set<string>>(() => new Set());
+  const syncJob = useCompanyAssetSyncStore((state) => state.jobs[activeTab]);
+  const syncRequestPending = useCompanyAssetSyncStore((state) => state.requestPending[activeTab] ?? false);
+  const startCatalogSync = useCompanyAssetSyncStore((state) => state.start);
+  const syncingCatalog = syncRequestPending || isCompanyAssetJobActive(syncJob);
 
   const byType = useAssetsStore((s) => s.byType);
   const loadList = useAssetsStore((s) => s.loadList);
   const addAsset = useAssetsStore((s) => s.addAsset);
   const updateAssetLocal = useAssetsStore((s) => s.updateAsset);
   const deleteAssetLocal = useAssetsStore((s) => s.deleteAsset);
-  const characterCatalogRevision = useAssetsStore((s) => s.characterCatalogRevision);
-  const relevantCatalogRevision = activeTab === "character" ? characterCatalogRevision : 0;
+  const relevantCatalogRevision = useAssetsStore((s) => s.catalogRevisionByType[activeTab]);
 
   useEffect(() => {
     void loadList(activeTab, debouncedQ || undefined);
@@ -189,15 +191,31 @@ export function AssetLibraryPage() {
   const handleSyncCatalog = useCallback(async () => {
     if (syncingCatalog) return;
     try {
-      await startCatalogSync();
+      await startCatalogSync(activeTab);
       useAppStore.getState().pushToast(t("sync_background_started"), "info");
     } catch (err) {
       useAppStore.getState().pushToast(errMsg(err), "error");
     }
-  }, [startCatalogSync, syncingCatalog, t]);
+  }, [activeTab, startCatalogSync, syncingCatalog, t]);
 
   const handleEditAsset = useCallback((a: Asset) => setFormModal({ mode: "edit", asset: a }), []);
   const handleDeleteAsset = useCallback((a: Asset) => setDeleteTarget(a), []);
+  const handleShareAsset = useCallback(async (asset: Asset) => {
+    setSharingIds((current) => new Set(current).add(asset.id));
+    try {
+      const result = await API.publishCompanyAsset(asset.id);
+      useAppStore.getState().pushToast(t("share_asset_success", { name: asset.name, version: result.version }), "success");
+      await loadList(asset.type, debouncedQ || undefined);
+    } catch (err) {
+      useAppStore.getState().pushToast(errMsg(err), "error");
+    } finally {
+      setSharingIds((current) => {
+        const next = new Set(current);
+        next.delete(asset.id);
+        return next;
+      });
+    }
+  }, [debouncedQ, loadList, t]);
 
   const confirmDelete = async () => {
     if (!deleteTarget || deleting) return;
@@ -246,6 +264,16 @@ export function AssetLibraryPage() {
           </div>
 
           <div className="flex shrink-0 items-center gap-2 pt-2">
+            {role !== "user" && (
+              <button
+                type="button"
+                onClick={() => navigate("/app/assets/source-sync")}
+                className={ACCENT_BTN_SM_CLS}
+              >
+                <Activity className="h-4 w-4" />
+                {t("source_sync_open")}
+              </button>
+            )}
             <div className="relative">
               <Search className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-text-4" />
               <input
@@ -257,8 +285,7 @@ export function AssetLibraryPage() {
                 className={`${INPUT_CLS} w-[240px] pl-8`}
               />
             </div>
-            {activeTab === "character" && (
-              <button
+            <button
                 type="button"
                 onClick={() => void handleSyncCatalog()}
                 disabled={syncingCatalog}
@@ -271,8 +298,7 @@ export function AssetLibraryPage() {
                       total: syncJob.progress_total,
                     })
                   : t(syncingCatalog ? "syncing_library" : "sync_library")}
-              </button>
-            )}
+            </button>
             <button
               type="button"
               onClick={() => setFormModal({ mode: "create" })}
@@ -359,6 +385,8 @@ export function AssetLibraryPage() {
             assets={assets}
             onEdit={handleEditAsset}
             onDelete={handleDeleteAsset}
+            onShare={(asset) => void handleShareAsset(asset)}
+            sharingIds={sharingIds}
           />
         )}
         </div>

@@ -1,6 +1,6 @@
 import { memo } from "react";
 import { useTranslation } from "react-i18next";
-import { Edit2, Trash2, User as UserIcon, Landmark, Package } from "lucide-react";
+import { CloudUpload, Edit2, Trash2, User as UserIcon, Landmark, Package } from "lucide-react";
 import { API } from "@/api";
 import { formatDate } from "@/utils/date-format";
 import type { Asset } from "@/types/asset";
@@ -10,6 +10,8 @@ interface Props {
   asset: Asset;
   onEdit: (asset: Asset) => void;
   onDelete: (asset: Asset) => void;
+  onShare?: (asset: Asset) => void;
+  sharing?: boolean;
 }
 
 const TYPE_ICON = { character: UserIcon, scene: Landmark, prop: Package };
@@ -18,7 +20,7 @@ const SHORT_DATE_OPTS: Intl.DateTimeFormatOptions = { month: "short", day: "nume
 
 export const AssetCard = memo(AssetCardImpl);
 
-function AssetCardImpl({ asset, onEdit, onDelete }: Props) {
+function AssetCardImpl({ asset, onEdit, onDelete, onShare, sharing = false }: Props) {
   const { t, i18n } = useTranslation("assets");
   const Icon = TYPE_ICON[asset.type];
   const imageUrl = API.getGlobalAssetUrl(asset.image_path, asset.updated_at);
@@ -55,6 +57,17 @@ function AssetCardImpl({ asset, onEdit, onDelete }: Props) {
             ) : null}
           </div>
           <div className="flex flex-col gap-1 opacity-0 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100">
+            {onShare && asset.external_origin !== "official" && (
+              <button
+                type="button"
+                onClick={() => onShare(asset)}
+                disabled={sharing}
+                aria-label={t(asset.external_origin === "user_shared" ? "share_asset_update" : "share_asset")}
+                className="rounded-[5px] p-1 text-text-4 transition-colors hover:text-accent-2 focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent disabled:opacity-50"
+              >
+                <CloudUpload className={`h-3.5 w-3.5 ${sharing ? "animate-pulse" : ""}`} />
+              </button>
+            )}
             <button
               type="button"
               onClick={() => onEdit(asset)}

@@ -77,6 +77,8 @@ class ArcReelCloudSession(TimestampMixin, Base):
         primary_key=True,
     )
     cloud_user_sub: Mapped[str] = mapped_column(String, nullable=False, unique=True)
+    access_token_encrypted: Mapped[str | None] = mapped_column(String, nullable=True)
+    access_token_expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     refresh_token_encrypted: Mapped[str] = mapped_column(String, nullable=False)
     config_revision: Mapped[int] = mapped_column(sa.BigInteger, nullable=False, server_default="0")
     last_sync_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)

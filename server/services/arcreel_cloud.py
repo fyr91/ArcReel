@@ -2,11 +2,15 @@
 
 from __future__ import annotations
 
+import asyncio
 import base64
 import logging
 import os
+import ssl
 import uuid
 from dataclasses import dataclass
+from datetime import UTC, datetime, timedelta
+from pathlib import Path
 
 import httpx
 from cryptography.fernet import Fernet, InvalidToken
@@ -20,6 +24,7 @@ from lib.db.models.user import ArcReelCloudSession, User
 from server.services.account_center_sync import _apply_snapshot
 
 logger = logging.getLogger(__name__)
+_access_token_locks: dict[str, asyncio.Lock] = {}
 
 
 # These are public client coordinates, not privileged credentials. Keeping them
@@ -112,11 +117,15 @@ async def login_with_cloud(session: AsyncSession, username: str, password: str) 
         cloud_session = ArcReelCloudSession(
             user_id=user.id,
             cloud_user_sub=identity.sub,
+            access_token_encrypted=_encrypt(access_token),
+            access_token_expires_at=_token_expiry(payload),
             refresh_token_encrypted=_encrypt(refresh_token),
         )
         session.add(cloud_session)
     else:
         cloud_session.cloud_user_sub = identity.sub
+        cloud_session.access_token_encrypted = _encrypt(access_token)
+        cloud_session.access_token_expires_at = _token_expiry(payload)
         cloud_session.refresh_token_encrypted = _encrypt(refresh_token)
     cloud_session.config_revision = revision
     cloud_session.last_sync_at = utc_now()
@@ -148,6 +157,8 @@ async def sync_cloud_user(user_id: str) -> bool:
                 raise ArcReelCloudError("云端会话身份不匹配", status_code=401, code="CLOUD_IDENTITY_MISMATCH")
             access_token = str(refresh_payload.get("access_token") or "")
             next_refresh_token = str(refresh_payload.get("refresh_token") or "")
+            if not access_token or not next_refresh_token:
+                raise ArcReelCloudError("云端刷新返回的数据不完整", code="ARCREEL_CLOUD_RESPONSE_INVALID")
             config_payload = _payload(
                 await _request("GET", f"{config.auth_url}/config", config, access_token=access_token)
             )
@@ -171,6 +182,8 @@ async def sync_cloud_user(user_id: str) -> bool:
                 user.role = identity.role
                 user.is_active = True
             cloud_session.refresh_token_encrypted = _encrypt(next_refresh_token)
+            cloud_session.access_token_encrypted = _encrypt(access_token)
+            cloud_session.access_token_expires_at = _token_expiry(refresh_payload)
             cloud_session.config_revision = revision
             cloud_session.last_sync_at = utc_now()
             cloud_session.last_sync_status = "succeeded"
@@ -191,6 +204,59 @@ async def sync_cloud_user(user_id: str) -> bool:
                 await session.commit()
             logger.warning("ArcReel 云端配置同步失败 user=%s: %s", user_id, exc)
             return False
+
+
+async def cloud_access_token(user_id: str) -> str:
+    """Return a valid Supabase access token without exposing it to the SPA."""
+
+    lock = _access_token_locks.setdefault(user_id, asyncio.Lock())
+    async with lock:
+        config = cloud_config()
+        if config is None:
+            raise ArcReelCloudError("ArcReel 云端登录尚未配置", code="ARCREEL_CLOUD_NOT_CONFIGURED")
+        async with async_session_factory() as session:
+            cloud_session = await session.get(ArcReelCloudSession, user_id)
+            if cloud_session is None:
+                raise ArcReelCloudError("请重新登录后再同步公司资产", status_code=401, code="CLOUD_SESSION_MISSING")
+            expires_at = cloud_session.access_token_expires_at
+            encrypted_access_token = cloud_session.access_token_encrypted
+            if (
+                expires_at is not None
+                and encrypted_access_token is not None
+                and _as_utc(expires_at) > utc_now() + timedelta(seconds=60)
+            ):
+                return _decrypt(encrypted_access_token)
+
+            refresh_token = _decrypt(cloud_session.refresh_token_encrypted)
+            response = await _request(
+                "POST",
+                f"{config.auth_url}/refresh",
+                config,
+                json={"refresh_token": refresh_token},
+            )
+            payload = _payload(response)
+            identity = _identity(payload.get("user"))
+            if identity.sub != cloud_session.cloud_user_sub:
+                raise ArcReelCloudError("云端会话身份不匹配", status_code=401, code="CLOUD_IDENTITY_MISMATCH")
+            access_token = str(payload.get("access_token") or "")
+            next_refresh_token = str(payload.get("refresh_token") or "")
+            if not access_token or not next_refresh_token:
+                raise ArcReelCloudError("云端刷新返回的数据不完整", code="ARCREEL_CLOUD_RESPONSE_INVALID")
+            cloud_session.access_token_encrypted = _encrypt(access_token)
+            cloud_session.access_token_expires_at = _token_expiry(payload)
+            cloud_session.refresh_token_encrypted = _encrypt(next_refresh_token)
+            await session.commit()
+            return access_token
+
+
+async def cloud_user_sub(user_id: str) -> str:
+    """Resolve the durable Supabase Auth identity for a local shadow user."""
+
+    async with async_session_factory() as session:
+        cloud_session = await session.get(ArcReelCloudSession, user_id)
+        if cloud_session is None:
+            raise ArcReelCloudError("请重新登录后再访问公司资产", status_code=401, code="CLOUD_SESSION_MISSING")
+        return cloud_session.cloud_user_sub
 
 
 async def _upsert_shadow_user(session: AsyncSession, identity: ArcReelCloudIdentity) -> User:
@@ -227,7 +293,7 @@ async def _request(
     if access_token:
         headers["Authorization"] = f"Bearer {access_token}"
     try:
-        async with httpx.AsyncClient(timeout=20.0) as client:
+        async with httpx.AsyncClient(timeout=20.0, verify=cloud_tls_verify()) as client:
             response = await client.request(method, url, headers=headers, json=json)
     except httpx.HTTPError as exc:
         raise ArcReelCloudError("无法连接 ArcReel 云端登录服务") from exc
@@ -240,6 +306,18 @@ async def _request(
             message, code = "云端登录失败", "ARCREEL_CLOUD_REQUEST_FAILED"
         raise ArcReelCloudError(message, status_code=response.status_code, code=code)
     return response
+
+
+def cloud_tls_verify() -> ssl.SSLContext | bool:
+    """Use the private deployment CA when one is configured."""
+
+    configured = os.environ.get("ARCREEL_CLOUD_CA_BUNDLE", "").strip()
+    if not configured:
+        return True
+    bundle = Path(configured)
+    if not bundle.is_file():
+        raise ArcReelCloudError("ArcReel 云端 CA 证书不存在", code="ARCREEL_CLOUD_CONFIG_INVALID")
+    return ssl.create_default_context(cafile=str(bundle))
 
 
 def _payload(response: httpx.Response) -> dict[str, object]:
@@ -261,6 +339,25 @@ def _revision(value: object) -> int:
         except ValueError:
             pass
     raise ArcReelCloudError("云端配置版本无效", code="ARCREEL_CLOUD_RESPONSE_INVALID")
+
+
+def _token_expiry(payload: dict[str, object]) -> datetime:
+    expires_at = payload.get("expires_at")
+    if isinstance(expires_at, (int, float, str)):
+        try:
+            return datetime.fromtimestamp(float(expires_at), UTC)
+        except (OSError, OverflowError, ValueError):
+            pass
+    expires_in = payload.get("expires_in")
+    try:
+        seconds = int(expires_in) if expires_in is not None else 3600
+    except (TypeError, ValueError):
+        seconds = 3600
+    return utc_now() + timedelta(seconds=max(60, seconds))
+
+
+def _as_utc(value: datetime) -> datetime:
+    return value.replace(tzinfo=UTC) if value.tzinfo is None else value.astimezone(UTC)
 
 
 def _identity(raw: object) -> ArcReelCloudIdentity:

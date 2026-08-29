@@ -9,7 +9,7 @@ from typing import Any
 from sqlalchemy import select, update
 from sqlalchemy.exc import IntegrityError
 
-from lib.db.base import dt_to_iso, utc_now
+from lib.db.base import DEFAULT_USER_ID, dt_to_iso, utc_now
 from lib.db.models.background_job import BackgroundJob
 from lib.db.repositories.base import BaseRepository, rowcount
 
@@ -21,9 +21,15 @@ def background_job_to_dict(job: BackgroundJob) -> dict[str, Any]:
         result = json.loads(job.result_json) if job.result_json else None
     except (TypeError, ValueError):
         result = None
+    try:
+        payload = json.loads(job.payload_json) if job.payload_json else None
+    except (TypeError, ValueError):
+        payload = None
     return {
         "job_id": job.job_id,
         "job_type": job.job_type,
+        "owner_id": job.owner_id,
+        "payload": payload,
         "status": job.status,
         "phase": job.phase,
         "progress_current": job.progress_current,
@@ -39,11 +45,19 @@ def background_job_to_dict(job: BackgroundJob) -> dict[str, Any]:
 
 
 class BackgroundJobRepository(BaseRepository):
-    async def enqueue(self, job_type: str) -> tuple[dict[str, Any], bool]:
+    async def enqueue(
+        self,
+        job_type: str,
+        *,
+        owner_id: str = DEFAULT_USER_ID,
+        payload: dict[str, Any] | None = None,
+    ) -> tuple[dict[str, Any], bool]:
         now = utc_now()
         job = BackgroundJob(
             job_id=uuid.uuid4().hex,
             job_type=job_type,
+            owner_id=owner_id,
+            payload_json=json.dumps(payload, ensure_ascii=False, separators=(",", ":")) if payload is not None else None,
             status="queued",
             phase="queued",
             progress_current=0,
@@ -56,17 +70,18 @@ class BackgroundJobRepository(BaseRepository):
             await self.session.commit()
         except IntegrityError:
             await self.session.rollback()
-            existing = await self.get_active(job_type)
+            existing = await self.get_active(job_type, owner_id=owner_id)
             if existing is not None:
                 return existing, True
             raise
         return background_job_to_dict(job), False
 
-    async def get_active(self, job_type: str) -> dict[str, Any] | None:
+    async def get_active(self, job_type: str, *, owner_id: str = DEFAULT_USER_ID) -> dict[str, Any] | None:
         result = await self.session.execute(
             select(BackgroundJob)
             .where(
                 BackgroundJob.job_type == job_type,
+                BackgroundJob.owner_id == owner_id,
                 BackgroundJob.status.in_(ACTIVE_BACKGROUND_JOB_STATUSES),
             )
             .order_by(BackgroundJob.queued_at.desc())
@@ -75,10 +90,10 @@ class BackgroundJobRepository(BaseRepository):
         row = result.scalar_one_or_none()
         return background_job_to_dict(row) if row else None
 
-    async def get_latest(self, job_type: str) -> dict[str, Any] | None:
+    async def get_latest(self, job_type: str, *, owner_id: str = DEFAULT_USER_ID) -> dict[str, Any] | None:
         result = await self.session.execute(
             select(BackgroundJob)
-            .where(BackgroundJob.job_type == job_type)
+            .where(BackgroundJob.job_type == job_type, BackgroundJob.owner_id == owner_id)
             .order_by(BackgroundJob.updated_at.desc())
             .limit(1)
         )

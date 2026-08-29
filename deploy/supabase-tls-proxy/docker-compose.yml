@@ -1,0 +1,23 @@
+services:
+  supabase-tls-proxy:
+    image: dockerproxy.net/library/nginx:1.27-alpine
+    restart: unless-stopped
+    ports:
+      - "${SUPABASE_HTTPS_PORT:-50002}:8443"
+    volumes:
+      - ./nginx.conf:/etc/nginx/nginx.conf:ro
+      - ${SUPABASE_TLS_DIR:-/opt/supabase/tls}:/etc/nginx/tls:ro
+    networks:
+      - supabase
+    security_opt:
+      - no-new-privileges:true
+    read_only: true
+    tmpfs:
+      - /var/cache/nginx:size=32m,mode=0755
+      - /var/run:size=1m,mode=0755
+      - /tmp:size=16m,mode=1777
+
+networks:
+  supabase:
+    external: true
+    name: ${SUPABASE_NETWORK:-supabase_default}

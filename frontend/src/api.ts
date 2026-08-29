@@ -30,6 +30,10 @@ import type {
   GetSystemConfigResponse,
   ImageModelSelection,
   CharacterCatalogSyncJob,
+  CompanyAssetSyncJob,
+  CompanyAssetSourceSyncDashboard,
+  CompanyCatalogAssetPage,
+  CompanyCatalogAssetDeleteResult,
   GetSystemVersionResponse,
   ModelCandidatesResponse,
   OnboardingStatus,
@@ -936,6 +940,92 @@ class API {
 
   static async getCharacterCatalogSyncStatus(): Promise<{ job: CharacterCatalogSyncJob | null }> {
     return this.request("/character-catalog/sync/status");
+  }
+
+  static async syncCompanyAssets(
+    assetType: AssetType,
+  ): Promise<{ job: CompanyAssetSyncJob; deduped: boolean }> {
+    return this.request(`/company-assets/sync/${assetType}`, { method: "POST" });
+  }
+
+  static async getCompanyAssetSyncStatus(
+    assetType: AssetType,
+  ): Promise<{ job: CompanyAssetSyncJob | null }> {
+    return this.request(`/company-assets/sync/${assetType}/status`);
+  }
+
+  static async syncAllCompanyAssets(): Promise<{
+    jobs: { job: CompanyAssetSyncJob; deduped: boolean }[];
+  }> {
+    return this.request("/company-assets/sync-all", { method: "POST" });
+  }
+
+  static async publishCompanyAsset(
+    assetId: string,
+  ): Promise<{ asset_id: string; version_id: string; version: number }> {
+    return this.request(`/company-assets/${encodeURIComponent(assetId)}/publish`, { method: "POST" });
+  }
+
+  static async getCompanyAssetSourceSyncDashboard(): Promise<CompanyAssetSourceSyncDashboard> {
+    return this.request("/company-assets/source-sync/dashboard");
+  }
+
+  static async listCompanyCatalogAssets(params: {
+    assetType?: AssetType;
+    origin?: "official" | "user_shared";
+    q?: string;
+    limit?: number;
+    offset?: number;
+  } = {}): Promise<CompanyCatalogAssetPage> {
+    const query = new URLSearchParams();
+    if (params.assetType) query.set("asset_type", params.assetType);
+    if (params.origin) query.set("origin", params.origin);
+    if (params.q) query.set("q", params.q);
+    if (params.limit !== undefined) query.set("limit", String(params.limit));
+    if (params.offset !== undefined) query.set("offset", String(params.offset));
+    const suffix = query.size ? `?${query.toString()}` : "";
+    return this.request(`/company-assets/source-sync/assets${suffix}`);
+  }
+
+  static async deleteCompanyCatalogAsset(assetId: string): Promise<CompanyCatalogAssetDeleteResult> {
+    return this.request(`/company-assets/source-sync/assets/${encodeURIComponent(assetId)}`, {
+      method: "DELETE",
+    });
+  }
+
+  static async getCompanyCatalogAssetPreview(assetId: string): Promise<Blob> {
+    const endpoint = `/company-assets/source-sync/assets/${encodeURIComponent(assetId)}/preview`;
+    const response = await fetch(`${API_BASE}${endpoint}`, withAuth(endpoint, { method: "GET" }));
+    await throwIfNotOk(response, `HTTP ${response.status}`);
+    return response.blob();
+  }
+
+  static async runCompanyAssetSourceSync(sourceKey: string): Promise<unknown> {
+    return this.request(`/company-assets/source-sync/sources/${encodeURIComponent(sourceKey)}/run`, {
+      method: "POST",
+    });
+  }
+
+  static async controlCompanyAssetSourceSync(
+    sourceKey: string,
+    payload: { action: "pause" | "resume" | "set_interval"; interval_seconds?: number },
+  ): Promise<unknown> {
+    return this.request(`/company-assets/source-sync/sources/${encodeURIComponent(sourceKey)}/control`, {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
+  }
+
+  static async cancelCompanyAssetSourceSync(runId: string): Promise<unknown> {
+    return this.request(`/company-assets/source-sync/runs/${encodeURIComponent(runId)}/cancel`, {
+      method: "POST",
+    });
+  }
+
+  static async retryCompanyAssetSourceSync(runId: string): Promise<unknown> {
+    return this.request(`/company-assets/source-sync/runs/${encodeURIComponent(runId)}/retry`, {
+      method: "POST",
+    });
   }
 
 

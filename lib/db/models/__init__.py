@@ -5,6 +5,7 @@ from lib.db.models.api_call import ApiCall
 from lib.db.models.api_key import ApiKey
 from lib.db.models.asset import Asset, AssetAlias, AssetResource
 from lib.db.models.background_job import BackgroundJob
+from lib.db.models.company_asset_checkpoint import CompanyAssetCheckpoint
 from lib.db.models.config import ManagedProviderConfig, ProviderConfig, SystemSetting
 from lib.db.models.credential import ProviderCredential
 from lib.db.models.custom_provider import CustomProvider, CustomProviderModel
@@ -36,5 +37,6 @@ __all__ = [
     "AssetAlias",
     "AssetResource",
     "BackgroundJob",
+    "CompanyAssetCheckpoint",
     "AgentAnthropicCredential",
 ]

@@ -6,7 +6,7 @@
 - ArcReel 仍可部署在 Windows、macOS 或 Linux 本机，登录请求发送到 ArcReel Supabase Edge Function。
 - 云端账号 UUID 是唯一身份。用户名可展示和修改，但不能作为跨设备身份主键。
 - 每个账号的供应商 API Key 在 ArcReel 云端使用 AES-GCM 加密保存；本地端登录后按账号 UUID 拉取并写入该本地影子用户的凭据表。
-- 本地项目、素材和任务数据仍保留在本机。只有账号、角色和供应商凭据由云端统一管理。
+- 本地项目、素材和任务数据仍保留在本机。账号、角色、供应商凭据与公司资产库由云端统一管理；公司资产只有在用户同步后才复制到本地全局资产库。
 
 ## 云端部署
 
@@ -53,6 +53,8 @@ supabase functions deploy arcreel-admin --no-verify-jwt
 ARCREEL_CLOUD_AUTH_URL=https://<ARCREEL_PROJECT_REF>.supabase.co/functions/v1/arcreel-auth
 ARCREEL_CLOUD_PUBLISHABLE_KEY=sb_publishable_xxx
 ARCREEL_CLOUD_SYNC_INTERVAL_SECONDS=60
+# 使用私有 CA 的自托管 HTTPS 部署才需要：
+ARCREEL_CLOUD_CA_BUNDLE=C:/path/to/arcreel-supabase-ca.crt
 ```
 
 只配置其中一个值会导致启动后的登录配置校验失败，避免把一个项目的 URL 与另一个项目的 Key 混用。
@@ -69,6 +71,9 @@ ARCREEL_CLOUD_SYNC_INTERVAL_SECONDS=60
 3. 如果本地已有同名且尚未绑定云身份的用户，则绑定该用户，从而保留其原有项目和数据。
 4. 拉取该 UUID 对应的供应商凭据并应用到该用户。
 5. 后台定时刷新会话和配置，管理员后续修改 API Key 后无需重新部署本地 ArcReel。
+6. 非阻塞地触发角色、场景、道具三类公司资产增量同步；单类失败不影响登录和其他类型。
+
+公司资产库的数据模型、监控服务和运维方式见 [公司资产库部署与运维](company-asset-catalog.md)。
 
 ## 安全边界
 

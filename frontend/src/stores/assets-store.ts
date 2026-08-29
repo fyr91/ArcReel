@@ -5,16 +5,19 @@ import type { Asset, AssetType } from "@/types/asset";
 interface AssetsStore {
   byType: Record<AssetType, Asset[]>;
   characterCatalogRevision: number;
+  catalogRevisionByType: Record<AssetType, number>;
   loadList: (type: AssetType, q?: string) => Promise<void>;
   addAsset: (asset: Asset) => void;
   updateAsset: (asset: Asset) => void;
   deleteAsset: (id: string, type: AssetType) => Promise<void>;
   invalidateCharacterCatalog: () => void;
+  invalidateCatalog: (type: AssetType) => void;
 }
 
 export const useAssetsStore = create<AssetsStore>((set) => ({
   byType: { character: [], scene: [], prop: [] },
   characterCatalogRevision: 0,
+  catalogRevisionByType: { character: 0, scene: 0, prop: 0 },
   loadList: async (type, q) => {
     const res = await API.listAssets({ type, q });
     set((s) => ({ byType: { ...s.byType, [type]: res.items } }));
@@ -38,5 +41,15 @@ export const useAssetsStore = create<AssetsStore>((set) => ({
   },
   invalidateCharacterCatalog: () => set((state) => ({
     characterCatalogRevision: state.characterCatalogRevision + 1,
+    catalogRevisionByType: {
+      ...state.catalogRevisionByType,
+      character: state.catalogRevisionByType.character + 1,
+    },
+  })),
+  invalidateCatalog: (type) => set((state) => ({
+    catalogRevisionByType: {
+      ...state.catalogRevisionByType,
+      [type]: state.catalogRevisionByType[type] + 1,
+    },
   })),
 }));

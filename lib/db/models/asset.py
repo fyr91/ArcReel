@@ -28,6 +28,11 @@ class Asset(TimestampMixin, Base):
     source_project: Mapped[str | None] = mapped_column(String(200), nullable=True)
     external_source: Mapped[str | None] = mapped_column(String(64), nullable=True)
     external_id: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    external_origin: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    external_version: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+    external_status: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    external_owner_id: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    external_owner_name: Mapped[str | None] = mapped_column(String(200), nullable=True)
     voice_id: Mapped[str | None] = mapped_column(String(200), nullable=True)
     resources: Mapped[list[AssetResource]] = relationship(
         back_populates="asset",

@@ -26,6 +26,10 @@ from server.agent_runtime.sdk_tools.character_voice_references import (
     confirm_character_voice_reference_tool,
     generate_character_voice_references_tool,
 )
+from server.agent_runtime.sdk_tools.company_assets import (
+    delete_company_catalog_asset_tool,
+    list_company_catalog_assets_tool,
+)
 from server.agent_runtime.sdk_tools.confirm_asset_sheets import confirm_asset_sheets_tool
 from server.agent_runtime.sdk_tools.delete_project_asset import delete_project_asset_tool
 from server.agent_runtime.sdk_tools.enqueue_assets import (
@@ -106,6 +110,8 @@ __all__ = ["build_arcreel_mcp_server", "ToolContext", "ARCREEL_MCP_TOOL_IDS"]
 # i18n fails CI.
 ARCREEL_MCP_TOOL_IDS: tuple[str, ...] = (
     "list_global_assets",
+    "list_company_catalog_assets",
+    "delete_company_catalog_asset",
     "complete_asset_inventory",
     "complete_step1_rebuild",
     "get_workflow_plan",
@@ -236,6 +242,8 @@ def build_arcreel_mcp_server(
     ctx = ToolContext(project_name=project_name, projects_root=projects_root, user_id=user_id)
     tools = [
         list_global_assets_tool(ctx),
+        list_company_catalog_assets_tool(ctx),
+        delete_company_catalog_asset_tool(ctx),
         complete_asset_inventory_tool(ctx),
         complete_step1_rebuild_tool(ctx),
         get_workflow_plan_tool(ctx),

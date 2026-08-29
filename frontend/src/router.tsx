@@ -10,12 +10,13 @@ import { ProjectsPage } from "@/components/pages/ProjectsPage";
 import { SystemConfigPage } from "@/components/pages/SystemConfigPage";
 import { ProjectSettingsPage } from "@/components/pages/ProjectSettingsPage";
 import { AssetLibraryPage } from "@/components/pages/AssetLibraryPage";
+import { CompanyAssetSourceSyncPage } from "@/components/pages/CompanyAssetSourceSyncPage";
 import { LoginPage } from "@/pages/LoginPage";
 import { AccountCenterCallbackPage } from "@/pages/AccountCenterCallbackPage";
 import { AccountCenterSetupPage } from "@/pages/AccountCenterSetupPage";
 import { NotFoundPage } from "@/pages/NotFoundPage";
 import { ToastOverlay } from "@/components/layout/ToastOverlay";
-import { CharacterCatalogSyncMonitor } from "@/components/assets/CharacterCatalogSyncMonitor";
+import { CompanyAssetSyncMonitor } from "@/components/assets/CompanyAssetSyncMonitor";
 import { OnboardingTour } from "@/onboarding/OnboardingTour";
 import {
   buildDemoProjectData,
@@ -33,6 +34,7 @@ import { errMsg } from "@/utils/async";
 import {
   ROUTE_APP,
   ROUTE_APP_ASSETS,
+  ROUTE_APP_ASSET_SOURCE_SYNC,
   ROUTE_APP_PROJECTS,
   ROUTE_APP_SETTINGS,
   WORKSPACE_ROUTE_SETTINGS,
@@ -217,7 +219,7 @@ export function AppRoutes() {
   return (
     <>
       <ConfigStatusLoader />
-      <CharacterCatalogSyncMonitor />
+      <CompanyAssetSyncMonitor />
       <OnboardingTour />
       <Switch>
         {/* Login page */}
@@ -247,6 +249,14 @@ export function AppRoutes() {
           <AuthGuard>
             <AdminGuard>
               <SystemConfigPage />
+            </AdminGuard>
+          </AuthGuard>
+        </Route>
+
+        <Route path={ROUTE_APP_ASSET_SOURCE_SYNC}>
+          <AuthGuard>
+            <AdminGuard>
+              <CompanyAssetSourceSyncPage />
             </AdminGuard>
           </AuthGuard>
         </Route>

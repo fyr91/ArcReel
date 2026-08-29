@@ -7,7 +7,7 @@ from datetime import datetime
 from sqlalchemy import DateTime, Index, Integer, String, Text, text
 from sqlalchemy.orm import Mapped, mapped_column
 
-from lib.db.base import Base
+from lib.db.base import DEFAULT_USER_ID, Base
 
 
 class BackgroundJob(Base):
@@ -15,6 +15,8 @@ class BackgroundJob(Base):
 
     job_id: Mapped[str] = mapped_column(String(32), primary_key=True)
     job_type: Mapped[str] = mapped_column(String(64), nullable=False)
+    owner_id: Mapped[str] = mapped_column(String, nullable=False, default=DEFAULT_USER_ID, server_default=DEFAULT_USER_ID)
+    payload_json: Mapped[str | None] = mapped_column(Text)
     status: Mapped[str] = mapped_column(String(16), nullable=False)
     phase: Mapped[str] = mapped_column(String(64), nullable=False)
     progress_current: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
@@ -33,6 +35,7 @@ class BackgroundJob(Base):
         Index(
             "idx_background_jobs_one_active_per_type",
             "job_type",
+            "owner_id",
             unique=True,
             sqlite_where=text("status IN ('queued', 'running')"),
             postgresql_where=text("status IN ('queued', 'running')"),

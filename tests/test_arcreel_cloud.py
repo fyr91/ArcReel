@@ -64,6 +64,7 @@ async def test_cloud_login_creates_stable_shadow_user_and_applies_scoped_credent
                 json={
                     "access_token": "access-token",
                     "refresh_token": "refresh-token",
+                    "expires_in": 3600,
                     "user": {
                         "id": "7a834ad1-30b4-494d-b780-e1fe47659238",
                         "username": "alice",
@@ -123,7 +124,10 @@ async def test_cloud_login_creates_stable_shadow_user_and_applies_scoped_credent
         assert cloud_session is not None
         assert cloud_session.cloud_user_sub == users[0].arcreel_cloud_sub
         assert cloud_session.config_revision == 4
+        assert "access-token" not in cloud_session.access_token_encrypted
         assert "refresh-token" not in cloud_session.refresh_token_encrypted
+        assert cloud_session.access_token_expires_at is not None
+        assert arcreel_cloud._decrypt(cloud_session.access_token_encrypted) == "access-token"
 
         credentials = list((await session.execute(select(ProviderCredential))).scalars())
         assert len(credentials) == 1
