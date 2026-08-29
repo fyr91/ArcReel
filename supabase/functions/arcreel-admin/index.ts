@@ -1,10 +1,16 @@
 import "@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "@supabase/supabase-js";
 import CONFIG_SCHEMA_JSON from "../_shared/arcreel-config-schema.json" with { type: "json" };
+import {
+  AccountCreateError,
+  createAccountOperation,
+  type AccountCreationStore,
+  type AccountProfile,
+} from "./account-creation.ts";
 
 const cors = {
   "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, apikey, content-type",
+  "Access-Control-Allow-Headers": "authorization, apikey, content-type, idempotency-key",
   "Access-Control-Allow-Methods": "GET, POST, PATCH, PUT, DELETE, OPTIONS",
 };
 
@@ -74,7 +80,9 @@ Deno.serve(async (req) => {
     }
     return notFound();
   } catch (error) {
-    if (error instanceof HttpError) return json({ error: { code: error.code, message: error.message } }, error.status);
+    if (error instanceof HttpError || error instanceof AccountCreateError) {
+      return json({ error: { code: error.code, message: error.message } }, error.status);
+    }
     console.error("arcreel-admin", error);
     return json({ error: { code: "INTERNAL_ERROR", message: "服务暂时不可用" } }, 500);
   }
@@ -99,40 +107,54 @@ async function listAccounts(req: Request) {
 
 async function createAccount(req: Request) {
   const body = await readJson(req);
-  const username = String(body.username ?? "").trim();
-  const password = String(body.password ?? "");
-  const displayName = optional(body.display_name);
-  const role = validateRole(body.role);
-  if (!/^[A-Za-z0-9][A-Za-z0-9._-]{1,63}$/.test(username)) {
-    throw new HttpError(400, "USERNAME_INVALID", "账号需为 2-64 位字母、数字、点、下划线或短横线");
-  }
-  if (password.length < 8) throw new HttpError(400, "PASSWORD_WEAK", "初始密码至少 8 位");
   const client = admin();
-  const { data: duplicate } = await client.from("arcreel_profiles").select("id").ilike("username", username).maybeSingle();
-  if (duplicate) throw new HttpError(409, "USERNAME_EXISTS", "账号已存在");
-  const authEmail = `${username.toLowerCase()}@accounts.arcreel.invalid`;
-  const { data: created, error: createError } = await client.auth.admin.createUser({
-    email: authEmail,
-    password,
-    email_confirm: true,
-    app_metadata: { application: "arcreel" },
-  });
-  if (createError || !created.user) {
-    throw new HttpError(400, "ACCOUNT_CREATE_FAILED", createError?.message || "账号创建失败");
-  }
-  const { data, error } = await client.from("arcreel_profiles").insert({
-    id: created.user.id,
-    username,
-    auth_email: authEmail,
-    display_name: displayName,
-    role,
-    status: "active",
-  }).select("id,username,display_name,role,status,created_at,updated_at").single();
-  if (error) {
-    await client.auth.admin.deleteUser(created.user.id);
-    throw error;
-  }
-  return json({ account: data }, 201);
+  const result = await createAccountOperation({
+    username: body.username,
+    password: body.password,
+    displayName: body.display_name,
+    role: body.role,
+  }, req.headers.get("idempotency-key"), required("ARCREEL_ADMIN_INTEGRATION_TOKEN"), accountCreationStore(client));
+  return json(result, result.replayed ? 200 : 201);
+}
+
+const ACCOUNT_PROFILE_SELECT =
+  "id,username,auth_email,display_name,role,status,created_at,updated_at,creation_request_id,creation_request_fingerprint";
+
+function accountCreationStore(client: ReturnType<typeof admin>): AccountCreationStore {
+  return {
+    async findByRequestId(requestId) {
+      const { data, error } = await client.from("arcreel_profiles").select(ACCOUNT_PROFILE_SELECT)
+        .eq("creation_request_id", requestId).maybeSingle();
+      if (error) throw error;
+      return data as AccountProfile | null;
+    },
+    async findByUsername(username) {
+      const { data, error } = await client.from("arcreel_profiles").select(ACCOUNT_PROFILE_SELECT)
+        .ilike("username", username).maybeSingle();
+      if (error) throw error;
+      return data as AccountProfile | null;
+    },
+    async createAuthUser(input) {
+      const { data, error } = await client.auth.admin.createUser({
+        email: input.email,
+        password: input.password,
+        email_confirm: true,
+        app_metadata: input.appMetadata,
+      });
+      if (error || !data.user) throw error ?? new Error("Auth user was not returned");
+      return { id: data.user.id };
+    },
+    async insertProfile(profile) {
+      const { data, error } = await client.from("arcreel_profiles").insert(profile)
+        .select(ACCOUNT_PROFILE_SELECT).single();
+      if (error) throw error;
+      return data as AccountProfile;
+    },
+    async deleteAuthUser(userId) {
+      const { error } = await client.auth.admin.deleteUser(userId);
+      if (error) console.error("arcreel-admin auth cleanup failed", { userId, reason: error.message });
+    },
+  };
 }
 
 async function updateAccount(req: Request, accountId: string) {
