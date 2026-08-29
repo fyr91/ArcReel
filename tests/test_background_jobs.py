@@ -202,6 +202,29 @@ async def test_company_asset_publish_route_uses_the_shared_domain_operation(db_f
 
 
 @pytest.mark.unit
+async def test_company_asset_publish_route_reports_ownership_denial(db_factory, monkeypatch) -> None:
+    from fastapi import HTTPException
+
+    from lib.company_assets import CompanyAssetSyncError
+    from server.routers import company_assets
+
+    async def fake_publish(*args, **kwargs):
+        raise CompanyAssetSyncError("company_asset_not_owned")
+
+    monkeypatch.setattr(company_assets, "async_session_factory", db_factory)
+    monkeypatch.setattr(company_assets, "publish_local_asset", fake_publish)
+    monkeypatch.setattr(company_assets, "get_company_asset_catalog", object)
+    monkeypatch.setattr(company_assets, "get_project_manager", object)
+    user = CurrentUserInfo(id="user-1", sub="alice", role="user")
+
+    with pytest.raises(HTTPException) as raised:
+        await company_assets.publish_asset("local-asset", user, make_translator())
+
+    assert raised.value.status_code == 403
+    assert raised.value.detail == "该公司资产由其他用户共享，你不能发布它的新版本"
+
+
+@pytest.mark.unit
 async def test_company_asset_admin_routes_use_the_shared_list_and_delete_operations(monkeypatch) -> None:
     from lib.company_assets import CompanyAssetAdminItem, CompanyAssetAdminPage, CompanyAssetDeleteResult
     from server.routers import company_assets

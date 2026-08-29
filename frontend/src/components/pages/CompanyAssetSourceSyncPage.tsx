@@ -8,6 +8,7 @@ import { useAppStore } from "@/stores/app-store";
 import { errMsg } from "@/utils/async";
 import { ACCENT_BTN_SM_CLS, INPUT_CLS } from "@/components/ui/darkroom-tokens";
 import { CompanyCatalogAdminSection } from "@/components/assets/CompanyCatalogAdminSection";
+import { AccountMenu } from "@/components/layout/AccountMenu";
 
 const ACTIVE_RUNS = new Set(["queued", "running", "cancelling"]);
 
@@ -72,9 +73,12 @@ export function CompanyAssetSourceSyncPage() {
               <p className="mt-2 max-w-2xl text-sm text-text-3">{t("source_sync_subtitle")}</p>
             </div>
           </div>
-          <button type="button" onClick={() => void load()} className={ACCENT_BTN_SM_CLS}>
-            <RefreshCw className="h-4 w-4" /> {t("source_sync_refresh")}
-          </button>
+          <div className="flex items-center gap-2">
+            <button type="button" onClick={() => void load()} className={ACCENT_BTN_SM_CLS}>
+              <RefreshCw className="h-4 w-4" /> {t("source_sync_refresh")}
+            </button>
+            <AccountMenu />
+          </div>
         </header>
 
         <section className="grid gap-4 md:grid-cols-3">

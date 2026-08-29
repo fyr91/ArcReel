@@ -132,6 +132,8 @@ class SupabaseCompanyAssetCatalog:
         publication: CompanyAssetPublication,
     ) -> CompanyAssetPublishResult:
         cloud_sub = await self._identity_provider(user_id)
+        if publication.owner_id is not None and publication.owner_id != cloud_sub:
+            raise CompanyAssetSyncError("company_asset_not_owned")
         uploaded_paths: list[str] = []
         file_payloads: list[dict[str, Any]] = []
         try:
@@ -194,6 +196,7 @@ class SupabaseCompanyAssetCatalog:
                 asset_id=str(raw["asset_id"]),
                 version_id=str(raw["version_id"]),
                 version=int(raw["version"]),
+                owner_id=cloud_sub,
             )
         except Exception:
             await self._delete_uploaded(user_id, uploaded_paths)
@@ -383,6 +386,13 @@ class SupabaseCompanyAssetCatalog:
             response.raise_for_status()
             return response
         except httpx.HTTPStatusError as exc:
+            if exc.response.status_code == 403:
+                try:
+                    payload = exc.response.json()
+                except ValueError:
+                    payload = None
+                if isinstance(payload, dict) and "ARCREEL_ASSET_NOT_OWNED" in str(payload.get("message") or ""):
+                    raise CompanyAssetSyncError("company_asset_not_owned") from exc
             raise CompanyAssetSyncError(
                 "company_asset_request_failed",
                 f"HTTP {exc.response.status_code}",

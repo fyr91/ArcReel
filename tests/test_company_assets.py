@@ -17,6 +17,7 @@ from lib.company_assets import (
     CompanyAssetFile,
     CompanyAssetPage,
     CompanyAssetPublishResult,
+    CompanyAssetSyncError,
     delete_company_catalog_asset,
     list_company_catalog_assets,
     publish_local_asset,
@@ -673,6 +674,7 @@ async def test_publish_local_asset_uses_the_same_operation_for_all_supported_typ
     assert publisher.publication is not None
     assert publisher.publication.asset_type == asset_type
     assert publisher.publication.name == f"Local {asset_type}"
+    assert publisher.publication.owner_id is None
     assert [(item.role, item.media_type, item.path) for item in publisher.publication.files] == [
         ("primary_image", "image", tmp_path / relative)
     ]
@@ -681,6 +683,39 @@ async def test_publish_local_asset_uses_the_same_operation_for_all_supported_typ
     assert refreshed.external_source == COMPANY_ASSET_SOURCE
     assert refreshed.external_origin == "user_shared"
     assert refreshed.external_version == 1
+
+
+@pytest.mark.unit
+async def test_publish_local_asset_carries_existing_company_owner_to_the_publisher(async_session, tmp_path: Path) -> None:
+    owner_id = "8156e216-6272-4fea-af43-c74735b3ca6f"
+    asset = await AssetRepository(async_session).create(
+        type="scene",
+        name="Shared by Alice",
+        external_source=COMPANY_ASSET_SOURCE,
+        external_id="b47da8b5-b6a2-44d6-b4e0-30498f041eee",
+        external_origin="user_shared",
+        external_version=1,
+        external_status="published",
+        external_owner_id=owner_id,
+        external_owner_name="Alice",
+    )
+    await async_session.commit()
+
+    class _Publisher:
+        async def publish_asset(self, *, user_id, publication):
+            assert publication.owner_id == owner_id
+            raise CompanyAssetSyncError("company_asset_not_owned")
+
+    with pytest.raises(CompanyAssetSyncError) as raised:
+        await publish_local_asset(
+            async_session,
+            publisher=_Publisher(),
+            manager=ProjectManager(tmp_path),
+            user_id="local-user",
+            asset_id=asset.id,
+        )
+
+    assert raised.value.code == "company_asset_not_owned"
 
 
 @pytest.mark.unit

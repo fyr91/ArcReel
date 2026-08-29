@@ -11,6 +11,8 @@ import {
   Package,
   Pause,
   Play,
+  Trash2,
+  Upload,
   User,
 } from "lucide-react";
 import { API } from "@/api";
@@ -30,16 +32,29 @@ interface Props {
   initialData?: Partial<Asset>;
   previewImageUrl?: string;
   conflictWith?: Asset;
+  manageResourceGroups?: boolean;
   onClose: () => void;
   onSubmit: (payload: {
     name: string;
     description: string;
     voice_style: string;
+    voice_id: string;
     image?: File | null;
+    images?: File[];
+    audios?: File[];
+    remove_resource_ids?: string[];
     overwrite?: boolean;
     primary_image_resource_id?: string;
     primary_audio_resource_id?: string;
+    primary_image_upload_index?: number;
+    primary_audio_upload_index?: number;
   }) => Promise<void>;
+}
+
+interface PendingMedia {
+  id: string;
+  file: File;
+  previewUrl: string;
 }
 
 const TYPE_ICON: Record<AssetType, React.ComponentType<{ className?: string }>> = {
@@ -49,24 +64,42 @@ const TYPE_ICON: Record<AssetType, React.ComponentType<{ className?: string }>> 
 };
 
 export function AssetFormModal({
-  type, mode, initialData, previewImageUrl, conflictWith, onClose, onSubmit,
+  type,
+  mode,
+  initialData,
+  previewImageUrl,
+  conflictWith,
+  manageResourceGroups = false,
+  onClose,
+  onSubmit,
 }: Props) {
   const { t } = useTranslation("assets");
   const [name, setName] = useState(initialData?.name ?? "");
   const [description, setDescription] = useState(initialData?.description ?? "");
   const [voiceStyle, setVoiceStyle] = useState(initialData?.voice_style ?? "");
+  const [voiceId, setVoiceId] = useState(initialData?.voice_id ?? "");
   const [image, setImage] = useState<File | null>(null);
+  const [pendingImages, setPendingImages] = useState<PendingMedia[]>([]);
+  const [pendingAudios, setPendingAudios] = useState<PendingMedia[]>([]);
+  const [removedResourceIds, setRemovedResourceIds] = useState<Set<string>>(() => new Set());
+  const objectUrlsRef = useRef<Set<string>>(new Set());
   const [localPreview, setLocalPreview] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const resources = initialData?.resources ?? [];
-  const imageResources = resources.filter((resource) => resource.media_type === "image");
-  const audioResources = resources.filter((resource) => resource.media_type === "audio");
+  const imageResources = resources.filter(
+    (resource) => resource.media_type === "image" && !removedResourceIds.has(resource.id),
+  );
+  const audioResources = resources.filter(
+    (resource) => resource.media_type === "audio" && !removedResourceIds.has(resource.id),
+  );
   const [primaryImageResourceId, setPrimaryImageResourceId] = useState(
     imageResources.find((resource) => resource.is_primary)?.id ?? imageResources[0]?.id ?? "",
   );
   const [primaryAudioResourceId, setPrimaryAudioResourceId] = useState(
     audioResources.find((resource) => resource.is_primary)?.id ?? audioResources[0]?.id ?? "",
   );
+  const [primaryPendingImageId, setPrimaryPendingImageId] = useState<string | null>(null);
+  const [primaryPendingAudioId, setPrimaryPendingAudioId] = useState<string | null>(null);
   const selectedImageResource = imageResources.find((resource) => resource.id === primaryImageResourceId);
   const fileRef = useRef<HTMLInputElement>(null);
   const nameRef = useRef<HTMLInputElement>(null);
@@ -88,10 +121,76 @@ export function AssetFormModal({
     return () => URL.revokeObjectURL(url);
   }, [image]);
 
+  useEffect(() => () => {
+    for (const url of objectUrlsRef.current) URL.revokeObjectURL(url);
+    objectUrlsRef.current.clear();
+  }, []);
+
+  const addPending = (files: FileList | null, mediaType: "image" | "audio") => {
+    if (!files?.length) return;
+    const additions = Array.from(files).map((file) => {
+      const previewUrl = URL.createObjectURL(file);
+      objectUrlsRef.current.add(previewUrl);
+      return { id: crypto.randomUUID(), file, previewUrl };
+    });
+    if (mediaType === "image") {
+      setPendingImages((current) => [...current, ...additions]);
+      if (!primaryImageResourceId && !primaryPendingImageId) {
+        setPrimaryPendingImageId(additions[0].id);
+      }
+    } else {
+      setPendingAudios((current) => [...current, ...additions]);
+      if (!primaryAudioResourceId && !primaryPendingAudioId) {
+        setPrimaryPendingAudioId(additions[0].id);
+      }
+    }
+  };
+
+  const removePending = (id: string, mediaType: "image" | "audio") => {
+    const current = mediaType === "image" ? pendingImages : pendingAudios;
+    const target = current.find((item) => item.id === id);
+    if (target) {
+      URL.revokeObjectURL(target.previewUrl);
+      objectUrlsRef.current.delete(target.previewUrl);
+    }
+    const next = current.filter((item) => item.id !== id);
+    if (mediaType === "image") {
+      setPendingImages(next);
+      if (primaryPendingImageId === id) {
+        setPrimaryPendingImageId(next[0]?.id ?? null);
+        if (!next.length) setPrimaryImageResourceId(imageResources[0]?.id ?? "");
+      }
+    } else {
+      setPendingAudios(next);
+      if (primaryPendingAudioId === id) {
+        setPrimaryPendingAudioId(next[0]?.id ?? null);
+        if (!next.length) setPrimaryAudioResourceId(audioResources[0]?.id ?? "");
+      }
+    }
+  };
+
+  const removeExisting = (resource: AssetResource) => {
+    if (resource.origin !== "local") return;
+    setRemovedResourceIds((current) => new Set(current).add(resource.id));
+    if (resource.media_type === "image" && primaryImageResourceId === resource.id) {
+      const fallback = imageResources.find((item) => item.id !== resource.id);
+      setPrimaryImageResourceId(fallback?.id ?? "");
+      if (!fallback && pendingImages.length) setPrimaryPendingImageId(pendingImages[0].id);
+    }
+    if (resource.media_type === "audio" && primaryAudioResourceId === resource.id) {
+      const fallback = audioResources.find((item) => item.id !== resource.id);
+      setPrimaryAudioResourceId(fallback?.id ?? "");
+      if (!fallback && pendingAudios.length) setPrimaryPendingAudioId(pendingAudios[0].id);
+    }
+  };
+
+  const selectedPendingImage = pendingImages.find((item) => item.id === primaryPendingImageId);
   const selectedResourcePreview = selectedImageResource
     ? API.getGlobalAssetUrl(selectedImageResource.path, initialData?.updated_at)
     : null;
-  const displayedPreview = sanitizeImageSrc(localPreview ?? selectedResourcePreview ?? previewImageUrl);
+  const displayedPreview = sanitizeImageSrc(
+    selectedPendingImage?.previewUrl ?? localPreview ?? selectedResourcePreview ?? previewImageUrl,
+  );
   const TypeIcon = TYPE_ICON[type];
 
   const isCharacter = type === "character";
@@ -109,10 +208,20 @@ export function AssetFormModal({
         name: name.trim(),
         description,
         voice_style: voiceStyle,
-        image,
+        voice_id: voiceId.trim(),
+        image: manageResourceGroups ? null : image,
+        images: manageResourceGroups ? pendingImages.map((item) => item.file) : undefined,
+        audios: manageResourceGroups ? pendingAudios.map((item) => item.file) : undefined,
+        remove_resource_ids: manageResourceGroups ? [...removedResourceIds] : undefined,
         overwrite,
-        primary_image_resource_id: primaryImageResourceId || undefined,
-        primary_audio_resource_id: primaryAudioResourceId || undefined,
+        primary_image_resource_id: primaryPendingImageId ? undefined : primaryImageResourceId || undefined,
+        primary_audio_resource_id: primaryPendingAudioId ? undefined : primaryAudioResourceId || undefined,
+        primary_image_upload_index: primaryPendingImageId
+          ? pendingImages.findIndex((item) => item.id === primaryPendingImageId)
+          : undefined,
+        primary_audio_upload_index: primaryPendingAudioId
+          ? pendingAudios.findIndex((item) => item.id === primaryPendingAudioId)
+          : undefined,
       });
       onClose();
     } finally {
@@ -125,7 +234,7 @@ export function AssetFormModal({
       open
       onClose={onClose}
       labelledBy={titleId}
-      widthClassName="w-[580px] max-w-[96vw]"
+      widthClassName={manageResourceGroups ? "w-[760px] max-w-[96vw]" : "w-[580px] max-w-[96vw]"}
     >
       {/* Header */}
         <div
@@ -182,7 +291,7 @@ export function AssetFormModal({
         )}
 
         {/* Body */}
-        <div className="grid grid-cols-[200px_1fr] gap-5 p-6">
+        <div className="grid max-h-[68vh] grid-cols-[220px_1fr] gap-5 overflow-y-auto p-6">
           {/* Image uploader */}
           <div>
             <button
@@ -216,7 +325,7 @@ export function AssetFormModal({
                     }}
                   >
                     <ImagePlus className="h-4 w-4" />
-                    {t("replace_image")}
+                    {manageResourceGroups ? t("add_images") : t("replace_image")}
                   </div>
                 </>
               ) : (
@@ -255,9 +364,19 @@ export function AssetFormModal({
               ref={fileRef}
               type="file"
               accept=".png,.jpg,.jpeg,.webp"
+              multiple={manageResourceGroups}
               className="hidden"
-              onChange={(e) => setImage(e.target.files?.[0] ?? null)}
+              onChange={(event) => {
+                if (manageResourceGroups) addPending(event.target.files, "image");
+                else setImage(event.target.files?.[0] ?? null);
+                event.currentTarget.value = "";
+              }}
             />
+            {manageResourceGroups && (
+              <p className="mt-2 text-[10px] leading-relaxed text-text-4">
+                {t("resource_group_limit_hint")}
+              </p>
+            )}
           </div>
 
           {/* Form fields */}
@@ -312,40 +431,103 @@ export function AssetFormModal({
               </FieldLabel>
             )}
 
-            {isCharacter && mode === "edit" && initialData?.voice_id && (
-              <FieldGroup label={t("field.voice_id")}>
-                <div
-                  className="select-text break-all rounded-lg px-3 py-2 font-mono text-[11px]"
+            {isCharacter && (manageResourceGroups || initialData?.voice_id) && (
+              <FieldLabel label={t("field.voice_id")}>
+                <input
+                  value={voiceId}
+                  onChange={(event) => setVoiceId(event.target.value)}
+                  readOnly={!manageResourceGroups}
+                  placeholder={manageResourceGroups ? t("voice_id_placeholder") : undefined}
+                  className="focus-ring rounded-lg px-3 py-2 font-mono text-[11px] outline-none read-only:cursor-default"
                   style={{
                     background: "oklch(0.16 0.010 265 / 0.45)",
                     border: "1px solid var(--color-hairline-soft)",
                     color: "var(--color-text-3)",
                   }}
-                >
-                  {initialData.voice_id}
-                </div>
-              </FieldGroup>
+                />
+              </FieldLabel>
             )}
 
-            {isCharacter && mode === "edit" && imageResources.length > 1 && (
-              <FieldGroup label={t("field.primary_image")}>
+            {manageResourceGroups && (
+              <FieldGroup label={t("field.image_group", {
+                count: imageResources.length + pendingImages.length,
+              })}>
+                {imageResources.length > 0 && (
                 <ImageResourcePicker
                   resources={imageResources}
                   value={primaryImageResourceId}
                   fingerprint={initialData?.updated_at}
-                  onChange={setPrimaryImageResourceId}
+                  onChange={(resourceId) => {
+                    setPrimaryImageResourceId(resourceId);
+                    setPrimaryPendingImageId(null);
+                  }}
+                />
+                )}
+                <ResourceRemovalList
+                  resources={imageResources}
+                  mediaType="image"
+                  onRemove={removeExisting}
+                />
+                <PendingMediaList
+                  items={pendingImages}
+                  mediaType="image"
+                  primaryId={primaryPendingImageId}
+                  onPrimary={(id) => {
+                    setPrimaryPendingImageId(id);
+                    setPrimaryImageResourceId("");
+                  }}
+                  onRemove={(id) => removePending(id, "image")}
                 />
               </FieldGroup>
             )}
 
-            {isCharacter && mode === "edit" && audioResources.length > 0 && (
-              <FieldGroup label={t("field.primary_audio")}>
+            {isCharacter && manageResourceGroups && (
+              <FieldGroup label={t("field.audio_group", {
+                count: audioResources.length + pendingAudios.length,
+              })}>
+                {audioResources.length > 0 && (
                 <AudioResourcePicker
                   resources={audioResources}
                   value={primaryAudioResourceId}
                   fingerprint={initialData?.updated_at}
-                  onChange={setPrimaryAudioResourceId}
+                  onChange={(resourceId) => {
+                    setPrimaryAudioResourceId(resourceId);
+                    setPrimaryPendingAudioId(null);
+                  }}
                 />
+                )}
+                <ResourceRemovalList
+                  resources={audioResources}
+                  mediaType="audio"
+                  onRemove={removeExisting}
+                />
+                <PendingMediaList
+                  items={pendingAudios}
+                  mediaType="audio"
+                  primaryId={primaryPendingAudioId}
+                  onPrimary={(id) => {
+                    setPrimaryPendingAudioId(id);
+                    setPrimaryAudioResourceId("");
+                  }}
+                  onRemove={(id) => removePending(id, "audio")}
+                />
+                <label
+                  className="focus-within:focus-ring flex cursor-pointer items-center justify-center gap-2 rounded-lg px-3 py-2 text-[12px] text-text-3 outline-none transition-colors hover:bg-white/5"
+                  style={{ border: "1px dashed var(--color-hairline)" }}
+                >
+                  <Upload aria-hidden className="h-4 w-4" />
+                  {t("add_audios")}
+                  <input
+                    type="file"
+                    accept=".wav,.mp3,.m4a,.aac,.ogg,.flac,audio/*"
+                    multiple
+                    className="sr-only"
+                    onChange={(event) => {
+                      addPending(event.target.files, "audio");
+                      event.currentTarget.value = "";
+                    }}
+                  />
+                </label>
               </FieldGroup>
             )}
           </div>
@@ -659,6 +841,121 @@ function AudioResourcePicker({
           })}
         </div>
       )}
+    </div>
+  );
+}
+
+function ResourceRemovalList({
+  resources,
+  mediaType,
+  onRemove,
+}: {
+  resources: AssetResource[];
+  mediaType: "image" | "audio";
+  onRemove: (resource: AssetResource) => void;
+}) {
+  const { t } = useTranslation("assets");
+  const localResources = resources.filter((resource) => resource.origin === "local");
+  if (!localResources.length) return null;
+  return (
+    <div className="flex flex-col gap-1.5">
+      {localResources.map((resource, index) => {
+        const label = mediaType === "image"
+          ? t("local_image_option", { index: index + 1 })
+          : t("local_audio_option", { index: index + 1 });
+        return (
+          <div
+            key={resource.id}
+            className="flex items-center gap-2 rounded-lg px-2.5 py-2 text-[11px] text-text-3"
+            style={{ background: "oklch(0.15 0.008 265 / 0.45)", border: "1px solid var(--color-hairline-soft)" }}
+          >
+            {mediaType === "image"
+              ? <ImageIcon aria-hidden className="h-3.5 w-3.5 shrink-0" />
+              : <AudioLines aria-hidden className="h-3.5 w-3.5 shrink-0" />}
+            <span className="min-w-0 flex-1 truncate">{label}</span>
+            <button
+              type="button"
+              aria-label={t("remove_resource", { name: label })}
+              title={t("remove_resource", { name: label })}
+              onClick={() => onRemove(resource)}
+              className="focus-ring grid h-7 w-7 place-items-center rounded-md text-text-4 outline-none transition-colors hover:bg-red-500/10 hover:text-red-300"
+            >
+              <Trash2 aria-hidden className="h-3.5 w-3.5" />
+            </button>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+function PendingMediaList({
+  items,
+  mediaType,
+  primaryId,
+  onPrimary,
+  onRemove,
+}: {
+  items: PendingMedia[];
+  mediaType: "image" | "audio";
+  primaryId: string | null;
+  onPrimary: (id: string) => void;
+  onRemove: (id: string) => void;
+}) {
+  const { t } = useTranslation("assets");
+  if (!items.length) return null;
+  return (
+    <div className="flex flex-col gap-1.5">
+      {items.map((item) => {
+        const primary = item.id === primaryId;
+        return (
+          <div
+            key={item.id}
+            className="flex items-center gap-2 rounded-lg p-2"
+            style={{
+              background: primary ? "var(--color-accent-dim)" : "oklch(0.15 0.008 265 / 0.45)",
+              border: `1px solid ${primary ? "var(--color-accent-soft)" : "var(--color-hairline-soft)"}`,
+            }}
+          >
+            {mediaType === "image" ? (
+              <img
+                src={item.previewUrl}
+                alt={item.file.name}
+                className="h-10 w-14 shrink-0 rounded-md object-cover"
+              />
+            ) : (
+              <>
+                {/* User-provided reference voices do not include caption tracks. */}
+                {/* eslint-disable-next-line jsx-a11y/media-has-caption */}
+                <audio controls preload="metadata" src={item.previewUrl} className="h-8 w-32 shrink-0" />
+              </>
+            )}
+            <span className="min-w-0 flex-1 truncate text-[11px] text-text-3" title={item.file.name}>
+              {item.file.name}
+            </span>
+            <button
+              type="button"
+              aria-pressed={primary}
+              aria-label={t("set_primary_resource", { name: item.file.name })}
+              title={t("set_primary_resource", { name: item.file.name })}
+              onClick={() => onPrimary(item.id)}
+              className="focus-ring grid h-7 w-7 place-items-center rounded-md outline-none transition-colors hover:bg-white/5"
+              style={{ color: primary ? "var(--color-accent-2)" : "var(--color-text-4)" }}
+            >
+              <Check aria-hidden className="h-3.5 w-3.5" />
+            </button>
+            <button
+              type="button"
+              aria-label={t("remove_resource", { name: item.file.name })}
+              title={t("remove_resource", { name: item.file.name })}
+              onClick={() => onRemove(item.id)}
+              className="focus-ring grid h-7 w-7 place-items-center rounded-md text-text-4 outline-none transition-colors hover:bg-red-500/10 hover:text-red-300"
+            >
+              <Trash2 aria-hidden className="h-3.5 w-3.5" />
+            </button>
+          </div>
+        );
+      })}
     </div>
   );
 }

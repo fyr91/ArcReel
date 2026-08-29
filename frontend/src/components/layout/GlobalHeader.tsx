@@ -16,6 +16,7 @@ import { WorkspaceNotificationsDrawer } from "./WorkspaceNotificationsDrawer";
 import { ExportScopeDialog } from "./ExportScopeDialog";
 import { ProjectMenu } from "./ProjectMenu";
 import { PhaseStepper } from "./PhaseStepper";
+import { AccountMenu } from "./AccountMenu";
 
 import { API } from "@/api";
 import { ArchiveDiagnosticsDialog } from "@/components/shared/ArchiveDiagnosticsDialog";
@@ -541,6 +542,7 @@ export function GlobalHeader({ onNavigateBack }: GlobalHeaderProps) {
               />
             )}
           </button>
+          <AccountMenu />
         </div>
       </header>
 

@@ -457,6 +457,7 @@ MESSAGES = {
     "company_asset_cloud_not_configured": "The company asset catalog is not configured; contact an administrator",
     "company_asset_local_not_found": "The local asset does not exist",
     "company_asset_official_read_only": "Official assets are read-only and cannot be republished as personal assets",
+    "company_asset_not_owned": "This company asset was shared by another user; you cannot publish a new version",
     "company_asset_invalid_identity": "The local asset identity is invalid and cannot be published",
     "company_asset_file_invalid": "An asset file path is invalid",
     "company_asset_file_missing": "An asset file is missing and cannot be published",

@@ -5,6 +5,7 @@ import { Activity, ChevronLeft, Landmark, Package as PackageIcon, Plus, RefreshC
 import { AssetGrid } from "@/components/assets/AssetGrid";
 import { AssetFormModal } from "@/components/assets/AssetFormModal";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
+import { AccountMenu } from "@/components/layout/AccountMenu";
 import { useAssetsStore } from "@/stores/assets-store";
 import {
   isCompanyAssetJobActive,
@@ -153,32 +154,37 @@ export function AssetLibraryPage() {
   const ActiveIcon = TABS.find((tab) => tab.type === activeTab)!.icon;
 
   const handleSubmit = async (payload: {
-    name: string; description: string; voice_style: string; image?: File | null;
+    name: string; description: string; voice_style: string; voice_id: string;
+    image?: File | null; images?: File[]; audios?: File[];
+    remove_resource_ids?: string[];
     primary_image_resource_id?: string; primary_audio_resource_id?: string;
+    primary_image_upload_index?: number; primary_audio_upload_index?: number;
   }) => {
     try {
       if (formModal?.mode === "edit" && formModal.asset) {
-        const { asset } = await API.updateAsset(formModal.asset.id, {
-          name: payload.name, description: payload.description, voice_style: payload.voice_style,
+        const { asset: after } = await API.updateAssetResourceGroups(formModal.asset.id, {
+          name: payload.name,
+          description: payload.description,
+          voice_style: payload.voice_style,
+          voice_id: payload.voice_id,
+          images: payload.images,
+          audios: payload.audios,
+          remove_resource_ids: payload.remove_resource_ids,
+          primary_image_resource_id: payload.primary_image_resource_id,
+          primary_audio_resource_id: payload.primary_audio_resource_id,
+          primary_image_upload_index: payload.primary_image_upload_index,
+          primary_audio_upload_index: payload.primary_audio_upload_index,
         });
-        let after = asset;
-        if (payload.image) {
-          ({ asset: after } = await API.replaceAssetImage(asset.id, payload.image));
-        } else if (payload.primary_image_resource_id) {
-          ({ asset: after } = await API.setAssetPrimaryResource(
-            asset.id, "image", payload.primary_image_resource_id,
-          ));
-        }
-        if (payload.primary_audio_resource_id) {
-          ({ asset: after } = await API.setAssetPrimaryResource(
-            asset.id, "audio", payload.primary_audio_resource_id,
-          ));
-        }
         updateAssetLocal(after);
       } else {
         const { asset } = await API.createAsset({
           type: activeTab, name: payload.name, description: payload.description,
-          voice_style: payload.voice_style, image: payload.image ?? undefined,
+          voice_style: payload.voice_style,
+          voice_id: payload.voice_id,
+          images: payload.images,
+          audios: payload.audios,
+          primary_image_index: payload.primary_image_upload_index,
+          primary_audio_index: payload.primary_audio_upload_index,
         });
         addAsset(asset);
       }
@@ -308,6 +314,7 @@ export function AssetLibraryPage() {
               <Plus className="h-4 w-4" />
               {t("add_asset")}
             </button>
+            <AccountMenu />
           </div>
         </div>
 
@@ -397,6 +404,7 @@ export function AssetLibraryPage() {
           type={formModal.asset?.type ?? activeTab}
           mode={formModal.mode}
           initialData={formModal.asset}
+          manageResourceGroups
           previewImageUrl={
             formModal.asset
               ? API.getGlobalAssetUrl(formModal.asset.image_path, formModal.asset.updated_at) ?? undefined

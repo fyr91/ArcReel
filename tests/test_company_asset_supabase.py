@@ -274,6 +274,122 @@ async def test_supabase_catalog_uploads_then_finalizes_a_publication(tmp_path) -
         "000-primary_image.png"
     )
     assert requests[1].url.path.endswith("/rpc/arcreel_publish_asset")
+    assert result.owner_id == "f18dfa5e-15f4-43e1-a19c-7617db84f645"
+
+
+@pytest.mark.unit
+async def test_supabase_catalog_rejects_another_users_asset_before_upload(tmp_path) -> None:
+    source = tmp_path / "scene.png"
+    source.write_bytes(b"scene")
+    requests: list[httpx.Request] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        requests.append(request)
+        return httpx.Response(200, json={})
+
+    async def token_provider(_user_id: str) -> str:
+        return "access-token"
+
+    async def identity_provider(_user_id: str) -> str:
+        return "f18dfa5e-15f4-43e1-a19c-7617db84f645"
+
+    publication = CompanyAssetPublication(
+        asset_id="028f7edb-0848-4aef-95b8-cc7352baf6ab",
+        version_id="7ac5cc93-ae2d-4551-bc1d-671613907c83",
+        client_asset_id="df24cc9b-e45e-46de-aaf5-c57c5101819c",
+        asset_type="scene",
+        name="Office",
+        description="daylight",
+        voice_style="",
+        voice_id=None,
+        aliases=(),
+        files=(
+            CompanyAssetPublicationFile(
+                key="primary_image",
+                role="primary_image",
+                media_type="image",
+                mime_type="image/png",
+                path=source,
+                byte_size=5,
+                sha256=hashlib.sha256(b"scene").hexdigest(),
+                revision=None,
+                sort_order=0,
+            ),
+        ),
+        owner_id="8156e216-6272-4fea-af43-c74735b3ca6f",
+    )
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
+        catalog = SupabaseCompanyAssetCatalog(
+            base_url="https://cloud.example",
+            publishable_key="publishable-key",
+            token_provider=token_provider,
+            identity_provider=identity_provider,
+            client=client,
+        )
+        with pytest.raises(CompanyAssetSyncError) as raised:
+            await catalog.publish_asset(user_id="local-user", publication=publication)
+
+    assert raised.value.code == "company_asset_not_owned"
+    assert requests == []
+
+
+@pytest.mark.unit
+async def test_supabase_catalog_maps_rpc_ownership_denial_and_cleans_uploaded_files(tmp_path) -> None:
+    source = tmp_path / "scene.png"
+    source.write_bytes(b"scene")
+    requests: list[httpx.Request] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        requests.append(request)
+        if request.url.path.endswith("/rpc/arcreel_publish_asset"):
+            return httpx.Response(403, json={"code": "42501", "message": "ARCREEL_ASSET_NOT_OWNED"})
+        return httpx.Response(200, json={})
+
+    async def token_provider(_user_id: str) -> str:
+        return "access-token"
+
+    async def identity_provider(_user_id: str) -> str:
+        return "f18dfa5e-15f4-43e1-a19c-7617db84f645"
+
+    publication = CompanyAssetPublication(
+        asset_id="028f7edb-0848-4aef-95b8-cc7352baf6ab",
+        version_id="7ac5cc93-ae2d-4551-bc1d-671613907c83",
+        client_asset_id="df24cc9b-e45e-46de-aaf5-c57c5101819c",
+        asset_type="scene",
+        name="Office",
+        description="daylight",
+        voice_style="",
+        voice_id=None,
+        aliases=(),
+        files=(
+            CompanyAssetPublicationFile(
+                key="primary_image",
+                role="primary_image",
+                media_type="image",
+                mime_type="image/png",
+                path=source,
+                byte_size=5,
+                sha256=hashlib.sha256(b"scene").hexdigest(),
+                revision=None,
+                sort_order=0,
+            ),
+        ),
+    )
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
+        catalog = SupabaseCompanyAssetCatalog(
+            base_url="https://cloud.example",
+            publishable_key="publishable-key",
+            token_provider=token_provider,
+            identity_provider=identity_provider,
+            client=client,
+        )
+        with pytest.raises(CompanyAssetSyncError) as raised:
+            await catalog.publish_asset(user_id="local-user", publication=publication)
+
+    assert raised.value.code == "company_asset_not_owned"
+    assert [request.method for request in requests] == ["POST", "POST", "DELETE"]
 
 
 @pytest.mark.unit

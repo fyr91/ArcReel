@@ -27,6 +27,7 @@ export interface Asset {
   external_status?: "published" | "archived" | null;
   external_owner_id?: string | null;
   external_owner_name?: string | null;
+  company_publish_state?: "publish" | "update" | "read_only_official" | "read_only_other";
   voice_id?: string | null;
   aliases?: string[];
   resources?: AssetResource[];
@@ -38,10 +39,32 @@ export interface AssetCreatePayload {
   name: string;
   description?: string;
   voice_style?: string;
+  voice_id?: string;
+  /** Legacy single-image caller support. New asset-library flows use images. */
+  image?: File;
+  images?: File[];
+  audios?: File[];
+  primary_image_index?: number;
+  primary_audio_index?: number;
 }
 
 export interface AssetUpdatePayload {
   name?: string;
   description?: string;
   voice_style?: string;
+  voice_id?: string;
+}
+
+export interface AssetResourceGroupUpdatePayload {
+  name?: string;
+  description?: string;
+  voice_style?: string;
+  voice_id?: string;
+  images?: File[];
+  audios?: File[];
+  remove_resource_ids?: string[];
+  primary_image_resource_id?: string;
+  primary_audio_resource_id?: string;
+  primary_image_upload_index?: number;
+  primary_audio_upload_index?: number;
 }

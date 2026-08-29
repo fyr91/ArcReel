@@ -457,6 +457,7 @@ MESSAGES = {
     "company_asset_cloud_not_configured": "Danh mục tài sản công ty chưa được cấu hình; hãy liên hệ quản trị viên",
     "company_asset_local_not_found": "Tài sản cục bộ không tồn tại",
     "company_asset_official_read_only": "Tài sản chính thức chỉ đọc và không thể xuất bản lại dưới dạng tài sản cá nhân",
+    "company_asset_not_owned": "Tài sản công ty này do người dùng khác chia sẻ; bạn không thể xuất bản phiên bản mới",
     "company_asset_invalid_identity": "Định danh tài sản cục bộ không hợp lệ và không thể xuất bản",
     "company_asset_file_invalid": "Đường dẫn tệp tài sản không hợp lệ",
     "company_asset_file_missing": "Thiếu tệp tài sản nên không thể xuất bản",

@@ -89,7 +89,13 @@ import type {
   PresentationRequestOptions,
   PresentationResourceType,
 } from "@/types/presentation";
-import type { Asset, AssetType, AssetCreatePayload, AssetUpdatePayload } from "@/types/asset";
+import type {
+  Asset,
+  AssetType,
+  AssetCreatePayload,
+  AssetResourceGroupUpdatePayload,
+  AssetUpdatePayload,
+} from "@/types/asset";
 import type { WorkflowPlan, WorkflowPlanRequest } from "@/types/workflow";
 import type {
   AgentCredential,
@@ -3266,13 +3272,18 @@ class API {
     );
   }
 
-  static async createAsset(payload: AssetCreatePayload & { image?: File }) {
+  static async createAsset(payload: AssetCreatePayload) {
     const form = new FormData();
     form.append("type", payload.type);
     form.append("name", payload.name);
     form.append("description", payload.description ?? "");
     form.append("voice_style", payload.voice_style ?? "");
+    form.append("voice_id", payload.voice_id ?? "");
     if (payload.image) form.append("image", payload.image);
+    for (const image of payload.images ?? []) form.append("images", image);
+    for (const audio of payload.audios ?? []) form.append("audios", audio);
+    form.append("primary_image_index", String(payload.primary_image_index ?? 0));
+    form.append("primary_audio_index", String(payload.primary_audio_index ?? 0));
     const endpoint = "/assets";
     const url = `${API_BASE}${endpoint}`;
     const response = await fetch(url, withAuth(endpoint, { method: "POST", body: form }));
@@ -3291,6 +3302,34 @@ class API {
       method: "PATCH",
       body: JSON.stringify(patch),
     });
+  }
+
+  static async updateAssetResourceGroups(id: string, payload: AssetResourceGroupUpdatePayload) {
+    const form = new FormData();
+    if (payload.name !== undefined) form.append("name", payload.name);
+    if (payload.description !== undefined) form.append("description", payload.description);
+    if (payload.voice_style !== undefined) form.append("voice_style", payload.voice_style);
+    if (payload.voice_id !== undefined) form.append("voice_id", payload.voice_id);
+    for (const image of payload.images ?? []) form.append("images", image);
+    for (const audio of payload.audios ?? []) form.append("audios", audio);
+    form.append("remove_resource_ids", JSON.stringify(payload.remove_resource_ids ?? []));
+    form.append("primary_image_resource_id", payload.primary_image_resource_id ?? "");
+    form.append("primary_audio_resource_id", payload.primary_audio_resource_id ?? "");
+    form.append("primary_image_upload_index", String(payload.primary_image_upload_index ?? -1));
+    form.append("primary_audio_upload_index", String(payload.primary_audio_upload_index ?? -1));
+    const endpoint = `/assets/${encodeURIComponent(id)}/resources`;
+    const response = await fetch(
+      `${API_BASE}${endpoint}`,
+      withAuth(endpoint, { method: "PUT", body: form }),
+    );
+    if (!response.ok) {
+      handleUnauthorized(response);
+      const error = (await response.json().catch(() => ({ detail: response.statusText }))) as {
+        detail?: string;
+      };
+      throw new Error(typeof error.detail === "string" ? error.detail : "请求失败");
+    }
+    return response.json() as Promise<{ asset: Asset }>;
   }
 
   static async replaceAssetImage(id: string, image: File) {

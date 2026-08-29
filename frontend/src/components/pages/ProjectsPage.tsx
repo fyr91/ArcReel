@@ -47,6 +47,7 @@ import { ONBOARDING_ANCHORS } from "@/onboarding/anchors";
 import { OnboardingDemoCard } from "@/onboarding/OnboardingDemoCard";
 import { useOnboardingStore } from "@/stores/onboarding-store";
 import { BRAND } from "@/branding";
+import { AccountMenu } from "@/components/layout/AccountMenu";
 import {
   PHASE_ORDER,
   type Phase,
@@ -510,6 +511,7 @@ function TopBar({
               </button>
             </>
           ) : null}
+          <AccountMenu showIdentity />
         </div>
       </div>
     </div>

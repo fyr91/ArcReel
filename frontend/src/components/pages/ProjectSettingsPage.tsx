@@ -28,6 +28,7 @@ import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { useWarnUnsaved } from "@/hooks/useWarnUnsaved";
 import { normalizeRoute, type GenerationRoute } from "@/utils/generation-mode";
 import { getProjectDisplayName } from "@/utils/project-display";
+import { AccountMenu } from "@/components/layout/AccountMenu";
 
 function deriveStyleValue(project: Record<string, unknown>, projectName: string): StylePickerValue {
   const styleImage = project.style_image as string | undefined;
@@ -843,6 +844,7 @@ export function ProjectSettingsPage() {
               </span>
             </h1>
           </div>
+          <AccountMenu />
         </div>
       </header>
 

@@ -404,6 +404,7 @@ MESSAGES = {
     "company_asset_cloud_not_configured": "公司资产库尚未配置，请联系管理员",
     "company_asset_local_not_found": "本地资产不存在",
     "company_asset_official_read_only": "官方资产为只读，不能作为个人资产重复发布",
+    "company_asset_not_owned": "该公司资产由其他用户共享，你不能发布它的新版本",
     "company_asset_invalid_identity": "本地资产标识无效，无法发布",
     "company_asset_file_invalid": "资产文件路径无效",
     "company_asset_file_missing": "资产文件不存在，无法发布",

@@ -121,6 +121,7 @@ class CompanyAssetPublication:
     voice_id: str | None
     aliases: tuple[str, ...]
     files: tuple[CompanyAssetPublicationFile, ...]
+    owner_id: str | None = None
 
 
 @dataclass(frozen=True)
@@ -128,6 +129,7 @@ class CompanyAssetPublishResult:
     asset_id: str
     version_id: str
     version: int
+    owner_id: str | None = None
 
 
 @dataclass(frozen=True)
@@ -316,6 +318,7 @@ async def publish_local_asset(
         voice_id=asset.voice_id if asset.type == "character" else None,
         aliases=tuple(alias.alias for alias in asset.aliases),
         files=files,
+        owner_id=asset.external_owner_id,
     )
     result = await publisher.publish_asset(user_id=user_id, publication=publication)
     await repository.update(
@@ -325,6 +328,7 @@ async def publish_local_asset(
         external_origin="user_shared",
         external_version=result.version,
         external_status="published",
+        external_owner_id=result.owner_id or asset.external_owner_id,
     )
     await session.commit()
     return result

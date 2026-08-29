@@ -84,6 +84,8 @@ async def publish_asset(asset_id: str, user: CurrentUser, _t: Translator):
     except CompanyAssetSyncError as exc:
         if exc.code == "company_asset_local_not_found":
             status_code = 404
+        elif exc.code == "company_asset_not_owned":
+            status_code = 403
         elif exc.code == "company_asset_official_read_only":
             status_code = 409
         elif exc.code in {"company_asset_request_failed", "company_asset_cloud_not_configured"}:
@@ -204,6 +206,8 @@ def _require_admin(user) -> None:
 def _catalog_http_error(exc: CompanyAssetSyncError) -> HTTPException:
     if exc.code in {"company_asset_request_failed", "company_asset_cloud_not_configured"}:
         status_code = 503
+    elif exc.code == "company_asset_not_owned":
+        status_code = 403
     elif exc.code == "company_asset_local_not_found":
         status_code = 404
     else:

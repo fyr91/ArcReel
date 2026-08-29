@@ -27,6 +27,15 @@ function AssetCardImpl({ asset, onEdit, onDelete, onShare, sharing = false }: Pr
   const formattedDate = asset.updated_at
     ? formatDate(asset.updated_at, i18n.language, SHORT_DATE_OPTS, "")
     : "";
+  const publishState = asset.company_publish_state ?? (
+    asset.external_origin === "official"
+      ? "read_only_official"
+      : asset.external_origin === "user_shared"
+        ? "read_only_other"
+        : "publish"
+  );
+  const canPublish = publishState === "publish" || publishState === "update";
+  const isOtherUserAsset = publishState === "read_only_other" && asset.external_origin === "user_shared";
 
   return (
     <div className="group relative overflow-hidden rounded-[10px] border border-hairline-soft bg-bg-grad-a/55 transition-[transform,border-color] motion-safe:hover:-translate-y-0.5 hover:border-hairline">
@@ -55,14 +64,23 @@ function AssetCardImpl({ asset, onEdit, onDelete, onShare, sharing = false }: Pr
                 <span className="tabular-nums">{t("meta_updated_at", { date: formattedDate })}</span>
               </div>
             ) : null}
+            {isOtherUserAsset ? (
+              <div className="mt-1 truncate text-[10.5px] text-text-4" title={t("shared_by_read_only", {
+                name: asset.external_owner_name || t("shared_by_unknown_user"),
+              })}>
+                {t("shared_by_read_only", {
+                  name: asset.external_owner_name || t("shared_by_unknown_user"),
+                })}
+              </div>
+            ) : null}
           </div>
           <div className="flex flex-col gap-1 opacity-0 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100">
-            {onShare && asset.external_origin !== "official" && (
+            {onShare && canPublish && (
               <button
                 type="button"
                 onClick={() => onShare(asset)}
                 disabled={sharing}
-                aria-label={t(asset.external_origin === "user_shared" ? "share_asset_update" : "share_asset")}
+                aria-label={t(publishState === "update" ? "share_asset_update" : "share_asset")}
                 className="rounded-[5px] p-1 text-text-4 transition-colors hover:text-accent-2 focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent disabled:opacity-50"
               >
                 <CloudUpload className={`h-3.5 w-3.5 ${sharing ? "animate-pulse" : ""}`} />

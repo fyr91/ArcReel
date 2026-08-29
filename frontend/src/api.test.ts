@@ -1407,6 +1407,59 @@ describe("API", () => {
       const res = await API.createAsset({ type: "scene", name: "A", description: "d" });
       expect(res.asset.id).toBe("x");
     });
+
+    it("sends local character image/audio groups and primary indexes", async () => {
+      const fetchMock = vi.fn().mockResolvedValue(
+        mockResponse({ jsonData: { asset: { id: "character-1" } } }),
+      );
+      vi.stubGlobal("fetch", fetchMock);
+      const images = [new File(["a"], "a.png"), new File(["b"], "b.webp")];
+      const audios = [new File(["v"], "voice.wav")];
+
+      await API.createAsset({
+        type: "character",
+        name: "Local",
+        voice_style: "warm",
+        voice_id: "voice-local",
+        images,
+        audios,
+        primary_image_index: 1,
+        primary_audio_index: 0,
+      });
+
+      const form = (fetchMock.mock.calls[0][1] as RequestInit).body as FormData;
+      expect(form.getAll("images")).toEqual(images);
+      expect(form.getAll("audios")).toEqual(audios);
+      expect(form.get("voice_id")).toBe("voice-local");
+      expect(form.get("primary_image_index")).toBe("1");
+      expect(form.get("primary_audio_index")).toBe("0");
+    });
+
+    it("atomically updates character metadata and resource groups", async () => {
+      const fetchMock = vi.fn().mockResolvedValue(
+        mockResponse({ jsonData: { asset: { id: "character-1" } } }),
+      );
+      vi.stubGlobal("fetch", fetchMock);
+      const audio = new File(["v"], "voice.wav");
+
+      await API.updateAssetResourceGroups("character-1", {
+        name: "Edited",
+        voice_style: "bright",
+        voice_id: "voice-edited",
+        audios: [audio],
+        remove_resource_ids: ["old-audio"],
+        primary_audio_upload_index: 0,
+      });
+
+      expect(fetchMock.mock.calls[0][0]).toBe("/api/v1/assets/character-1/resources");
+      const form = (fetchMock.mock.calls[0][1] as RequestInit).body as FormData;
+      expect(form.get("name")).toBe("Edited");
+      expect(form.get("voice_style")).toBe("bright");
+      expect(form.get("voice_id")).toBe("voice-edited");
+      expect(form.getAll("audios")).toEqual([audio]);
+      expect(form.get("remove_resource_ids")).toBe('["old-audio"]');
+      expect(form.get("primary_audio_upload_index")).toBe("0");
+    });
   });
 
   describe("addAssetFromProject", () => {

@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+import json
+from types import SimpleNamespace
+
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
@@ -60,6 +63,123 @@ class TestAssetsCRUD:
         assert r2.status_code == 200
         assert len(r2.json()["items"]) == 1
         assert r2.json()["items"][0]["id"] == asset_id
+
+    @pytest.mark.unit
+    def test_company_publish_state_distinguishes_owner_and_read_only_assets(self):
+        local = SimpleNamespace(external_source=None, external_origin=None, external_owner_id=None)
+        official = SimpleNamespace(
+            external_source="company_asset_catalog", external_origin="official", external_owner_id=None
+        )
+        mine = SimpleNamespace(
+            external_source="company_asset_catalog", external_origin="user_shared", external_owner_id="cloud-me"
+        )
+        others = SimpleNamespace(
+            external_source="company_asset_catalog", external_origin="user_shared", external_owner_id="cloud-alice"
+        )
+
+        assert assets._company_publish_state(local, "cloud-me") == "publish"
+        assert assets._company_publish_state(official, "cloud-me") == "read_only_official"
+        assert assets._company_publish_state(mine, "cloud-me") == "update"
+        assert assets._company_publish_state(others, "cloud-me") == "read_only_other"
+
+    @pytest.mark.unit
+    def test_create_character_with_image_and_voice_groups(self, _assets_env):
+        client = _assets_env["client"]
+        response = client.post(
+            "/api/v1/assets",
+            data={
+                "type": "character",
+                "name": "本地人物",
+                "voice_style": "温柔、沉稳",
+                "voice_id": "voice-local-001",
+                "primary_image_index": "1",
+                "primary_audio_index": "1",
+            },
+            files=[
+                ("images", ("front.png", b"front", "image/png")),
+                ("images", ("full.webp", b"full", "image/webp")),
+                ("audios", ("calm.wav", b"calm", "audio/wav")),
+                ("audios", ("bright.mp3", b"bright", "audio/mpeg")),
+            ],
+        )
+
+        assert response.status_code == 200, response.text
+        asset = response.json()["asset"]
+        assert asset["voice_style"] == "温柔、沉稳"
+        assert asset["voice_id"] == "voice-local-001"
+        assert len(asset["resources"]) == 4
+        assert {item["origin"] for item in asset["resources"]} == {"local"}
+        images = [item for item in asset["resources"] if item["media_type"] == "image"]
+        audios = [item for item in asset["resources"] if item["media_type"] == "audio"]
+        assert [item["is_primary"] for item in images] == [False, True]
+        assert [item["is_primary"] for item in audios] == [False, True]
+
+    @pytest.mark.unit
+    def test_scene_rejects_audio_group_without_leaving_files(self, _assets_env):
+        client = _assets_env["client"]
+        response = client.post(
+            "/api/v1/assets",
+            data={"type": "scene", "name": "有声音的场景"},
+            files=[("audios", ("voice.wav", b"voice", "audio/wav"))],
+        )
+
+        assert response.status_code == 422
+        scene_dir = _assets_env["pm"].get_global_assets_root() / "scene"
+        assert not scene_dir.exists() or not list(scene_dir.iterdir())
+
+    @pytest.mark.unit
+    def test_invalid_group_file_cleans_files_saved_earlier_in_the_request(self, _assets_env):
+        client = _assets_env["client"]
+        response = client.post(
+            "/api/v1/assets",
+            data={"type": "character", "name": "失败人物"},
+            files=[
+                ("images", ("valid.png", b"image", "image/png")),
+                ("audios", ("invalid.exe", b"not-audio", "application/octet-stream")),
+            ],
+        )
+
+        assert response.status_code == 415
+        character_dir = _assets_env["pm"].get_global_assets_root() / "character"
+        assert not character_dir.exists() or not list(character_dir.iterdir())
+
+    @pytest.mark.unit
+    def test_edit_character_resource_groups_adds_selects_and_removes_local_files(self, _assets_env):
+        client = _assets_env["client"]
+        created = client.post(
+            "/api/v1/assets",
+            data={"type": "character", "name": "可编辑人物"},
+            files=[
+                ("images", ("one.png", b"one", "image/png")),
+                ("images", ("two.png", b"two", "image/png")),
+            ],
+        ).json()["asset"]
+        first, second = created["resources"]
+        first_path = _assets_env["pm"].projects_root / first["path"]
+        assert first_path.exists()
+
+        response = client.put(
+            f"/api/v1/assets/{created['id']}/resources",
+            data={
+                "name": "编辑后人物",
+                "voice_style": "清亮",
+                "voice_id": "voice-edited",
+                "remove_resource_ids": json.dumps([first["id"]]),
+                "primary_image_resource_id": second["id"],
+                "primary_audio_upload_index": "0",
+            },
+            files=[("audios", ("reference.wav", b"voice", "audio/wav"))],
+        )
+
+        assert response.status_code == 200, response.text
+        asset = response.json()["asset"]
+        assert asset["name"] == "编辑后人物"
+        assert asset["voice_style"] == "清亮"
+        assert asset["voice_id"] == "voice-edited"
+        assert len(asset["resources"]) == 2
+        assert asset["image_path"] == second["path"]
+        assert next(item for item in asset["resources"] if item["media_type"] == "audio")["is_primary"]
+        assert not first_path.exists()
 
     @pytest.mark.unit
     def test_duplicate_type_name_returns_409(self, _assets_env):

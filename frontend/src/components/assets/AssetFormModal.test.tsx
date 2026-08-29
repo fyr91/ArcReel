@@ -77,6 +77,7 @@ describe("AssetFormModal", () => {
       <AssetFormModal
         type="character"
         mode="edit"
+        manageResourceGroups
         initialData={{
           name: "鳄鱼爸爸",
           resources: [
@@ -133,6 +134,50 @@ describe("AssetFormModal", () => {
       />,
     );
 
-    expect(screen.getByText("voice-croco-dad")).toBeInTheDocument();
+    expect(screen.getByDisplayValue("voice-croco-dad")).toHaveAttribute("readonly");
+  });
+
+  it("creates a local character with image group, voice group and editable Voice ID", async () => {
+    const onSubmit = vi.fn().mockResolvedValue(undefined);
+    const createObjectURL = vi.spyOn(URL, "createObjectURL")
+      .mockImplementation((blob) => `blob:${(blob as File).name}`);
+    const revokeObjectURL = vi.spyOn(URL, "revokeObjectURL").mockImplementation(() => undefined);
+    render(
+      <AssetFormModal
+        type="character"
+        mode="create"
+        manageResourceGroups
+        onClose={() => {}}
+        onSubmit={onSubmit}
+      />,
+    );
+    const [imageInput, audioInput] = Array.from(
+      document.querySelectorAll<HTMLInputElement>('input[type="file"]'),
+    );
+    const images = [
+      new File(["front"], "front.png", { type: "image/png" }),
+      new File(["full"], "full.webp", { type: "image/webp" }),
+    ];
+    const audios = [new File(["voice"], "voice.wav", { type: "audio/wav" })];
+
+    fireEvent.change(screen.getByLabelText(/field\.name/), { target: { value: "本地人物" } });
+    fireEvent.change(screen.getByLabelText("field.voice_style"), { target: { value: "温柔" } });
+    fireEvent.change(screen.getByLabelText("field.voice_id"), { target: { value: "voice-local" } });
+    fireEvent.change(imageInput!, { target: { files: images } });
+    fireEvent.change(audioInput!, { target: { files: audios } });
+    fireEvent.click(screen.getByRole("button", { name: "create" }));
+
+    await waitFor(() => expect(onSubmit).toHaveBeenCalledWith(expect.objectContaining({
+      name: "本地人物",
+      voice_style: "温柔",
+      voice_id: "voice-local",
+      images,
+      audios,
+      primary_image_upload_index: 0,
+      primary_audio_upload_index: 0,
+    })));
+    expect(createObjectURL).toHaveBeenCalledTimes(3);
+    createObjectURL.mockRestore();
+    revokeObjectURL.mockRestore();
   });
 });

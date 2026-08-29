@@ -30,7 +30,11 @@ export const useAssetsStore = create<AssetsStore>((set) => ({
     set((s) => ({
       byType: {
         ...s.byType,
-        [asset.type]: s.byType[asset.type].map((a) => (a.id === asset.id ? asset : a)),
+        [asset.type]: s.byType[asset.type].map((a) => (
+          a.id === asset.id
+            ? { ...asset, company_publish_state: asset.company_publish_state ?? a.company_publish_state }
+            : a
+        )),
       },
     })),
   deleteAsset: async (id, type) => {

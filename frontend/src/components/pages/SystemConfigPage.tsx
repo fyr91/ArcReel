@@ -18,6 +18,7 @@ import { ONBOARDING_ANCHORS } from "@/onboarding/anchors";
 import { AgentConfigTab } from "./AgentConfigTab";
 import { ApiKeysTab } from "./ApiKeysTab";
 import { AboutSection } from "./settings/AboutSection";
+import { AccountMenu } from "@/components/layout/AccountMenu";
 import { MediaModelSection } from "./settings/MediaModelSection";
 import { ProviderSection } from "./ProviderSection";
 import { UsageStatsSection } from "./settings/UsageStatsSection";
@@ -190,6 +191,7 @@ export function SystemConfigPage() {
               {currentLang}
             </span>
           </button>
+          <AccountMenu />
         </div>
       </header>
 
