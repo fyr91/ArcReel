@@ -94,10 +94,27 @@ def test_reference_prompts_anchor_keyframes_to_action_start_not_outcome():
     assert "00:00.000" not in _split_prompt()
     prompt = _step2_prompt()
     assert "00:00.000" in prompt
-    assert "摔进桂花堆" in prompt
-    assert "不能画弟弟摔倒" in prompt or "错误首帧" in prompt
+    assert "动作完成后的结果" in prompt
     assert "`keyframes[].description`" in prompt
-    assert "必须使用与正式文稿相同的 `@[名称]`" in prompt
+    assert "实际可见的人物、场景、道具与产品使用" in prompt
+
+
+def test_reference_prompt_requires_generation_ready_keyframe_image_descriptions():
+    """Keyframe descriptions cover photographic staging plus scene-specific physical guards."""
+    prompt = _step2_prompt()
+    for dimension in (
+        "镜头与透视",
+        "构图与空间层次",
+        "主体状态",
+        "尺度、地面与遮挡",
+        "场景与物体",
+        "光线与焦点",
+        "物理合理性与定向避免",
+    ):
+        assert dimension in prompt
+    assert "哪只手、接触点、手掌朝向和物体所在位置" in prompt
+    assert "不得穿插、粘连或融合" in prompt
+    assert "避免项必须针对当前场景" in prompt
 
 
 def test_build_reference_video_prompt_states_structure_preserving_contract():

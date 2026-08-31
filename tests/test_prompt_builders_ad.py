@@ -4,6 +4,7 @@ import pytest
 
 from lib import prompt_builders_ad as ad_prompts
 from lib.prompt_builders_ad import _shot_duration_constraint, build_ad_prompt, nearest_ad_tier
+from lib.prompt_rules.keyframe_description import KEYFRAME_DESCRIPTION_WRITING_GUIDE
 from lib.speech_rate import speech_rate_units_per_second
 
 pytestmark = pytest.mark.unit
@@ -141,6 +142,21 @@ class TestDurationConstraint:
         assert "取 7-91 的整数" in prompt
         assert '"keyframes"' in prompt
         assert "[[关键分镜1]]" in prompt
+
+    def test_reference_prompt_uses_shared_generation_ready_keyframe_guidance(self):
+        prompt = ad_prompts.build_ad_reference_prompt(
+            project_overview={},
+            style="实拍",
+            style_description="真实质感",
+            characters={"小美": {}},
+            scenes={"厨房": {}},
+            props={},
+            products={"速干杯": {}},
+            brief="小美拿起速干杯",
+            target_duration=30,
+        )
+
+        assert KEYFRAME_DESCRIPTION_WRITING_GUIDE in prompt
 
 
 class TestEpisodeConstraint:
