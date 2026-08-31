@@ -922,7 +922,7 @@ export default {
   'reference_keyframe_manuscript_changed_hint': '正式文稿或图片描述在这张关键分镜生成后有过变动。当前结果仍可继续使用，也可由你决定是否重新生成。',
   'reference_editor_view_parse': '解析预览',
   'reference_editor_view_h3': 'H3 提示词',
-  'reference_keyframe_description': '关键首帧描述',
+  'reference_keyframe_description': '画面描述',
   'reference_keyframe_not_generated': '尚未生成关键首帧',
   'reference_keyframe_generate': '生成关键首帧',
   'reference_keyframe_regenerate': '重新生成关键首帧',

@@ -99,7 +99,7 @@ describe("reference visual prompts save before generation", () => {
         />,
       );
 
-      fireEvent.change(screen.getByRole("combobox", { name: /关键首帧描述|Keyframe description/ }), {
+      fireEvent.change(screen.getByRole("combobox", { name: /画面描述|Image description/ }), {
         target: { value: nextDescription },
       });
       expect(screen.queryByRole("button", { name: /^(保存|Save)$/ })).not.toBeInTheDocument();
@@ -162,7 +162,7 @@ describe("reference visual prompts save before generation", () => {
         onChanged={vi.fn().mockResolvedValue(undefined)}
       />,
     );
-    fireEvent.change(screen.getByRole("combobox", { name: /关键首帧描述|Keyframe description/ }), {
+    fireEvent.change(screen.getByRole("combobox", { name: /画面描述|Image description/ }), {
       target: { value: "新的关键帧提示词" },
     });
     fireEvent.click(screen.getByRole("button", { name: /重新生成关键首帧|Regenerate keyframe/ }));

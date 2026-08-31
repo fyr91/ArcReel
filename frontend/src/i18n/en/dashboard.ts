@@ -923,7 +923,7 @@ export default {
   'reference_keyframe_manuscript_changed_hint': 'The formal manuscript or image description changed after this Keyframe was generated. You can keep using it or regenerate it.',
   'reference_editor_view_parse': 'Parse preview',
   'reference_editor_view_h3': 'H3 prompt',
-  'reference_keyframe_description': 'Key first-frame description',
+  'reference_keyframe_description': 'Image description',
   'reference_keyframe_not_generated': 'Key first frame not generated',
   'reference_keyframe_generate': 'Generate first frame',
   'reference_keyframe_regenerate': 'Regenerate first frame',

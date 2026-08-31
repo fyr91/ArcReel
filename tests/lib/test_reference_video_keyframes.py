@@ -131,18 +131,28 @@ def test_keyframe_specs_do_not_wait_for_storyboard_sheet_confirmation() -> None:
     assert [spec.resource_id for spec in specs] == ["E1U01K01"]
 
 
-def test_keyframe_prompt_requires_action_beat_entry_state() -> None:
+@pytest.mark.parametrize(
+    ("project", "expected_style"),
+    [
+        ({"style": "田园动画"}, "田园动画"),
+        ({"style": "田园动画", "style_description": "暖色自然光"}, "暖色自然光"),
+    ],
+)
+def test_keyframe_prompt_contains_only_image_generation_inputs(project: dict[str, str], expected_style: str) -> None:
     from server.services.reference_keyframe_tasks import build_keyframe_prompt
 
     prompt = build_keyframe_prompt(
-        {"style": "田园动画", "style_description": "暖色自然光"},
-        "妹妹追弟弟，弟弟在奔跑中绊倒。",
+        project,
         "鳄鱼妹妹追鳄鱼弟弟，弟弟摔进桂花堆",
         "- Picture 1 = @[鳄鱼妹妹]",
     )
 
-    assert "动作刚开始" in prompt
-    assert "不得选择同一 beat 的完成结果" in prompt
-    assert "正式 Video Unit 文稿" in prompt
+    assert f"图片风格：{expected_style}" in prompt
+    assert "画面描述：鳄鱼妹妹追鳄鱼弟弟，弟弟摔进桂花堆" in prompt
     assert "Picture 1 = @[鳄鱼妹妹]" in prompt
-    assert "Storyboard Sheet" not in prompt
+    assert "项目风格" not in prompt
+    assert "风格定义" not in prompt
+    assert "正式 Video Unit 文稿" not in prompt
+    assert "动作刚开始" not in prompt
+    assert "完成结果" not in prompt
+    assert "首帧描述" not in prompt

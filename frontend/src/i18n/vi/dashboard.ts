@@ -903,7 +903,7 @@ export default {
   'reference_keyframe_manuscript_changed_hint': 'Bản thảo chính thức hoặc mô tả ảnh đã thay đổi sau khi khung hình chính này được tạo. Bạn vẫn có thể dùng kết quả hiện tại hoặc tạo lại.',
   'reference_editor_view_parse': 'Xem trước phân tích',
   'reference_editor_view_h3': 'Lời nhắc H3',
-  'reference_keyframe_description': 'Mô tả khung hình đầu tiên chính',
+  'reference_keyframe_description': 'Mô tả hình ảnh',
   'reference_keyframe_not_generated': 'Chưa tạo khung hình đầu tiên',
   'reference_keyframe_generate': 'Tạo khung hình đầu tiên',
   'reference_keyframe_regenerate': 'Tạo lại khung hình đầu tiên',
