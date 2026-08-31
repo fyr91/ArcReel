@@ -106,7 +106,9 @@ describe("reference visual prompts save before generation", () => {
       fireEvent.click(screen.getByRole("button", { name: /重新生成关键首帧|Regenerate keyframe/ }));
 
       await waitFor(() => expect(generate).toHaveBeenCalledOnce());
-      expect(patch).toHaveBeenCalledWith("proj", 1, "E1U01K01", nextDescription);
+      expect(patch).toHaveBeenCalledWith("proj", 1, "E1U01K01", {
+        description: nextDescription,
+      });
       expect(patch.mock.invocationCallOrder[0]).toBeLessThan(generate.mock.invocationCallOrder[0]);
     });
 
@@ -192,5 +194,110 @@ describe("reference visual prompts save before generation", () => {
 
     await waitFor(() => expect(useAppStore.getState().toast?.text).toContain("save failed"));
     expect(generate).not.toHaveBeenCalled();
+  });
+
+  it("persists and generates with an edited full keyframe prompt", async () => {
+    const current = unit();
+    useProjectsStore.setState({ currentProjectName: "proj", currentProjectData: project("drama") });
+    const preview = vi.spyOn(API, "previewReferenceKeyframePrompt").mockResolvedValue({
+      prompt: "系统组装的完整 Prompt",
+    });
+    const patch = vi.spyOn(API, "patchReferenceKeyframe").mockResolvedValue({
+      keyframe: current.keyframes![0],
+    });
+    const generate = vi.spyOn(API, "generateReferenceKeyframe").mockResolvedValue({
+      success: true,
+      task_id: "full-keyframe",
+      deduped: false,
+      message: "queued",
+    });
+
+    render(
+      <KeyframePreviewPanel
+        projectName="proj"
+        episode={1}
+        unit={current}
+        onChanged={vi.fn().mockResolvedValue(undefined)}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: /完整 Prompt|Full prompt/ }));
+    const editor = await screen.findByRole("textbox", { name: /关键分镜完整 Prompt|Full Keyframe prompt/ });
+    expect(preview).toHaveBeenCalledWith(
+      "proj",
+      1,
+      "E1U01K01",
+      current.keyframes![0].description,
+      {},
+    );
+    expect(patch).toHaveBeenCalledWith("proj", 1, "E1U01K01", {
+      image_prompt_mode: "full_prompt",
+      image_full_prompt: "系统组装的完整 Prompt",
+    });
+
+    fireEvent.change(editor, { target: { value: "用户修改后的完整 Prompt" } });
+    fireEvent.click(screen.getByRole("button", { name: /重新生成关键首帧|Regenerate keyframe/ }));
+
+    await waitFor(() => expect(generate).toHaveBeenCalledOnce());
+    expect(patch).toHaveBeenLastCalledWith("proj", 1, "E1U01K01", {
+      image_prompt_mode: "full_prompt",
+      image_full_prompt: "用户修改后的完整 Prompt",
+    });
+    expect(patch.mock.invocationCallOrder.at(-1)).toBeLessThan(generate.mock.invocationCallOrder[0]);
+  });
+
+  it("restores a Storyboard full prompt and mode from persisted unit data", () => {
+    const current = unit();
+    current.storyboard_prompt_mode = "full_prompt";
+    current.storyboard_full_prompt = "刷新后仍存在的 Storyboard 完整 Prompt";
+    useProjectsStore.setState({ currentProjectName: "proj", currentProjectData: project("course") });
+    const preview = vi.spyOn(API, "previewReferenceStoryboardSheetPrompt");
+
+    render(
+      <StoryboardSheetPanel
+        projectName="proj"
+        episode={1}
+        unit={current}
+        onChanged={vi.fn().mockResolvedValue(undefined)}
+      />,
+    );
+
+    expect(
+      screen.getByRole("textbox", { name: /故事板完整 Prompt|Full Storyboard prompt/ }),
+    ).toHaveValue("刷新后仍存在的 Storyboard 完整 Prompt");
+    expect(screen.getByRole("button", { name: /完整 Prompt|Full prompt/ })).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
+    expect(preview).not.toHaveBeenCalled();
+  });
+
+  it("autosaves an edited persisted Storyboard full prompt", async () => {
+    const current = unit();
+    current.storyboard_prompt_mode = "full_prompt";
+    current.storyboard_full_prompt = "已保存全文";
+    useProjectsStore.setState({ currentProjectName: "proj", currentProjectData: project("drama") });
+    const patch = vi.spyOn(API, "patchReferenceVideoUnit").mockResolvedValue({ unit: current });
+
+    render(
+      <StoryboardSheetPanel
+        projectName="proj"
+        episode={1}
+        unit={current}
+        onChanged={vi.fn().mockResolvedValue(undefined)}
+      />,
+    );
+    fireEvent.change(
+      screen.getByRole("textbox", { name: /故事板完整 Prompt|Full Storyboard prompt/ }),
+      { target: { value: "自动保存后的全文" } },
+    );
+
+    await waitFor(
+      () =>
+        expect(patch).toHaveBeenCalledWith("proj", 1, "E1U01", {
+          storyboard_full_prompt: "自动保存后的全文",
+        }),
+      { timeout: 1600 },
+    );
   });
 });

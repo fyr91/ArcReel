@@ -40,6 +40,42 @@ def _storyboard_description(unit: dict[str, Any]) -> str:
     return without_keyframe_mentions(str(unit.get("storyboard_description") or unit.get("text") or ""))
 
 
+def _storyboard_prompt_mode(unit: dict[str, Any]) -> str:
+    return "full_prompt" if unit.get("storyboard_prompt_mode") == "full_prompt" else "description"
+
+
+def _storyboard_active_prompt(unit: dict[str, Any]) -> str:
+    if _storyboard_prompt_mode(unit) == "full_prompt":
+        return str(unit.get("storyboard_full_prompt") or "")
+    return _storyboard_description(unit)
+
+
+def _storyboard_prompt_basis(unit: dict[str, Any]) -> tuple[str, str]:
+    mode = _storyboard_prompt_mode(unit)
+    return mode, _storyboard_active_prompt(unit)
+
+
+def _render_storyboard_prompt(
+    project: dict[str, Any],
+    unit: dict[str, Any],
+    *,
+    panel_ratio: str,
+    panel_count: int,
+    reference_roster: str,
+    instructions: str | None = None,
+) -> str:
+    if _storyboard_prompt_mode(unit) == "full_prompt":
+        return str(unit.get("storyboard_full_prompt") or "")
+    return build_storyboard_sheet_prompt(
+        project,
+        unit,
+        panel_ratio=panel_ratio,
+        panel_count=panel_count,
+        reference_roster=reference_roster,
+        instructions=instructions,
+    )
+
+
 def reference_storyboard_sheet_task_specs(
     script: dict[str, Any],
     script_file: str,
@@ -62,8 +98,8 @@ def reference_storyboard_sheet_task_specs(
         if not isinstance(unit, dict):
             continue
         unit_id = str(unit.get("unit_id") or "").strip()
-        description = _storyboard_description(unit)
-        if not unit_id or not description or (unit_ids is not None and unit_id not in unit_ids):
+        prompt = _storyboard_active_prompt(unit)
+        if not unit_id or not prompt.strip() or (unit_ids is not None and unit_id not in unit_ids):
             continue
         sheet = unit.get("storyboard_sheet")
         if missing_only and isinstance(sheet, dict) and sheet.get("image_path"):
@@ -83,7 +119,7 @@ def reference_storyboard_sheet_task_specs(
                 task_type="reference_storyboard_sheet",
                 media_type="image",
                 resource_id=unit_id,
-                prompt=description,
+                prompt=prompt,
                 script_file=script_file,
                 extra_payload=extra_payload,
             )
@@ -228,6 +264,81 @@ Video Unit：{unit.get("unit_id")}
 """
 
 
+async def _prepare_storyboard_references(
+    project_name: str,
+    project: dict[str, Any],
+    prompt_source: str,
+    payload: dict[str, Any],
+    *,
+    user_id: str,
+):
+    project_path = get_project_manager().get_project_path(project_name)
+    resolved = await asyncio.to_thread(
+        resolve_reference_assets,
+        project,
+        project_path,
+        {"text": prompt_source, "keyframes": []},
+    )
+    assets = tuple(asset for asset in resolved if asset.reference.type not in {"keyframe", "storyboard_sheet"})
+    bindings = bind_resolved_assets(assets)
+    ctx = await resolve_generation_context(
+        project_name,
+        payload,
+        project=project,
+        user_id=user_id,
+        image=ImageLaneRequest(
+            capability="i2i" if bindings else "t2i",
+            stage="storyboard",
+        ),
+    )
+    prepared = await asyncio.to_thread(
+        prepare_qwen_image_references,
+        bindings,
+        provider_id=ctx.image.backend_name,
+        model_id=ctx.image.backend_model,
+        role="storyboard_subject",
+    )
+    return ctx, prepared
+
+
+async def render_storyboard_sheet_prompt_preview(
+    project_name: str,
+    project: dict[str, Any],
+    unit: dict[str, Any],
+    description: str,
+    payload: dict[str, Any],
+    *,
+    user_id: str = DEFAULT_USER_ID,
+) -> str:
+    """Render the exact description-mode Storyboard prompt for the selected image model."""
+
+    normalized = description.strip()
+    if not normalized:
+        raise ValueError("reference storyboard description is required")
+    preview_unit = deepcopy(unit)
+    preview_unit["storyboard_description"] = normalized
+    prompt_source = f"{str(preview_unit.get('text') or '').strip()}\n{_storyboard_description(preview_unit)}"
+    _ctx, prepared = await _prepare_storyboard_references(
+        project_name,
+        project,
+        prompt_source,
+        payload,
+        user_id=user_id,
+    )
+    try:
+        panel_ratio = resolve_video_aspect_ratio(project)
+        count = _panel_count(preview_unit)
+        return build_storyboard_sheet_prompt(
+            project,
+            preview_unit,
+            panel_ratio=panel_ratio,
+            panel_count=count,
+            reference_roster=prepared.reference_roster,
+        )
+    finally:
+        await asyncio.to_thread(prepared.cleanup)
+
+
 def _load_unit(project_name: str, script_file: str, unit_id: str) -> tuple[dict, dict, dict]:
     pm = get_project_manager()
     project = pm.load_project(project_name)
@@ -245,14 +356,17 @@ def _load_unit(project_name: str, script_file: str, unit_id: str) -> tuple[dict,
     return project, script, unit
 
 
-def _unit_storyboard_basis(unit: dict[str, Any]) -> tuple[object, object, object]:
+def _unit_storyboard_basis(unit: dict[str, Any]) -> tuple[object, object, tuple[str, str]]:
     """Storyboard provenance is the formal manuscript, never sibling Keyframes."""
 
-    return unit.get("text"), unit.get("duration_seconds"), _storyboard_description(unit)
+    return unit.get("text"), unit.get("duration_seconds"), _storyboard_prompt_basis(unit)
 
 
 def _assert_unit_unchanged(
-    project_name: str, script_file: str, unit_id: str, expected_basis: tuple[object, object, object]
+    project_name: str,
+    script_file: str,
+    unit_id: str,
+    expected_basis: tuple[object, object, tuple[str, str]],
 ) -> None:
     _project, _script, unit = _load_unit(project_name, script_file, unit_id)
     if _unit_storyboard_basis(unit) != expected_basis:
@@ -263,7 +377,7 @@ def _commit_sheet_pointer(
     project_name: str,
     script_file: str,
     unit_id: str,
-    expected_basis: tuple[object, object, object],
+    expected_basis: tuple[object, object, tuple[str, str]],
     image_path: str,
 ) -> None:
     pm = get_project_manager()
@@ -302,32 +416,20 @@ async def execute_reference_storyboard_sheet_task(
         raise ValueError("script_file is required for reference_storyboard_sheet task")
     project, _script, unit = await asyncio.to_thread(_load_unit, project_name, script_file, resource_id)
     expected_basis = deepcopy(_unit_storyboard_basis(unit))
-    project_path = get_project_manager().get_project_path(project_name)
-    visual_reference_text = f"{str(unit.get('text') or '').strip()}\n{_storyboard_description(unit)}"
-    resolved = await asyncio.to_thread(
-        resolve_reference_assets,
-        project,
-        project_path,
-        {"text": visual_reference_text, "keyframes": []},
+    prompt_mode, active_prompt = expected_basis[2]
+    if not active_prompt.strip():
+        raise ValueError("reference storyboard image prompt is required")
+    visual_reference_text = (
+        active_prompt
+        if prompt_mode == "full_prompt"
+        else f"{str(unit.get('text') or '').strip()}\n{_storyboard_description(unit)}"
     )
-    assets = tuple(asset for asset in resolved if asset.reference.type not in {"keyframe", "storyboard_sheet"})
-    bindings = bind_resolved_assets(assets)
-    ctx = await resolve_generation_context(
+    ctx, prepared = await _prepare_storyboard_references(
         project_name,
+        project,
+        visual_reference_text,
         payload,
-        project=project,
         user_id=user_id,
-        image=ImageLaneRequest(
-            capability="i2i" if bindings else "t2i",
-            stage="storyboard",
-        ),
-    )
-    prepared = await asyncio.to_thread(
-        prepare_qwen_image_references,
-        bindings,
-        provider_id=ctx.image.backend_name,
-        model_id=ctx.image.backend_model,
-        role="storyboard_subject",
     )
     try:
         panel_ratio = resolve_video_aspect_ratio(project)
@@ -337,15 +439,16 @@ async def execute_reference_storyboard_sheet_task(
             await asyncio.to_thread(_assert_unit_unchanged, project_name, script_file, resource_id, expected_basis)
 
         image_path = resource_relative_path("storyboard_sheets", resource_id)
+        prompt = _render_storyboard_prompt(
+            project,
+            unit,
+            panel_ratio=panel_ratio,
+            panel_count=count,
+            reference_roster=prepared.reference_roster,
+            instructions=str(payload.get("storyboard_instructions") or "").strip() or None,
+        )
         _output, version = await ctx.generator.generate_image_async(
-            prompt=build_storyboard_sheet_prompt(
-                project,
-                unit,
-                panel_ratio=panel_ratio,
-                panel_count=count,
-                reference_roster=prepared.reference_roster,
-                instructions=str(payload.get("storyboard_instructions") or "").strip() or None,
-            ),
+            prompt=prompt,
             resource_type="storyboard_sheets",
             resource_id=resource_id,
             reference_images=prepared.reference_images,
@@ -478,6 +581,7 @@ __all__ = [
     "build_storyboard_sheet_prompt",
     "confirm_storyboard_sheet",
     "execute_reference_storyboard_sheet_task",
+    "render_storyboard_sheet_prompt_preview",
     "reference_storyboard_sheet_task_specs",
     "require_storyboard_sheet",
     "require_generated_keyframes",

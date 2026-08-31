@@ -1,10 +1,18 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { AlertTriangle, Images, Loader2 } from "lucide-react";
 import { enqueueReferenceStoryboardSheet } from "@/actions/generation";
 import { API } from "@/api";
 import { ImageEditButton } from "@/components/canvas/timeline/ImageEditButton";
 import { ReferenceVideoCard } from "@/components/canvas/reference/ReferenceVideoCard";
+import {
+  FullPromptTextarea,
+  ImagePromptModeSwitch,
+} from "@/components/canvas/reference/ImagePromptModeSwitch";
+import {
+  usePersistentImagePrompt,
+  type ImagePromptPersistencePatch,
+} from "@/components/canvas/reference/usePersistentImagePrompt";
 import { VersionTimeMachine } from "@/components/canvas/timeline/VersionTimeMachine";
 import { ImageModelSelect, imageSelectionFromValue } from "@/components/shared/ImageModelSelect";
 import { GenerateButton } from "@/components/ui/GenerateButton";
@@ -39,7 +47,6 @@ export function StoryboardSheetPanel({
   const { t } = useTranslation("dashboard");
   const [model, setModel] = useState("");
   const [description, setDescription] = useState(() => defaultStoryboardDescription(unit));
-  const [saving, setSaving] = useState(false);
   const activeIds = useActiveResourceIds("reference_storyboard_sheet", projectName);
   const busy = activeIds.has(unit.unit_id);
   const sheet = unit.storyboard_sheet;
@@ -50,7 +57,6 @@ export function StoryboardSheetPanel({
     ? API.getFileUrl(projectName, sheet.image_path, fingerprint)
     : null;
   const savedDescription = defaultStoryboardDescription(unit);
-  const dirty = description.trim() !== savedDescription;
 
   useEffect(() => {
     // External Agent/browser edits arrive through the unit refresh. Adopt the
@@ -59,23 +65,47 @@ export function StoryboardSheetPanel({
     setDescription(savedDescription);
   }, [savedDescription]);
 
+  const persistPrompt = useCallback(
+    async (patch: ImagePromptPersistencePatch) => {
+      await API.patchReferenceVideoUnit(projectName, episode, unit.unit_id, {
+        ...(patch.description !== undefined
+          ? { storyboard_description: patch.description }
+          : {}),
+        ...(patch.mode !== undefined ? { storyboard_prompt_mode: patch.mode } : {}),
+        ...(patch.fullPrompt !== undefined
+          ? { storyboard_full_prompt: patch.fullPrompt }
+          : {}),
+      });
+    },
+    [episode, projectName, unit.unit_id],
+  );
+  const buildFullPrompt = useCallback(
+    async (nextDescription: string) => {
+      const result = await API.previewReferenceStoryboardSheetPrompt(
+        projectName,
+        episode,
+        unit.unit_id,
+        nextDescription,
+        imageSelectionFromValue(model),
+      );
+      return result.prompt;
+    },
+    [episode, model, projectName, unit.unit_id],
+  );
+  const prompt = usePersistentImagePrompt({
+    resourceId: unit.unit_id,
+    savedMode: unit.storyboard_prompt_mode,
+    savedFullPrompt: unit.storyboard_full_prompt,
+    description,
+    savedDescription,
+    disabled: busy,
+    buildFullPrompt,
+    persist: persistPrompt,
+    onChanged,
+  });
+
   const generate = async () => {
-    const next = description.trim();
-    if (!next || saving || busy) return;
-    if (dirty) {
-      setSaving(true);
-      try {
-        await API.patchReferenceVideoUnit(projectName, episode, unit.unit_id, {
-          storyboard_description: next,
-        });
-        await onChanged();
-      } catch (error) {
-        useAppStore.getState().pushToast(errMsg(error), "error");
-        return;
-      } finally {
-        setSaving(false);
-      }
-    }
+    if (!(await prompt.saveBeforeGenerate())) return;
     try {
       await enqueueReferenceStoryboardSheet(
         projectName,
@@ -151,28 +181,51 @@ export function StoryboardSheetPanel({
         </p>
 
         <div className="mt-3 text-[10px] font-semibold uppercase tracking-[0.12em] text-[var(--color-text-4)]">
-          {t("reference_storyboard_sheet_description")}
-          <div className="mt-1.5 h-56 min-h-56 shrink-0 normal-case tracking-normal">
-            <ReferenceVideoCard
-              unit={unit}
-              projectName={projectName}
-              episode={episode}
-              value={description}
-              onChange={setDescription}
-              includeKeyframes={false}
-              showMeta={false}
-              placeholder={t("reference_storyboard_sheet_description_placeholder")}
-              ariaLabel={t("reference_storyboard_sheet_description")}
-              disabled={busy}
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <span>
+              {prompt.mode === "full_prompt"
+                ? t("reference_image_prompt_mode_full")
+                : t("reference_storyboard_sheet_description")}
+            </span>
+            <ImagePromptModeSwitch
+              mode={prompt.mode}
+              onChange={(mode) => void prompt.switchMode(mode)}
+              disabled={busy || prompt.saving || prompt.preparing}
+              label={t("reference_storyboard_sheet_prompt_mode")}
             />
+          </div>
+          <div className="mt-1.5 h-56 min-h-56 shrink-0 normal-case tracking-normal">
+            {prompt.mode === "description" ? (
+              <ReferenceVideoCard
+                unit={unit}
+                projectName={projectName}
+                episode={episode}
+                value={description}
+                onChange={setDescription}
+                includeKeyframes={false}
+                showMeta={false}
+                placeholder={t("reference_storyboard_sheet_description_placeholder")}
+                ariaLabel={t("reference_storyboard_sheet_description")}
+                disabled={busy}
+              />
+            ) : (
+              <FullPromptTextarea
+                value={prompt.fullPrompt}
+                onChange={prompt.setFullPrompt}
+                disabled={busy || prompt.preparing}
+                ariaLabel={t("reference_storyboard_sheet_full_prompt")}
+              />
+            )}
           </div>
         </div>
         <div className="mt-3 grid gap-2 sm:grid-cols-[minmax(0,1fr)_auto]">
           <ImageModelSelect value={model} onChange={setModel} capability="any" />
           <GenerateButton
             onClick={() => void generate()}
-            loading={busy || saving}
-            disabled={!description.trim()}
+            loading={busy || prompt.saving || prompt.preparing}
+            disabled={
+              prompt.mode === "full_prompt" ? !prompt.fullPrompt.trim() : !description.trim()
+            }
             label={
               sheet
                 ? t("reference_storyboard_sheet_regenerate")

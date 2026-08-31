@@ -835,11 +835,25 @@ class ReferenceKeyframe(BaseModel):
 
     keyframe_id: str = Field(min_length=1, description="稳定 ID，格式 E{集}U{序号}K{序号}")
     description: str = Field(min_length=1, description="该核心场景首帧的静态画面描述，可包含已登记资产引用")
+    image_prompt_mode: SkipJsonSchema[Literal["description", "full_prompt"]] = Field(
+        default="description",
+        description="图片生成使用画面描述自动组装，或使用该关键帧持久化的完整 Prompt",
+    )
+    image_full_prompt: SkipJsonSchema[str | None] = Field(
+        default=None,
+        description="仅属于该关键帧的完整图片 Prompt；切回画面描述模式时仍保留",
+    )
     image_path: SkipJsonSchema[str | None] = Field(default=None, description="当前首帧图片的项目内相对路径")
     generation_input_changed: SkipJsonSchema[bool] = Field(
         default=False,
         description="图片生成后正式文稿或图片描述是否变化；仅提示，不影响生成准入",
     )
+
+    @model_validator(mode="after")
+    def _validate_full_image_prompt(self) -> "ReferenceKeyframe":
+        if self.image_prompt_mode == "full_prompt" and not str(self.image_full_prompt or "").strip():
+            raise ValueError("完整 Prompt 模式必须保存非空 image_full_prompt")
+        return self
 
 
 class ReferenceStoryboardSheet(BaseModel):
@@ -921,6 +935,14 @@ class ReferenceVideoUnit(BaseModel):
         default=None,
         description="分镜版图片描述；默认从正式文稿机械派生，支持与文稿相同的 @[资产] 语法",
     )
+    storyboard_prompt_mode: SkipJsonSchema[Literal["description", "full_prompt"]] = Field(
+        default="description",
+        description="Storyboard 图片生成使用描述自动组装，或使用该单元持久化的完整 Prompt",
+    )
+    storyboard_full_prompt: SkipJsonSchema[str | None] = Field(
+        default=None,
+        description="仅属于该 Video Unit Storyboard 的完整图片 Prompt；切回描述模式时仍保留",
+    )
     storyboard_sheet: SkipJsonSchema[ReferenceStoryboardSheet | None] = Field(
         default=None,
         description="与 Keyframes 同级、从正式文稿独立派生的整段 Storyboard Sheet",
@@ -933,6 +955,8 @@ class ReferenceVideoUnit(BaseModel):
     @model_validator(mode="after")
     def _validate_replan_shell(self) -> "ReferenceVideoUnit":
         """全悬空迁移壳可为空且为 0 秒；其余单元仍须可执行。"""
+        if self.storyboard_prompt_mode == "full_prompt" and not str(self.storyboard_full_prompt or "").strip():
+            raise ValueError("完整 Prompt 模式必须保存非空 storyboard_full_prompt")
         if not self.text.strip():
             if not self.needs_replan or self.duration_seconds != 0:
                 raise ValueError("空 video unit 仅允许 needs_replan=true 且 duration_seconds=0")

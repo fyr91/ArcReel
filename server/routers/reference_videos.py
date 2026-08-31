@@ -89,10 +89,14 @@ from server.services.narration_delivery_tasks import (
     prepare_current_reference_video_request_options,
     tts_task_in_progress,
 )
-from server.services.reference_keyframe_tasks import reference_keyframe_task_specs
+from server.services.reference_keyframe_tasks import (
+    reference_keyframe_task_specs,
+    render_keyframe_prompt_preview,
+)
 from server.services.reference_storyboard_sheet_tasks import (
     StoryboardSheetGateError,
     reference_storyboard_sheet_task_specs,
+    render_storyboard_sheet_prompt_preview,
 )
 from server.services.reference_storyboard_sheet_tasks import (
     confirm_storyboard_sheet as confirm_storyboard_sheet_service,
@@ -143,6 +147,10 @@ class ScriptPreviewRequest(BaseModel):
 
 class StoryboardSheetGenerationRequest(ImageModelSelection):
     instructions: str | None = Field(default=None, max_length=4000)
+
+
+class ImagePromptPreviewRequest(ImageModelSelection):
+    description: str = Field(min_length=1, max_length=50_000)
 
 
 class AddUnitRequest(BaseModel):
@@ -226,7 +234,11 @@ class AddKeyframeRequest(BaseModel):
 
 
 class PatchKeyframeRequest(BaseModel):
-    description: str = Field(min_length=1)
+    model_config = ConfigDict(extra="forbid")
+
+    description: str | None = Field(default=None, min_length=1)
+    image_prompt_mode: str | None = Field(default=None, pattern=r"^(description|full_prompt)$")
+    image_full_prompt: str | None = Field(default=None, max_length=50_000)
 
 
 class GenerateKeyframesRequest(ImageModelSelection):
@@ -500,6 +512,8 @@ class PatchUnitRequest(BaseModel):
 
     prompt: str | None = None
     storyboard_description: str | None = None
+    storyboard_prompt_mode: str | None = Field(default=None, pattern=r"^(description|full_prompt)$")
+    storyboard_full_prompt: str | None = Field(default=None, max_length=50_000)
     duration_seconds: int | None = Field(default=None, ge=1)
     transition_to_next: str | None = Field(default=None, pattern=r"^(cut|fade|dissolve)$")
     note: str | None = None
@@ -620,10 +634,22 @@ async def patch_keyframe(
     found = find_keyframe(current, keyframe_id_value)
     if found is None:
         raise NotFoundError("reference_keyframe_not_found", id=keyframe_id_value)
-    unit, _existing = found
+    unit, existing = found
     keyframes = [dict(item) for item in unit.get("keyframes") or [] if isinstance(item, dict)]
     updated = next(item for item in keyframes if item.get("keyframe_id") == keyframe_id_value)
-    updated["description"] = req.description.strip()
+    changed = False
+    if req.description is not None:
+        description = req.description.strip()
+        changed = changed or description != str(existing.get("description") or "").strip()
+        updated["description"] = description
+    if "image_prompt_mode" in req.model_fields_set:
+        changed = changed or req.image_prompt_mode != existing.get("image_prompt_mode", "description")
+        updated["image_prompt_mode"] = req.image_prompt_mode
+    if "image_full_prompt" in req.model_fields_set:
+        changed = changed or req.image_full_prompt != existing.get("image_full_prompt")
+        updated["image_full_prompt"] = req.image_full_prompt
+    if not changed:
+        return {"keyframe": updated}
     if updated.get("image_path"):
         updated["generation_input_changed"] = True
     result = execute_current_episode_edit(
@@ -636,6 +662,28 @@ async def patch_keyframe(
     )
     require_script_edit_result(result)
     return {"keyframe": updated, "edit_result": result.model_dump(mode="json")}
+
+
+@router.post("/episodes/{episode}/keyframes/{keyframe_id_value}/prompt-preview")
+async def preview_keyframe_prompt(
+    project_name: str,
+    episode: int,
+    keyframe_id_value: str,
+    req: ImagePromptPreviewRequest,
+    user: CurrentUser,
+    _t: Translator,
+) -> dict[str, str]:
+    project, script, _script_file = _load_episode_script(project_name, episode, _t)
+    if find_keyframe(script, keyframe_id_value) is None:
+        raise NotFoundError("reference_keyframe_not_found", id=keyframe_id_value)
+    prompt = await render_keyframe_prompt_preview(
+        project_name,
+        project,
+        req.description,
+        req.image_override_payload(),
+        user_id=user.id,
+    )
+    return {"prompt": prompt}
 
 
 @router.delete("/episodes/{episode}/keyframes/{keyframe_id_value}", status_code=status.HTTP_204_NO_CONTENT)
@@ -832,6 +880,10 @@ async def patch_unit(
         fields["text"] = req.prompt
     if req.storyboard_description is not None:
         fields["storyboard_description"] = without_keyframe_mentions(req.storyboard_description)
+    if "storyboard_prompt_mode" in req.model_fields_set:
+        fields["storyboard_prompt_mode"] = req.storyboard_prompt_mode
+    if "storyboard_full_prompt" in req.model_fields_set:
+        fields["storyboard_full_prompt"] = req.storyboard_full_prompt
     if req.duration_seconds is not None:
         fields["duration_seconds"] = req.duration_seconds
     if req.transition_to_next is not None:
@@ -878,6 +930,28 @@ async def patch_unit(
     saved = get_project_manager().load_script(project_name, result.script)
     unit = _find_unit(saved, unit_id, _t)
     return {"unit": unit, "edit_result": result.model_dump(mode="json")}
+
+
+@router.post("/episodes/{episode}/units/{unit_id}/storyboard-sheet/prompt-preview")
+async def preview_storyboard_sheet_prompt(
+    project_name: str,
+    episode: int,
+    unit_id: str,
+    req: ImagePromptPreviewRequest,
+    user: CurrentUser,
+    _t: Translator,
+) -> dict[str, str]:
+    project, script, _script_file = _load_episode_script(project_name, episode, _t)
+    unit = _find_unit(script, unit_id, _t)
+    prompt = await render_storyboard_sheet_prompt_preview(
+        project_name,
+        project,
+        unit,
+        req.description,
+        req.image_override_payload(),
+        user_id=user.id,
+    )
+    return {"prompt": prompt}
 
 
 @router.patch("/episodes/{episode}/course-bookends")

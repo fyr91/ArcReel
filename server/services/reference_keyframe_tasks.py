@@ -37,7 +37,8 @@ def reference_keyframe_task_specs(
                 continue
             value = keyframe.get("keyframe_id")
             description = str(keyframe.get("description") or "").strip()
-            if not isinstance(value, str) or not value or not description:
+            prompt = _keyframe_active_prompt(keyframe)
+            if not isinstance(value, str) or not value or not description or not prompt:
                 continue
             if keyframe_ids is not None and value not in keyframe_ids:
                 continue
@@ -48,7 +49,7 @@ def reference_keyframe_task_specs(
                     task_type="reference_keyframe",
                     media_type="image",
                     resource_id=value,
-                    prompt=description,
+                    prompt=prompt,
                     script_file=script_file,
                     extra_payload={
                         "unit_id": str(unit.get("unit_id") or ""),
@@ -70,6 +71,95 @@ def build_keyframe_prompt(project: dict[str, Any], description: str, reference_r
     )
 
 
+def _keyframe_prompt_mode(keyframe: dict[str, Any]) -> str:
+    return "full_prompt" if keyframe.get("image_prompt_mode") == "full_prompt" else "description"
+
+
+def _keyframe_active_prompt(keyframe: dict[str, Any]) -> str:
+    if _keyframe_prompt_mode(keyframe) == "full_prompt":
+        return str(keyframe.get("image_full_prompt") or "")
+    return str(keyframe.get("description") or "").strip()
+
+
+def _keyframe_prompt_basis(keyframe: dict[str, Any]) -> tuple[str, str]:
+    """Return only the persisted input currently active for image generation."""
+
+    mode = _keyframe_prompt_mode(keyframe)
+    return mode, _keyframe_active_prompt(keyframe)
+
+
+def _render_keyframe_prompt(project: dict[str, Any], keyframe: dict[str, Any], reference_roster: str) -> str:
+    if _keyframe_prompt_mode(keyframe) == "full_prompt":
+        return str(keyframe.get("image_full_prompt") or "")
+    return build_keyframe_prompt(
+        project,
+        str(keyframe.get("description") or "").strip(),
+        reference_roster,
+    )
+
+
+async def _prepare_keyframe_references(
+    project_name: str,
+    project: dict[str, Any],
+    prompt_source: str,
+    payload: dict[str, Any],
+    *,
+    user_id: str,
+):
+    project_path = get_project_manager().get_project_path(project_name)
+    reference_assets = await asyncio.to_thread(
+        resolve_reference_assets,
+        project,
+        project_path,
+        {"text": prompt_source, "keyframes": []},
+    )
+    bindings = bind_resolved_assets(reference_assets)
+    ctx = await resolve_generation_context(
+        project_name,
+        payload,
+        project=project,
+        user_id=user_id,
+        image=ImageLaneRequest(
+            capability="i2i" if bindings else "t2i",
+            stage="keyframe",
+        ),
+    )
+    prepared = await asyncio.to_thread(
+        prepare_qwen_image_references,
+        bindings,
+        provider_id=ctx.image.backend_name,
+        model_id=ctx.image.backend_model,
+        role="keyframe_subject",
+    )
+    return ctx, prepared
+
+
+async def render_keyframe_prompt_preview(
+    project_name: str,
+    project: dict[str, Any],
+    description: str,
+    payload: dict[str, Any],
+    *,
+    user_id: str = DEFAULT_USER_ID,
+) -> str:
+    """Render the same description-mode prompt used by the generation worker."""
+
+    normalized = description.strip()
+    if not normalized:
+        raise ValueError("reference keyframe description is required")
+    _ctx, prepared = await _prepare_keyframe_references(
+        project_name,
+        project,
+        normalized,
+        payload,
+        user_id=user_id,
+    )
+    try:
+        return build_keyframe_prompt(project, normalized, prepared.reference_roster)
+    finally:
+        await asyncio.to_thread(prepared.cleanup)
+
+
 def _load_keyframe(project_name: str, script_file: str, keyframe_id: str) -> tuple[dict, dict, dict, dict]:
     pm = get_project_manager()
     project = pm.load_project(project_name)
@@ -85,10 +175,10 @@ def _assert_keyframe_unchanged(
     project_name: str,
     script_file: str,
     keyframe_id: str,
-    expected_description: str,
+    expected_basis: tuple[str, str],
 ) -> None:
     _project, _script, _unit, keyframe = _load_keyframe(project_name, script_file, keyframe_id)
-    if str(keyframe.get("description") or "").strip() != expected_description:
+    if _keyframe_prompt_basis(keyframe) != expected_basis:
         raise ValueError(f"reference keyframe changed while generation was pending: {keyframe_id}")
 
 
@@ -96,7 +186,7 @@ def _commit_keyframe_pointer(
     project_name: str,
     script_file: str,
     keyframe_id: str,
-    expected_description: str,
+    expected_basis: tuple[str, str],
     image_path: str,
 ) -> None:
     pm = get_project_manager()
@@ -105,7 +195,7 @@ def _commit_keyframe_pointer(
         if found is None:
             raise ValueError(f"reference keyframe no longer exists: {keyframe_id}")
         _unit, keyframe = found
-        if str(keyframe.get("description") or "").strip() != expected_description:
+        if _keyframe_prompt_basis(keyframe) != expected_basis:
             raise ValueError(f"reference keyframe changed before image activation: {keyframe_id}")
         keyframe["image_path"] = image_path
         keyframe["generation_input_changed"] = False
@@ -128,31 +218,16 @@ async def execute_reference_keyframe_task(
     description = str(keyframe.get("description") or "").strip()
     if not description:
         raise ValueError("reference keyframe description is required")
-
-    project_path = get_project_manager().get_project_path(project_name)
-    reference_assets = await asyncio.to_thread(
-        resolve_reference_assets,
-        project,
-        project_path,
-        {"text": description, "keyframes": []},
-    )
-    bindings = bind_resolved_assets(reference_assets)
-    ctx = await resolve_generation_context(
+    expected_basis = _keyframe_prompt_basis(keyframe)
+    prompt_source = expected_basis[1]
+    if not prompt_source.strip():
+        raise ValueError("reference keyframe image prompt is required")
+    ctx, prepared = await _prepare_keyframe_references(
         project_name,
+        project,
+        prompt_source,
         payload,
-        project=project,
         user_id=user_id,
-        image=ImageLaneRequest(
-            capability="i2i" if bindings else "t2i",
-            stage="keyframe",
-        ),
-    )
-    prepared = await asyncio.to_thread(
-        prepare_qwen_image_references,
-        bindings,
-        provider_id=ctx.image.backend_name,
-        model_id=ctx.image.backend_model,
-        role="keyframe_subject",
     )
     try:
 
@@ -162,12 +237,13 @@ async def execute_reference_keyframe_task(
                 project_name,
                 script_file,
                 resource_id,
-                description,
+                expected_basis,
             )
 
         image_path = resource_relative_path("keyframes", resource_id)
+        prompt = _render_keyframe_prompt(project, keyframe, prepared.reference_roster)
         _output, version = await ctx.generator.generate_image_async(
-            prompt=build_keyframe_prompt(project, description, prepared.reference_roster),
+            prompt=prompt,
             resource_type="keyframes",
             resource_id=resource_id,
             reference_images=prepared.reference_images,
@@ -185,7 +261,7 @@ async def execute_reference_keyframe_task(
         project_name,
         script_file,
         resource_id,
-        description,
+        expected_basis,
         image_path,
     )
     versions = await asyncio.to_thread(ctx.generator.versions.get_versions, "keyframes", resource_id)

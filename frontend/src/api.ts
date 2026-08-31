@@ -3449,6 +3449,8 @@ class API {
     patch: {
       prompt?: string;
       storyboard_description?: string;
+      storyboard_prompt_mode?: "description" | "full_prompt";
+      storyboard_full_prompt?: string | null;
       duration_seconds?: number;
       transition_to_next?: TransitionType;
       note?: string | null;
@@ -3579,11 +3581,35 @@ class API {
     projectName: string,
     episode: number,
     keyframeId: string,
-    description: string,
+    patch: {
+      description?: string;
+      image_prompt_mode?: "description" | "full_prompt";
+      image_full_prompt?: string | null;
+    },
   ): Promise<{ keyframe: import("@/types").ReferenceKeyframe }> {
     return this.request(
       `/projects/${encodeURIComponent(projectName)}/reference-videos/episodes/${episode}/keyframes/${encodeURIComponent(keyframeId)}`,
-      { method: "PATCH", body: JSON.stringify({ description }) },
+      { method: "PATCH", body: JSON.stringify(patch) },
+    );
+  }
+
+  static async previewReferenceKeyframePrompt(
+    projectName: string,
+    episode: number,
+    keyframeId: string,
+    description: string,
+    selection: ImageModelSelection = {},
+  ): Promise<{ prompt: string }> {
+    return this.request(
+      `/projects/${encodeURIComponent(projectName)}/reference-videos/episodes/${episode}/keyframes/${encodeURIComponent(keyframeId)}/prompt-preview`,
+      {
+        method: "POST",
+        body: JSON.stringify({
+          description,
+          image_provider: selection.imageProvider,
+          image_model: selection.imageModel,
+        }),
+      },
     );
   }
 
@@ -3647,6 +3673,26 @@ class API {
           image_provider: selection.imageProvider,
           image_model: selection.imageModel,
           instructions: instructions?.trim() || undefined,
+        }),
+      },
+    );
+  }
+
+  static async previewReferenceStoryboardSheetPrompt(
+    projectName: string,
+    episode: number,
+    unitId: string,
+    description: string,
+    selection: ImageModelSelection = {},
+  ): Promise<{ prompt: string }> {
+    return this.request(
+      `/projects/${encodeURIComponent(projectName)}/reference-videos/episodes/${episode}/units/${encodeURIComponent(unitId)}/storyboard-sheet/prompt-preview`,
+      {
+        method: "POST",
+        body: JSON.stringify({
+          description,
+          image_provider: selection.imageProvider,
+          image_model: selection.imageModel,
         }),
       },
     );

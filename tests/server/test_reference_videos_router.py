@@ -288,6 +288,84 @@ def test_patch_unit_rejects_a_stored_reference_list(client: TestClient):
     assert resp.status_code == 422, resp.text
 
 
+@pytest.mark.unit
+def test_image_prompt_modes_and_full_prompts_persist_per_resource(client: TestClient) -> None:
+    unit_id = _seed_unit(client)
+    keyframe_id = f"{unit_id}K01"
+
+    keyframe_response = client.patch(
+        f"/api/v1/projects/demo/reference-videos/episodes/1/keyframes/{keyframe_id}",
+        json={
+            "image_prompt_mode": "full_prompt",
+            "image_full_prompt": "关键帧完整 Prompt",
+        },
+    )
+    assert keyframe_response.status_code == 200, keyframe_response.text
+    assert keyframe_response.json()["keyframe"]["image_prompt_mode"] == "full_prompt"
+    assert keyframe_response.json()["keyframe"]["image_full_prompt"] == "关键帧完整 Prompt"
+
+    storyboard_response = client.patch(
+        f"/api/v1/projects/demo/reference-videos/episodes/1/units/{unit_id}",
+        json={
+            "storyboard_prompt_mode": "full_prompt",
+            "storyboard_full_prompt": "故事板完整 Prompt",
+        },
+    )
+    assert storyboard_response.status_code == 200, storyboard_response.text
+    assert storyboard_response.json()["unit"]["storyboard_prompt_mode"] == "full_prompt"
+    assert storyboard_response.json()["unit"]["storyboard_full_prompt"] == "故事板完整 Prompt"
+
+    switch_back = client.patch(
+        f"/api/v1/projects/demo/reference-videos/episodes/1/units/{unit_id}",
+        json={"storyboard_prompt_mode": "description"},
+    )
+    assert switch_back.status_code == 200, switch_back.text
+    assert switch_back.json()["unit"]["storyboard_prompt_mode"] == "description"
+    assert switch_back.json()["unit"]["storyboard_full_prompt"] == "故事板完整 Prompt"
+
+    reloaded = client.get("/api/v1/projects/demo/reference-videos/episodes/1/units").json()["units"][0]
+    assert reloaded["storyboard_full_prompt"] == "故事板完整 Prompt"
+    assert reloaded["keyframes"][0]["image_full_prompt"] == "关键帧完整 Prompt"
+
+
+@pytest.mark.unit
+def test_prompt_preview_routes_use_shared_model_aware_renderers(
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from server.routers import reference_videos as router_mod
+
+    unit_id = _seed_unit(client)
+    keyframe_id = f"{unit_id}K01"
+    keyframe_renderer = AsyncMock(return_value="关键帧真实完整 Prompt")
+    storyboard_renderer = AsyncMock(return_value="故事板真实完整 Prompt")
+    monkeypatch.setattr(router_mod, "render_keyframe_prompt_preview", keyframe_renderer)
+    monkeypatch.setattr(router_mod, "render_storyboard_sheet_prompt_preview", storyboard_renderer)
+
+    keyframe_response = client.post(
+        f"/api/v1/projects/demo/reference-videos/episodes/1/keyframes/{keyframe_id}/prompt-preview",
+        json={
+            "description": "新的画面描述",
+            "image_provider": "runware",
+            "image_model": "openai:gpt-image@2",
+        },
+    )
+    storyboard_response = client.post(
+        f"/api/v1/projects/demo/reference-videos/episodes/1/units/{unit_id}/storyboard-sheet/prompt-preview",
+        json={"description": "新的故事板描述"},
+    )
+
+    assert keyframe_response.json() == {"prompt": "关键帧真实完整 Prompt"}
+    assert storyboard_response.json() == {"prompt": "故事板真实完整 Prompt"}
+    assert keyframe_renderer.await_args.args[2:] == (
+        "新的画面描述",
+        {"image_provider": "runware", "image_model": "openai:gpt-image@2"},
+    )
+    assert keyframe_renderer.await_args.kwargs == {"user_id": "u1"}
+    assert storyboard_renderer.await_args.args[3:] == ("新的故事板描述", {})
+    assert storyboard_renderer.await_args.kwargs == {"user_id": "u1"}
+
+
 @pytest.mark.integration
 def test_add_unit_without_duration_falls_back_to_model_slot(client: TestClient, monkeypatch: pytest.MonkeyPatch):
     """请求不给时长 → 取项目能力解析出的档位首项（与执行层解析申请秒数的回退序同源）。"""

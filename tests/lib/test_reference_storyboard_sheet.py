@@ -5,6 +5,7 @@ import pytest
 from server.services.reference_storyboard_sheet_tasks import (
     StoryboardSheetGateError,
     _panel_count,
+    _render_storyboard_prompt,
     _sheet_aspect_ratio,
     build_storyboard_sheet_prompt,
     reference_storyboard_sheet_task_specs,
@@ -162,6 +163,36 @@ def test_sheet_specs_keep_request_scoped_model_override() -> None:
     assert specs[0].task_type == "reference_storyboard_sheet"
     assert specs[0].payload["image_provider"] == "runware"
     assert specs[0].payload["image_model"] == "openai:gpt-image@2"
+
+
+def test_storyboard_full_prompt_is_sent_verbatim_and_ignores_request_instructions() -> None:
+    full_prompt = "  用户保存的 Storyboard 完整 Prompt\n严格保留这段结尾。  "
+    unit = {
+        "unit_id": "E1U01",
+        "text": "正式正文",
+        "duration_seconds": 5,
+        "storyboard_description": "图片描述",
+        "storyboard_prompt_mode": "full_prompt",
+        "storyboard_full_prompt": full_prompt,
+    }
+
+    assert (
+        _render_storyboard_prompt(
+            {"style": "不会重新组装"},
+            unit,
+            panel_ratio="16:9",
+            panel_count=4,
+            reference_roster="- Picture 1",
+            instructions="这段请求级意见不应追加到人工全文",
+        )
+        == full_prompt
+    )
+    specs = reference_storyboard_sheet_task_specs(
+        {"video_units": [unit]},
+        "episode_1.json",
+        instructions="不应改变完整 Prompt",
+    )
+    assert specs[0].payload["prompt"] == full_prompt
 
 
 def test_keyframe_generation_gate_rejects_missing_formal_keyframes() -> None:

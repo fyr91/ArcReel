@@ -152,6 +152,16 @@ def _mark_derived_visuals_for_manuscript_review(item: dict[str, Any]) -> None:
             keyframe["generation_input_changed"] = True
 
 
+def _storyboard_prompt_basis(item: dict[str, Any]) -> tuple[object, object]:
+    mode = "full_prompt" if item.get("storyboard_prompt_mode") == "full_prompt" else "description"
+    value = (
+        item.get("storyboard_full_prompt")
+        if mode == "full_prompt"
+        else str(item.get("storyboard_description") or item.get("text") or "").strip()
+    )
+    return mode, value
+
+
 def patch_field(script: dict[str, Any], item_id: str, field_path: str, value: Any) -> dict[str, Any]:
     """按 id 定位一个分镜，设置其（可嵌套的）字段。纯 setter，不触碰 generated_assets。"""
     items, id_field, kind = resolve_items(script)
@@ -160,6 +170,7 @@ def patch_field(script: dict[str, Any], item_id: str, field_path: str, value: An
     previous_storyboard_description = (
         str(items[idx].get("storyboard_description") or "").strip() if kind == "video_units" else ""
     )
+    previous_storyboard_prompt = _storyboard_prompt_basis(items[idx]) if kind == "video_units" else None
     _set_nested(items[idx], field_path, value)
     if (
         kind == "video_units"
@@ -171,6 +182,14 @@ def patch_field(script: dict[str, Any], item_id: str, field_path: str, value: An
         kind == "video_units"
         and field_path == "storyboard_description"
         and str(items[idx].get("storyboard_description") or "").strip() != previous_storyboard_description
+    ):
+        sheet = items[idx].get("storyboard_sheet")
+        if isinstance(sheet, dict) and sheet.get("image_path"):
+            sheet["generation_input_changed"] = True
+    if (
+        kind == "video_units"
+        and field_path in {"storyboard_prompt_mode", "storyboard_full_prompt"}
+        and _storyboard_prompt_basis(items[idx]) != previous_storyboard_prompt
     ):
         sheet = items[idx].get("storyboard_sheet")
         if isinstance(sheet, dict) and sheet.get("image_path"):

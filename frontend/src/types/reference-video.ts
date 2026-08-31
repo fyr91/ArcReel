@@ -69,6 +69,10 @@ export interface UnitGeneratedAssets {
 export interface ReferenceKeyframe {
   keyframe_id: string;
   description: string;
+  /** Persisted per-keyframe generation input selection. */
+  image_prompt_mode?: "description" | "full_prompt";
+  /** Exact full prompt used only while image_prompt_mode is full_prompt. */
+  image_full_prompt?: string | null;
   image_path: string | null;
   /** Advisory only: the formal manuscript changed after this image was generated. */
   generation_input_changed?: boolean;
@@ -110,6 +114,10 @@ export interface ReferenceVideoUnit {
   keyframes?: ReferenceKeyframe[];
   /** Storyboard image description; defaults to the formal manuscript and shares its @[asset] syntax. */
   storyboard_description?: string | null;
+  /** Persisted per-Storyboard generation input selection. */
+  storyboard_prompt_mode?: "description" | "full_prompt";
+  /** Exact full prompt used only while storyboard_prompt_mode is full_prompt. */
+  storyboard_full_prompt?: string | null;
   /** Full-unit storyboard derived independently from the same formal manuscript as Keyframes. */
   storyboard_sheet?: ReferenceStoryboardSheet | null;
   /** Problem shell or mixed-speech marker; generation is blocked until repaired. */

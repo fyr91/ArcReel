@@ -18,6 +18,9 @@ interface AddUnitPayload {
 
 interface PatchUnitPayload {
   prompt?: string;
+  storyboard_description?: string;
+  storyboard_prompt_mode?: "description" | "full_prompt";
+  storyboard_full_prompt?: string | null;
   duration_seconds?: number;
   transition_to_next?: TransitionType;
   note?: string | null;

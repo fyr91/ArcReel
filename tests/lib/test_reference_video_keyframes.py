@@ -7,7 +7,10 @@ from lib.reference_video.keyframes import materialize_keyframes
 from lib.reference_video.request_projection import unit_reference_declarations
 from lib.script_models import ReferenceVideoUnit
 from server.services.image_model_selection import ImageModelSelection
-from server.services.reference_keyframe_tasks import reference_keyframe_task_specs
+from server.services.reference_keyframe_tasks import (
+    _render_keyframe_prompt,
+    reference_keyframe_task_specs,
+)
 
 pytestmark = pytest.mark.unit
 
@@ -156,3 +159,48 @@ def test_keyframe_prompt_contains_only_image_generation_inputs(project: dict[str
     assert "动作刚开始" not in prompt
     assert "完成结果" not in prompt
     assert "首帧描述" not in prompt
+
+
+def test_keyframe_full_prompt_is_persisted_per_resource_and_sent_verbatim() -> None:
+    full_prompt = "  用户保留的完整 Prompt\nPicture 9 必须位于画面右侧。  "
+    unit = ReferenceVideoUnit.model_validate(
+        {
+            "unit_id": "E1U01",
+            "text": "正文",
+            "duration_seconds": 5,
+            "keyframes": [
+                {
+                    "keyframe_id": "E1U01K01",
+                    "description": "画面描述",
+                    "image_prompt_mode": "full_prompt",
+                    "image_full_prompt": full_prompt,
+                }
+            ],
+        }
+    )
+    keyframe = unit.model_dump(mode="python")["keyframes"][0]
+
+    assert _render_keyframe_prompt({"style": "不会被拼入"}, keyframe, "- Picture 1") == full_prompt
+    specs = reference_keyframe_task_specs(
+        {"video_units": [unit.model_dump(mode="python")]},
+        "episode_1.json",
+    )
+    assert specs[0].payload["prompt"] == full_prompt
+
+
+def test_keyframe_full_prompt_mode_rejects_an_empty_persisted_prompt() -> None:
+    with pytest.raises(ValidationError, match="image_full_prompt"):
+        ReferenceVideoUnit.model_validate(
+            {
+                "unit_id": "E1U01",
+                "text": "正文",
+                "duration_seconds": 5,
+                "keyframes": [
+                    {
+                        "keyframe_id": "E1U01K01",
+                        "description": "画面描述",
+                        "image_prompt_mode": "full_prompt",
+                    }
+                ],
+            }
+        )

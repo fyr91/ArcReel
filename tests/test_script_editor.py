@@ -200,6 +200,23 @@ class TestPatchField:
         assert script["video_units"][0]["storyboard_sheet"].get("generation_input_changed") is None
 
     @pytest.mark.unit
+    def test_switching_storyboard_prompt_mode_marks_existing_sheet_for_review(self):
+        unit = _unit("E1U1") | {
+            "text": "器物放在石台上冷却。",
+            "storyboard_description": "器物静置在石台中央。",
+            "storyboard_full_prompt": "用户保存的完整 Prompt",
+            "storyboard_sheet": {
+                "image_path": "storyboard_sheets/E1U1.png",
+                "status": "pending_review",
+                "confirmed_at": None,
+            },
+        }
+
+        script = patch_field(_reference([unit]), "E1U1", "storyboard_prompt_mode", "full_prompt")
+
+        assert script["video_units"][0]["storyboard_sheet"]["generation_input_changed"] is True
+
+    @pytest.mark.unit
     def test_patch_unknown_leaf_field_succeeds_at_set_nested_layer(self):
         # _set_nested 单元层面允许叶子写入——dict 操作不查 schema。
         # 但这里写的是 video_prompt.note(VideoPrompt 实际无 note 字段),

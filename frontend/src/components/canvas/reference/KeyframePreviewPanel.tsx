@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { AlertTriangle, ImageIcon, Plus, Trash2 } from "lucide-react";
 import { enqueueReferenceKeyframe } from "@/actions/generation";
@@ -6,6 +6,14 @@ import { API } from "@/api";
 import { ImageModelSelect, imageSelectionFromValue } from "@/components/shared/ImageModelSelect";
 import { ImageEditButton } from "@/components/canvas/timeline/ImageEditButton";
 import { ReferenceVideoCard } from "@/components/canvas/reference/ReferenceVideoCard";
+import {
+  FullPromptTextarea,
+  ImagePromptModeSwitch,
+} from "@/components/canvas/reference/ImagePromptModeSwitch";
+import {
+  usePersistentImagePrompt,
+  type ImagePromptPersistencePatch,
+} from "@/components/canvas/reference/usePersistentImagePrompt";
 import { VersionTimeMachine } from "@/components/canvas/timeline/VersionTimeMachine";
 import { AspectFrame } from "@/components/ui/AspectFrame";
 import { GenerateButton } from "@/components/ui/GenerateButton";
@@ -39,14 +47,12 @@ function KeyframeCard({
   const { t } = useTranslation("dashboard");
   const [description, setDescription] = useState(keyframe.description);
   const [model, setModel] = useState("");
-  const [saving, setSaving] = useState(false);
   const fingerprint = useProjectsStore((state) =>
     keyframe.image_path ? state.getAssetFingerprint(keyframe.image_path) : null,
   );
   const imageUrl = keyframe.image_path
     ? API.getFileUrl(projectName, keyframe.image_path, fingerprint)
     : null;
-  const dirty = description.trim() !== keyframe.description;
 
   useEffect(() => {
     // External Agent/browser edits arrive through the unit revision refresh. Keep a
@@ -55,25 +61,43 @@ function KeyframeCard({
     setDescription(keyframe.description);
   }, [keyframe.description]);
 
-  const saveBeforeGenerate = async (): Promise<boolean> => {
-    const next = description.trim();
-    if (!next || saving || busy) return false;
-    if (!dirty) return true;
-    setSaving(true);
-    try {
-      await API.patchReferenceKeyframe(projectName, episode, keyframe.keyframe_id, next);
-      await onChanged();
-      return true;
-    } catch (error) {
-      useAppStore.getState().pushToast(errMsg(error), "error");
-      return false;
-    } finally {
-      setSaving(false);
-    }
-  };
+  const persistPrompt = useCallback(
+    async (patch: ImagePromptPersistencePatch) => {
+      await API.patchReferenceKeyframe(projectName, episode, keyframe.keyframe_id, {
+        ...(patch.description !== undefined ? { description: patch.description } : {}),
+        ...(patch.mode !== undefined ? { image_prompt_mode: patch.mode } : {}),
+        ...(patch.fullPrompt !== undefined ? { image_full_prompt: patch.fullPrompt } : {}),
+      });
+    },
+    [episode, keyframe.keyframe_id, projectName],
+  );
+  const buildFullPrompt = useCallback(
+    async (nextDescription: string) => {
+      const result = await API.previewReferenceKeyframePrompt(
+        projectName,
+        episode,
+        keyframe.keyframe_id,
+        nextDescription,
+        imageSelectionFromValue(model),
+      );
+      return result.prompt;
+    },
+    [episode, keyframe.keyframe_id, model, projectName],
+  );
+  const prompt = usePersistentImagePrompt({
+    resourceId: keyframe.keyframe_id,
+    savedMode: keyframe.image_prompt_mode,
+    savedFullPrompt: keyframe.image_full_prompt,
+    description,
+    savedDescription: keyframe.description,
+    disabled: busy,
+    buildFullPrompt,
+    persist: persistPrompt,
+    onChanged,
+  });
 
   const generate = async () => {
-    if (!(await saveBeforeGenerate())) return;
+    if (!(await prompt.saveBeforeGenerate())) return;
     try {
       await enqueueReferenceKeyframe(
         projectName,
@@ -164,28 +188,51 @@ function KeyframeCard({
       )}
 
       <div className="mt-3 text-[10px] font-semibold uppercase tracking-[0.12em] text-[var(--color-text-4)]">
-        {t("reference_keyframe_description")}
-        <div className="mt-1.5 h-56 min-h-56 shrink-0 normal-case tracking-normal">
-          <ReferenceVideoCard
-            unit={unit}
-            projectName={projectName}
-            episode={episode}
-            value={description}
-            onChange={setDescription}
-            includeKeyframes={false}
-            showMeta={false}
-            placeholder={t("reference_keyframe_add_placeholder")}
-            ariaLabel={t("reference_keyframe_description")}
-            disabled={busy}
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <span>
+            {prompt.mode === "full_prompt"
+              ? t("reference_image_prompt_mode_full")
+              : t("reference_keyframe_description")}
+          </span>
+          <ImagePromptModeSwitch
+            mode={prompt.mode}
+            onChange={(mode) => void prompt.switchMode(mode)}
+            disabled={busy || prompt.saving || prompt.preparing}
+            label={t("reference_keyframe_prompt_mode")}
           />
+        </div>
+        <div className="mt-1.5 h-56 min-h-56 shrink-0 normal-case tracking-normal">
+          {prompt.mode === "description" ? (
+            <ReferenceVideoCard
+              unit={unit}
+              projectName={projectName}
+              episode={episode}
+              value={description}
+              onChange={setDescription}
+              includeKeyframes={false}
+              showMeta={false}
+              placeholder={t("reference_keyframe_add_placeholder")}
+              ariaLabel={t("reference_keyframe_description")}
+              disabled={busy}
+            />
+          ) : (
+            <FullPromptTextarea
+              value={prompt.fullPrompt}
+              onChange={prompt.setFullPrompt}
+              disabled={busy || prompt.preparing}
+              ariaLabel={t("reference_keyframe_full_prompt")}
+            />
+          )}
         </div>
       </div>
       <div className="mt-3 grid gap-2 sm:grid-cols-[minmax(0,1fr)_auto]">
         <ImageModelSelect value={model} onChange={setModel} capability="any" />
         <GenerateButton
           onClick={() => void generate()}
-          loading={busy || saving}
-          disabled={!description.trim()}
+          loading={busy || prompt.saving || prompt.preparing}
+          disabled={
+            prompt.mode === "full_prompt" ? !prompt.fullPrompt.trim() : !description.trim()
+          }
           label={
             keyframe.image_path
               ? t("reference_keyframe_regenerate")
